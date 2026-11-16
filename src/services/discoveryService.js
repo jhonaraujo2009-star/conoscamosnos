@@ -14,12 +14,15 @@ function buildParticipantSnapshot(user) {
   return {
     uid: user.uid || user.id,
     name: user.name || 'Usuario',
-    photo: user.photos?.[0] || '',
+    photo: user.photos?.[0] || user.photo || '',
     country: user.country || null,
   };
 }
 
 export async function checkConnectionStatus(currentUid, targetUid) {
+  if (!currentUid || !targetUid || currentUid === targetUid) {
+    return { iLiked: false, isMatched: false, matchId: null };
+  }
   const matchId = buildMatchId(currentUid, targetUid);
   const likeId = `${currentUid}_${targetUid}`;
   const [likeSnap, matchSnap] = await Promise.all([
@@ -31,6 +34,60 @@ export async function checkConnectionStatus(currentUid, targetUid) {
     isMatched: matchSnap.exists(),
     matchId,
   };
+}
+
+/**
+ * Abre o crea una sala de chat privada 1-a-1 entre dos perfiles independientes (gratis).
+ * Garantiza que únicamente los 2 participantes tengan acceso a la conversación.
+ */
+export async function openOrCreateDirectChat({ currentUser, targetUser }) {
+  const fromUid = currentUser?.uid || currentUser?.id;
+  const toUid = targetUser?.uid || targetUser?.id;
+  if (!fromUid || !toUid || fromUid === toUid) {
+    throw new Error('No puedes iniciar un chat contigo mismo.');
+  }
+
+  const matchId = buildMatchId(fromUid, toUid);
+  const matchRef = doc(db, 'matches', matchId);
+
+  const txResult = await runTransaction(db, async (transaction) => {
+    const matchSnap = await transaction.get(matchRef);
+
+    if (matchSnap.exists()) {
+      const existingData = matchSnap.data();
+      const updatedProfiles = {
+        ...(existingData.participantProfiles || {}),
+        [fromUid]: buildParticipantSnapshot(currentUser),
+        [toUid]: buildParticipantSnapshot(targetUser),
+      };
+      transaction.update(matchRef, {
+        participantProfiles: updatedProfiles,
+      });
+      return {
+        matchId,
+        createdNow: false,
+        matchData: { id: matchSnap.id, ...existingData, participantProfiles: updatedProfiles },
+      };
+    }
+
+    const newMatchData = {
+      participants: [fromUid, toUid].sort(),
+      participantProfiles: {
+        [fromUid]: buildParticipantSnapshot(currentUser),
+        [toUid]: buildParticipantSnapshot(targetUser),
+      },
+      isVipDirect: false,
+      lastMessage: '🔒 Chat privado iniciado. ¡Saluda!',
+      lastSenderId: fromUid,
+      lastMessageAt: serverTimestamp(),
+      createdAt: serverTimestamp(),
+    };
+
+    transaction.set(matchRef, newMatchData);
+    return { matchId, createdNow: true, matchData: { id: matchId, ...newMatchData } };
+  });
+
+  return txResult;
 }
 
 /**
@@ -88,6 +145,7 @@ export async function sendLike({ currentUser, targetUser }) {
         },
         isVipDirect: false,
         lastMessage: '🎉 ¡Hicieron Match! Envía el primer mensaje.',
+        lastSenderId: fromUid,
         lastMessageAt: serverTimestamp(),
         createdAt: serverTimestamp(),
       });
@@ -104,7 +162,7 @@ export async function sendLike({ currentUser, targetUser }) {
 }
 
 /**
- * Mensaje Directo VIP (50 monedas): abre/crea chat inmediato sin esperar match mutuo.
+ * Mensaje Directo VIP (50 monedas): abre/crea chat inmediato con etiqueta VIP destacada.
  */
 export async function startVipDirectMessage({ currentUser, targetUser }) {
   const fromUid = currentUser.uid;
@@ -142,6 +200,7 @@ export async function startVipDirectMessage({ currentUser, targetUser }) {
       isVipDirect: true,
       vipInitiatorId: fromUid,
       lastMessage: '⚡ Mensaje Directo VIP desbloqueado',
+      lastSenderId: fromUid,
       lastMessageAt: serverTimestamp(),
       createdAt: serverTimestamp(),
     };
@@ -161,6 +220,7 @@ export async function startVipDirectMessage({ currentUser, targetUser }) {
       senderId: fromUid,
       type: 'system',
       text: `⚡ ${currentUser.name} activó un Mensaje Directo VIP`,
+      clientCreatedAt: Date.now(),
       createdAt: serverTimestamp(),
     });
   }

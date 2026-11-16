@@ -57,12 +57,12 @@ export default function PhotoUploader({ photos = [], onChange, onError }) {
   return (
     <div className="space-y-2.5">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+        <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
           Galería ({photos.length}/{MAX_PHOTOS} fotos)
         </span>
         {!isCloudinaryConfigured && (
-          <span className="text-[11px] text-amber-400">
-            Configura Cloudinary en .env para subir archivos
+          <span className="text-[11px] font-semibold text-amber-600">
+            Configura Cloudinary en .env
           </span>
         )}
       </div>
@@ -74,7 +74,7 @@ export default function PhotoUploader({ photos = [], onChange, onError }) {
             return (
               <div
                 key={`${url}-${idx}`}
-                className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-slate-800 border border-slate-700/80 group"
+                className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 shadow-sm group"
               >
                 <img
                   src={optimizeCloudinaryUrl(url, 400)}
@@ -83,7 +83,7 @@ export default function PhotoUploader({ photos = [], onChange, onError }) {
                   className="w-full h-full object-cover"
                 />
                 {idx === 0 && (
-                  <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-brand-500 text-[10px] font-bold text-white shadow">
+                  <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-brand-500 text-[10px] font-extrabold text-white shadow">
                     Principal
                   </span>
                 )}
@@ -92,7 +92,7 @@ export default function PhotoUploader({ photos = [], onChange, onError }) {
                     <button
                       type="button"
                       onClick={() => handleSetPrimary(idx)}
-                      className="p-1.5 rounded-full bg-slate-950/80 text-amber-400 hover:bg-amber-500 hover:text-slate-950 transition"
+                      className="p-1.5 rounded-full bg-white/90 text-amber-500 hover:bg-amber-500 hover:text-white shadow transition"
                       title="Hacer principal"
                     >
                       <Star className="w-3.5 h-3.5" />
@@ -101,7 +101,7 @@ export default function PhotoUploader({ photos = [], onChange, onError }) {
                   <button
                     type="button"
                     onClick={() => handleRemove(idx)}
-                    className="p-1.5 rounded-full bg-slate-950/80 text-rose-400 hover:bg-rose-500 hover:text-white transition"
+                    className="p-1.5 rounded-full bg-white/90 text-rose-500 hover:bg-rose-500 hover:text-white shadow transition"
                     title="Eliminar foto"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -120,19 +120,19 @@ export default function PhotoUploader({ photos = [], onChange, onError }) {
               onClick={() => isNextSlot && inputRef.current?.click()}
               className={`aspect-[3/4] rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition ${
                 isNextSlot
-                  ? 'border-brand-500/60 bg-slate-900/80 hover:bg-slate-800/80 text-brand-300 cursor-pointer'
-                  : 'border-slate-800 bg-slate-900/30 text-slate-600 cursor-default'
+                  ? 'border-brand-300 bg-rose-50/50 hover:bg-rose-50 text-brand-600 cursor-pointer'
+                  : 'border-slate-200 bg-slate-50/70 text-slate-400 cursor-default'
               }`}
             >
               {isNextSlot && uploading ? (
                 <>
-                  <Loader2 className="w-6 h-6 animate-spin text-brand-400" />
-                  <span className="text-xs font-semibold">{progress}%</span>
+                  <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
+                  <span className="text-xs font-bold">{progress}%</span>
                 </>
               ) : (
                 <>
                   <Camera className="w-5 h-5" />
-                  <span className="text-[11px] font-medium">
+                  <span className="text-[11px] font-bold">
                     {isNextSlot ? 'Subir foto' : `Foto ${idx + 1}`}
                   </span>
                 </>

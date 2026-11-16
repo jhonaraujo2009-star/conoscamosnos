@@ -82,7 +82,32 @@ export function getSharedInterests(userA, userB) {
 }
 
 export function buildMatchId(uidA, uidB) {
-  return [uidA, uidB].sort().join('_');
+  const a = String(uidA || '').trim();
+  const b = String(uidB || '').trim();
+  if (!a || !b) return '';
+  return [a, b].sort().join('_');
+}
+
+export function formatMessageTime(ts, fallbackMs) {
+  const ms = toMillis(ts) || fallbackMs;
+  if (!ms) return 'Ahora';
+  try {
+    return new Intl.DateTimeFormat('es', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(ms));
+  } catch {
+    return '';
+  }
+}
+
+export function isMatchUnread(match, currentUid) {
+  if (!match || !currentUid) return false;
+  if (!match.lastSenderId || match.lastSenderId === currentUid) return false;
+  const lastMsgMs = toMillis(match.lastMessageAt);
+  const lastReadMs = toMillis(match.lastReadBy?.[currentUid]);
+  if (!lastMsgMs) return true;
+  return lastMsgMs > lastReadMs;
 }
 
 export function optimizeCloudinaryUrl(url, width = 800) {
@@ -100,7 +125,10 @@ export function getPrimaryPhoto(user, width = 600) {
   if (Array.isArray(user?.photos) && user.photos.length > 0 && user.photos[0]) {
     return optimizeCloudinaryUrl(user.photos[0], width);
   }
+  if (typeof user?.photo === 'string' && user.photo) {
+    return optimizeCloudinaryUrl(user.photo, width);
+  }
   const initial = (user?.name || 'U').charAt(0).toUpperCase();
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="500" viewBox="0 0 400 500"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1e293b"/><stop offset="100%" stop-color="#0f172a"/></linearGradient></defs><rect width="400" height="500" fill="url(#bg)"/><circle cx="200" cy="210" r="76" fill="#f43f6e" opacity="0.22"/><text x="200" y="232" text-anchor="middle" fill="#fda4ba" font-family="system-ui, sans-serif" font-size="78" font-weight="700">${initial}</text></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="500" viewBox="0 0 400 500"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#ffe4ea"/><stop offset="50%" stop-color="#fef3c7"/><stop offset="100%" stop-color="#fce7f3"/></linearGradient></defs><rect width="400" height="500" fill="url(#bg)"/><circle cx="200" cy="210" r="82" fill="#ffffff" opacity="0.75"/><text x="200" y="236" text-anchor="middle" fill="#e11d54" font-family="Plus Jakarta Sans, system-ui, sans-serif" font-size="80" font-weight="800">${initial}</text></svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }

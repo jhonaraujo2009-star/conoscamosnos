@@ -81,9 +81,23 @@ export async function updatePresence(uid, isOnline) {
 }
 
 export async function getUserById(uid) {
+  if (!uid) return null;
   const snap = await getDoc(doc(db, 'users', uid));
   if (!snap.exists()) return null;
-  return { id: snap.id, ...snap.data() };
+  return { uid: snap.id, id: snap.id, ...snap.data() };
+}
+
+export function subscribeUserById(uid, callback) {
+  if (!uid || !db) return () => {};
+  return onSnapshot(
+    doc(db, 'users', uid),
+    (snap) => {
+      if (snap.exists()) {
+        callback({ uid: snap.id, id: snap.id, ...snap.data() });
+      }
+    },
+    () => {}
+  );
 }
 
 export function subscribeVipUsers({ scope, countryCode, currentUserId, blockedUsers = [] }, onData, onError) {
@@ -98,7 +112,7 @@ export function subscribeVipUsers({ scope, countryCode, currentUserId, blockedUs
   const blockedSet = new Set(blockedUsers);
   const filterAndSort = (snapshot) =>
     snapshot.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
+      .map((d) => ({ uid: d.id, id: d.id, ...d.data() }))
       .filter((u) => {
         if (u.id === currentUserId) return false;
         if (blockedSet.has(u.id)) return false;
@@ -143,7 +157,7 @@ export function subscribePopularUsers({ scope, countryCode, currentUserId, block
   const blockedSet = new Set(blockedUsers);
   const filterAndSort = (snapshot) =>
     snapshot.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
+      .map((d) => ({ uid: d.id, id: d.id, ...d.data() }))
       .filter((u) => {
         if (u.id === currentUserId || blockedSet.has(u.id) || !u.onboardingCompleted) return false;
         if (scope === 'local' && countryCode && u.country?.code !== countryCode) return false;
@@ -204,7 +218,7 @@ export async function fetchDiscoverProfiles({ currentUser, scope = 'global', loo
   const blockedSet = new Set(currentUser.blockedUsers || []);
 
   const candidates = usersSnap.docs
-    .map((d) => ({ id: d.id, ...d.data() }))
+    .map((d) => ({ uid: d.id, id: d.id, ...d.data() }))
     .filter((u) => {
       if (u.id === currentUser.uid) return false;
       if (!u.onboardingCompleted) return false;

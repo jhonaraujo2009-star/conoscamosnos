@@ -1,13 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Gift, ImagePlus, Loader2, Send } from 'lucide-react';
 import {
+  ArrowLeft,
+  CheckCheck,
+  Gift,
+  ImagePlus,
+  Loader2,
+  Lock,
+  Send,
+  ShieldAlert,
+  Sparkles,
+} from 'lucide-react';
+import {
+  markChatAsRead,
   sendImageMessage,
   sendTextMessage,
   sendVirtualGift,
   subscribeChatMessages,
 } from '../../services/chatService';
 import { getUserCloudinaryFolder, uploadImageToCloudinary } from '../../services/cloudinaryService';
+import { subscribeUserById } from '../../services/userService';
 import {
+  formatMessageTime,
   formatRelativeLastSeen,
   getPrimaryPhoto,
   isUserActuallyOnline,
@@ -27,6 +40,7 @@ export default function ChatRoom({
   onSuccess,
   onError,
 }) {
+  const [livePeer, setLivePeer] = useState(peerUser);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -40,10 +54,35 @@ export default function ChatRoom({
   const initializedRef = useRef(false);
   const seenIdsRef = useRef(new Set());
 
+  const peerId =
+    peerUser?.uid ||
+    peerUser?.id ||
+    (match?.participants || []).find((p) => p !== currentUser?.uid);
+
+  // Verificación estricta de privacidad: solo los 2 participantes del match pueden estar aquí
+  const isParticipant = Boolean(
+    currentUser?.uid &&
+      match?.id &&
+      ((Array.isArray(match.participants) && match.participants.includes(currentUser.uid)) ||
+        match.id.split('_').includes(currentUser.uid))
+  );
+
+  // Suscripción en tiempo real al perfil independiente de la otra persona
   useEffect(() => {
-    if (!match?.id) return;
+    setLivePeer(peerUser);
+    if (!peerId) return;
+    const unsub = subscribeUserById(peerId, (fresh) => {
+      setLivePeer((prev) => ({ ...prev, ...fresh }));
+    });
+    return () => unsub();
+  }, [peerId]);
+
+  useEffect(() => {
+    if (!match?.id || !isParticipant) return;
     initializedRef.current = false;
     seenIdsRef.current = new Set();
+
+    markChatAsRead(match.id, currentUser.uid);
 
     const unsub = subscribeChatMessages(match.id, (list) => {
       if (!initializedRef.current) {
@@ -53,13 +92,16 @@ export default function ChatRoom({
         for (const msg of list) {
           if (!seenIdsRef.current.has(msg.id)) {
             seenIdsRef.current.add(msg.id);
+            if (msg.senderId !== currentUser.uid) {
+              markChatAsRead(match.id, currentUser.uid);
+            }
             if (msg.type === 'gift' && msg.senderId !== currentUser.uid) {
               setActiveGiftAnim({
                 giftIcon: msg.giftIcon,
                 giftName: msg.giftName,
                 giftValue: msg.giftValue,
                 diamondsCredited: msg.diamondsCredited,
-                senderName: msg.senderName || peerUser?.name,
+                senderName: msg.senderName || livePeer?.name,
                 isReceiver: true,
               });
             }
@@ -70,11 +112,51 @@ export default function ChatRoom({
     });
 
     return () => unsub();
-  }, [match?.id, currentUser.uid, peerUser?.name]);
+  }, [match?.id, isParticipant, currentUser.uid]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
+
+  if (!isParticipant) {
+    return (
+      <div className="fixed inset-0 z-40 bg-luxury-mesh flex items-center justify-center p-6">
+        <div className="bg-white border border-rose-200 rounded-3xl p-6 max-w-sm text-center shadow-luxury space-y-3">
+          <ShieldAlert className="w-10 h-10 text-rose-500 mx-auto" />
+          <h3 className="font-display text-base font-extrabold text-slate-900">
+            Conversación Privada Protegida
+          </h3>
+          <p className="text-xs text-slate-500">
+            No tienes acceso a este chat porque pertenece a otros perfiles.
+          </p>
+          <button
+            type="button"
+            onClick={onBack}
+            className="px-4 py-2.5 rounded-2xl bg-brand-500 text-white text-xs font-extrabold"
+          >
+            Volver a mis chats
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const sendQuickText = async (messageText) => {
+    const clean = messageText.trim();
+    if (!clean || sending) return;
+    setSending(true);
+    try {
+      await sendTextMessage({
+        matchId: match.id,
+        senderId: currentUser.uid,
+        text: clean,
+      });
+    } catch (err) {
+      onError?.(err.message || 'No se pudo enviar el mensaje.');
+    } finally {
+      setSending(false);
+    }
+  };
 
   const handleSendText = async (e) => {
     e.preventDefault();
@@ -124,7 +206,7 @@ export default function ChatRoom({
       await sendVirtualGift({
         matchId: match.id,
         sender: currentUser,
-        receiver: peerUser,
+        receiver: livePeer,
         gift,
       });
       setGiftPickerOpen(false);
@@ -135,7 +217,7 @@ export default function ChatRoom({
         diamondsCredited: gift.price,
         isReceiver: false,
       });
-      onSuccess?.(`${gift.icon} Enviaste ${gift.name} a ${peerUser.name}`);
+      onSuccess?.(`${gift.icon} Enviaste ${gift.name} a ${livePeer?.name}`);
     } catch (err) {
       onError?.(err.message || 'No se pudo enviar el regalo.');
     } finally {
@@ -143,42 +225,56 @@ export default function ChatRoom({
     }
   };
 
-  const online = isUserActuallyOnline(peerUser);
+  const online = isUserActuallyOnline(livePeer);
+
+  const icebreakers = [
+    `👋 ¡Hola ${livePeer?.name?.split(' ')[0] || ''}! Qué gusto conectar contigo.`,
+    `🌎 ¡Hola! ¿Qué tal todo por ${livePeer?.city || livePeer?.country?.name || 'tu ciudad'}?`,
+    `☕ ¡Hola! Vi tu perfil y me encantaría conversar.`,
+  ];
 
   return (
-    <div className="fixed inset-0 z-40 bg-slate-950 flex justify-center">
-      <div className="w-full max-w-md h-full flex flex-col bg-[#090d16] sm:border-x sm:border-slate-800">
+    <div className="fixed inset-0 z-40 bg-luxury-mesh flex justify-center">
+      <div className="w-full max-w-lg h-full flex flex-col bg-[#FAF7F5] sm:border-x sm:border-rose-100/80 shadow-luxury">
         {/* Chat Header */}
-        <div className="px-3.5 py-3 pt-safe border-b border-slate-800 bg-slate-950/90 backdrop-blur-xl flex items-center gap-3">
+        <div className="px-4 py-3 pt-safe border-b border-rose-100/90 bg-white/90 backdrop-blur-xl flex items-center gap-3 shadow-sm">
           <button
             type="button"
             onClick={onBack}
-            className="p-2 rounded-xl bg-slate-900 text-slate-300 hover:text-white"
+            className="p-2 rounded-2xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
 
           <button
             type="button"
-            onClick={() => onOpenProfile?.(peerUser)}
-            className="flex items-center gap-2.5 flex-1 min-w-0 text-left"
+            onClick={() => onOpenProfile?.(livePeer)}
+            className="flex items-center gap-3 flex-1 min-w-0 text-left group"
           >
             <div className="relative shrink-0">
               <img
-                src={getPrimaryPhoto(peerUser)}
-                alt={peerUser?.name}
-                className="w-10 h-10 rounded-full object-cover bg-slate-800"
+                src={getPrimaryPhoto(livePeer, 160)}
+                alt={livePeer?.name}
+                className="w-11 h-11 rounded-2xl object-cover bg-slate-100 border border-rose-100 group-hover:scale-105 transition"
               />
               {online && (
-                <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400 border-2 border-slate-950" />
+                <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white" />
               )}
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-bold text-white truncate">
-                {peerUser?.country?.flag} {peerUser?.name}
+              <p className="font-display text-sm font-extrabold text-slate-900 truncate flex items-center gap-1">
+                <span>{livePeer?.country?.flag}</span>
+                <span className="truncate">
+                  {livePeer?.name}
+                  {livePeer?.age ? `, ${livePeer.age}` : ''}
+                </span>
               </p>
-              <p className={`text-[11px] truncate ${online ? 'text-emerald-400 font-semibold' : 'text-slate-400'}`}>
-                {formatRelativeLastSeen(peerUser?.lastSeen, peerUser?.isOnline)}
+              <p
+                className={`text-[11px] truncate ${
+                  online ? 'text-emerald-600 font-bold' : 'text-slate-500 font-medium'
+                }`}
+              >
+                {formatRelativeLastSeen(livePeer?.lastSeen, livePeer?.isOnline)}
               </p>
             </div>
           </button>
@@ -186,7 +282,7 @@ export default function ChatRoom({
           <button
             type="button"
             onClick={() => setGiftPickerOpen(true)}
-            className="px-3 py-2 rounded-xl bg-gradient-to-r from-brand-500 to-amber-500 text-white text-xs font-extrabold flex items-center gap-1 shadow shadow-brand-500/25 hover:brightness-110"
+            className="px-3.5 py-2 rounded-2xl bg-gradient-to-r from-brand-500 to-amber-500 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-md shadow-brand-500/20 hover:brightness-105 transition"
           >
             <Gift className="w-4 h-4" />
             Regalo
@@ -194,14 +290,58 @@ export default function ChatRoom({
         </div>
 
         {/* Messages Feed */}
-        <div className="flex-1 overflow-y-auto p-3.5 space-y-2">
+        <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
+          {/* End-to-End Privacy Notice */}
+          <div className="flex justify-center mb-3">
+            <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/90 border border-slate-200/80 text-[11px] font-semibold text-slate-500 shadow-sm">
+              <Lock className="w-3 h-3 text-emerald-600 shrink-0" />
+              <span>
+                Chat privado entre <strong>{currentUser.name?.split(' ')[0]}</strong> y{' '}
+                <strong>{livePeer?.name?.split(' ')[0]}</strong> • Nadie más puede leerlo
+              </span>
+            </div>
+          </div>
+
+          {/* Empty state / Icebreakers */}
+          {messages.length === 0 && (
+            <div className="my-6 p-5 rounded-3xl bg-white border border-rose-100/90 shadow-card text-center space-y-3">
+              <img
+                src={getPrimaryPhoto(livePeer, 200)}
+                alt={livePeer?.name}
+                className="w-16 h-16 rounded-2xl object-cover mx-auto border-2 border-rose-100 shadow-sm"
+              />
+              <div>
+                <p className="text-sm font-extrabold text-slate-900">
+                  Rompe el hielo con {livePeer?.name}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Toca una frase rápida o escribe tu propio mensaje abajo:
+                </p>
+              </div>
+              <div className="space-y-1.5 pt-1">
+                {icebreakers.map((phrase, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => sendQuickText(phrase)}
+                    className="w-full py-2.5 px-3.5 rounded-2xl bg-rose-50/70 hover:bg-rose-100/80 border border-rose-200/70 text-xs font-bold text-brand-700 text-left flex items-center justify-between gap-2 transition"
+                  >
+                    <span className="truncate">{phrase}</span>
+                    <Sparkles className="w-3.5 h-3.5 text-brand-500 shrink-0" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {messages.map((msg) => {
             const isMine = msg.senderId === currentUser.uid;
+            const timeLabel = formatMessageTime(msg.createdAt, msg.clientCreatedAt);
 
             if (msg.type === 'system') {
               return (
                 <div key={msg.id} className="text-center my-2">
-                  <span className="inline-block px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-[11px] text-amber-300">
+                  <span className="inline-block px-3.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-800">
                     {msg.text}
                   </span>
                 </div>
@@ -214,35 +354,71 @@ export default function ChatRoom({
 
             if (msg.type === 'image') {
               return (
-                <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+                <div
+                  key={msg.id}
+                  className={`flex items-end gap-2 ${isMine ? 'justify-end' : 'justify-start'}`}
+                >
+                  {!isMine && (
+                    <img
+                      src={getPrimaryPhoto(livePeer, 80)}
+                      alt=""
+                      className="w-7 h-7 rounded-full object-cover shrink-0 mb-1"
+                    />
+                  )}
                   <div
-                    className={`max-w-[75%] rounded-2xl overflow-hidden border p-1 ${
+                    className={`max-w-[75%] rounded-3xl overflow-hidden border p-1.5 shadow-sm ${
                       isMine
-                        ? 'bg-brand-600/30 border-brand-500/50'
-                        : 'bg-slate-900 border-slate-800'
+                        ? 'bg-gradient-to-br from-brand-500 to-rose-500 border-brand-400'
+                        : 'bg-white border-slate-200'
                     }`}
                   >
                     <img
                       src={optimizeCloudinaryUrl(msg.imageUrl, 900)}
                       alt="Imagen compartida"
                       loading="lazy"
-                      className="rounded-xl max-h-64 object-cover"
+                      className="rounded-2xl max-h-64 object-cover"
                     />
+                    <div
+                      className={`flex items-center justify-end gap-1 px-2 pt-1 text-[10px] ${
+                        isMine ? 'text-white/85' : 'text-slate-400'
+                      }`}
+                    >
+                      <span>{timeLabel}</span>
+                      {isMine && <CheckCheck className="w-3 h-3" />}
+                    </div>
                   </div>
                 </div>
               );
             }
 
             return (
-              <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+              <div
+                key={msg.id}
+                className={`flex items-end gap-2 ${isMine ? 'justify-end' : 'justify-start'}`}
+              >
+                {!isMine && (
+                  <img
+                    src={getPrimaryPhoto(livePeer, 80)}
+                    alt=""
+                    className="w-7 h-7 rounded-full object-cover shrink-0 mb-1 border border-slate-200"
+                  />
+                )}
                 <div
-                  className={`max-w-[78%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed break-words ${
+                  className={`max-w-[78%] px-4 py-2.5 rounded-3xl text-sm leading-relaxed break-words shadow-sm ${
                     isMine
-                      ? 'bg-gradient-to-r from-brand-500 to-pink-500 text-white rounded-br-sm'
-                      : 'bg-slate-900 border border-slate-800 text-slate-100 rounded-bl-sm'
+                      ? 'bg-gradient-to-r from-brand-500 to-rose-500 text-white rounded-br-md shadow-brand-500/15'
+                      : 'bg-white border border-slate-200/90 text-slate-800 rounded-bl-md'
                   }`}
                 >
-                  {msg.text}
+                  <p className="font-medium">{msg.text}</p>
+                  <div
+                    className={`flex items-center justify-end gap-1 mt-0.5 text-[10px] ${
+                      isMine ? 'text-white/80' : 'text-slate-400'
+                    }`}
+                  >
+                    <span>{timeLabel}</span>
+                    {isMine && <CheckCheck className="w-3 h-3" />}
+                  </div>
                 </div>
               </div>
             );
@@ -253,17 +429,17 @@ export default function ChatRoom({
         {/* Input Toolbar */}
         <form
           onSubmit={handleSendText}
-          className="p-2.5 pb-safe border-t border-slate-800 bg-slate-950/95 flex items-center gap-2"
+          className="p-3 pb-safe border-t border-rose-100 bg-white/95 backdrop-blur-xl flex items-center gap-2"
         >
           <button
             type="button"
             disabled={uploadingImage}
             onClick={() => imageInputRef.current?.click()}
-            className="p-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white disabled:opacity-50"
-            title="Enviar imagen"
+            className="p-2.5 rounded-2xl bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 disabled:opacity-50 transition"
+            title="Enviar foto"
           >
             {uploadingImage ? (
-              <Loader2 className="w-5 h-5 animate-spin text-brand-400" />
+              <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
             ) : (
               <ImagePlus className="w-5 h-5" />
             )}
@@ -272,7 +448,7 @@ export default function ChatRoom({
           <button
             type="button"
             onClick={() => setGiftPickerOpen(true)}
-            className="p-2.5 rounded-2xl bg-amber-500/15 border border-amber-400/40 text-amber-300 hover:bg-amber-500/25"
+            className="p-2.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition"
             title="Enviar Regalo"
           >
             <Gift className="w-5 h-5" />
@@ -282,14 +458,14 @@ export default function ChatRoom({
             type="text"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Escribe un mensaje..."
-            className="flex-1 px-3.5 py-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-sm focus:outline-none focus:border-brand-500"
+            placeholder={`Mensaje privado para ${livePeer?.name?.split(' ')[0] || ''}...`}
+            className="flex-1 px-4 py-2.5 rounded-2xl bg-slate-100/90 border border-slate-200/80 text-sm text-slate-900 placeholder:text-slate-400 font-medium focus:outline-none focus:bg-white focus:border-brand-500 transition"
           />
 
           <button
             type="submit"
             disabled={!text.trim() || sending}
-            className="p-2.5 rounded-2xl bg-brand-500 text-white hover:bg-brand-400 disabled:opacity-40 transition"
+            className="p-2.5 rounded-2xl bg-gradient-to-r from-brand-500 to-rose-500 text-white shadow-md shadow-brand-500/20 hover:brightness-105 disabled:opacity-40 transition"
           >
             <Send className="w-5 h-5" />
           </button>
@@ -307,7 +483,7 @@ export default function ChatRoom({
       <GiftPickerModal
         isOpen={giftPickerOpen}
         onClose={() => setGiftPickerOpen(false)}
-        recipientName={peerUser?.name}
+        recipientName={livePeer?.name}
         userCoins={currentUser?.coins || 0}
         sendingGiftId={sendingGiftId}
         onSelectGift={handleSendGift}

@@ -62,7 +62,7 @@ export const VIRTUAL_GIFTS = [
     name: 'Rosa',
     icon: '🌹',
     price: 10,
-    accent: 'from-rose-500/30 to-pink-500/20 border-rose-400/50',
+    accent: 'from-rose-50 to-pink-50 border-rose-200 hover:border-rose-400',
     tagline: 'Un detalle romántico clásico',
   },
   {
@@ -70,7 +70,7 @@ export const VIRTUAL_GIFTS = [
     name: 'Café',
     icon: '☕',
     price: 25,
-    accent: 'from-amber-500/30 to-orange-500/20 border-amber-400/50',
+    accent: 'from-amber-50 to-orange-50 border-amber-200 hover:border-amber-400',
     tagline: 'Rompe el hielo con energía',
   },
   {
@@ -78,7 +78,7 @@ export const VIRTUAL_GIFTS = [
     name: 'Peluche',
     icon: '🧸',
     price: 50,
-    accent: 'from-yellow-500/30 to-amber-500/20 border-yellow-400/50',
+    accent: 'from-yellow-50 to-amber-50 border-yellow-200 hover:border-yellow-400',
     tagline: 'Ternura para alegrar el día',
   },
   {
@@ -86,7 +86,7 @@ export const VIRTUAL_GIFTS = [
     name: 'Champaña',
     icon: '🍾',
     price: 150,
-    accent: 'from-emerald-500/30 to-teal-500/20 border-emerald-400/50',
+    accent: 'from-emerald-50 to-teal-50 border-emerald-200 hover:border-emerald-400',
     tagline: '¡Brindemos por esta conexión!',
   },
   {
@@ -94,7 +94,7 @@ export const VIRTUAL_GIFTS = [
     name: 'Diamante Real',
     icon: '💎',
     price: 500,
-    accent: 'from-cyan-400/35 to-indigo-500/30 border-cyan-300/70',
+    accent: 'from-sky-50 via-indigo-50 to-purple-50 border-indigo-200 hover:border-indigo-400',
     tagline: 'El regalo legendario de élite',
   },
 ];

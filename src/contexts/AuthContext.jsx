@@ -27,13 +27,14 @@ export function AuthProvider({ children }) {
       }
 
       setFirebaseUser(user);
+      setUserProfile(null);
 
       if (!user) {
-        setUserProfile(null);
         setLoading(false);
         return;
       }
 
+      setLoading(true);
       try {
         await ensureUserDocument(user);
       } catch (err) {

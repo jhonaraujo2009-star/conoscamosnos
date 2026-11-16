@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, MapPin, Sparkles, UserCheck } from 'lucide-react';
 import {
   COUNTRIES,
@@ -27,6 +27,20 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
   const [bio, setBio] = useState(userProfile?.bio || '');
   const [interests, setInterests] = useState(userProfile?.interests || []);
   const [photos, setPhotos] = useState(userProfile?.photos || []);
+
+  useEffect(() => {
+    if (!userProfile?.uid) return;
+    setName(userProfile.name && userProfile.name !== 'Nuevo Usuario' ? userProfile.name : '');
+    setAge(userProfile.age || 22);
+    setGender(userProfile.gender || GENDERS[0]);
+    setInterestedIn(userProfile.interestedIn || INTERESTED_IN_OPTIONS[2]);
+    setCountryCode(userProfile.country?.code || COUNTRIES[0].code);
+    setCity(userProfile.city || '');
+    setLookingFor(userProfile.lookingFor || LOOKING_FOR_OPTIONS[1]);
+    setBio(userProfile.bio || '');
+    setInterests(userProfile.interests || []);
+    setPhotos(userProfile.photos || []);
+  }, [userProfile?.uid]);
 
   const toggleInterest = (item) => {
     setInterests((prev) =>
@@ -69,7 +83,7 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
         interests,
         photos,
       });
-      onSuccess?.('¡Perfil completado! Bienvenido a Conoscamosnos.');
+      onSuccess?.('¡Perfil creado! Ya puedes explorar y chatear en privado.');
     } catch (err) {
       onError?.(err.message || 'No se pudo guardar tu perfil.');
     } finally {
@@ -78,24 +92,24 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-brand-500/20 text-brand-400 flex items-center justify-center">
+    <div className="min-h-screen bg-luxury-mesh flex items-center justify-center p-4 sm:p-6">
+      <div className="w-full max-w-md bg-white/95 border border-rose-100 rounded-[32px] p-6 sm:p-7 shadow-luxury backdrop-blur-xl">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-brand-50 to-rose-100 text-brand-600 flex items-center justify-center border border-rose-200/60 shadow-sm">
               <UserCheck className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white">Completa tu Perfil</h2>
-              <p className="text-xs text-slate-400">Paso {step} de 3</p>
+              <h2 className="font-display text-lg font-extrabold text-slate-900">Personaliza tu Perfil</h2>
+              <p className="text-xs font-medium text-slate-500">Paso {step} de 3 • Perfil independiente</p>
             </div>
           </div>
           <div className="flex gap-1.5">
             {[1, 2, 3].map((s) => (
               <div
                 key={s}
-                className={`h-1.5 w-7 rounded-full transition ${
-                  s <= step ? 'bg-brand-500' : 'bg-slate-800'
+                className={`h-2 w-7 rounded-full transition-all ${
+                  s <= step ? 'bg-gradient-to-r from-brand-500 to-rose-500' : 'bg-slate-200'
                 }`}
               />
             ))}
@@ -104,21 +118,21 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
 
         <form onSubmit={handleFinish} className="space-y-4">
           {step === 1 && (
-            <div className="space-y-3.5">
+            <div className="space-y-4">
               <div>
-                <label className="text-xs font-semibold text-slate-400 block mb-1">Nombre</label>
+                <label className="text-xs font-bold text-slate-700 block mb-1.5">¿Cómo te llamas?</label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-sm focus:outline-none focus:border-brand-500"
-                  placeholder="Tu nombre visible"
+                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-medium focus:outline-none focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
+                  placeholder="Tu nombre o apodo visible"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-semibold text-slate-400 block mb-1">
+                  <label className="text-xs font-bold text-slate-700 block mb-1.5">
                     Edad (+{MIN_AGE})
                   </label>
                   <input
@@ -127,15 +141,15 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
                     max={99}
                     value={age}
                     onChange={(e) => setAge(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-sm focus:outline-none focus:border-brand-500"
+                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-medium focus:outline-none focus:bg-white focus:border-brand-500"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-400 block mb-1">Género</label>
+                  <label className="text-xs font-bold text-slate-700 block mb-1.5">Soy</label>
                   <select
                     value={gender}
                     onChange={(e) => setGender(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-sm focus:outline-none focus:border-brand-500"
+                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-medium focus:outline-none focus:bg-white focus:border-brand-500"
                   >
                     {GENDERS.map((g) => (
                       <option key={g} value={g}>
@@ -147,8 +161,8 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-400 block mb-1.5">
-                  Me interesa conectar con
+                <label className="text-xs font-bold text-slate-700 block mb-2">
+                  Me interesa conocer
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   {INTERESTED_IN_OPTIONS.map((opt) => (
@@ -156,10 +170,10 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
                       type="button"
                       key={opt}
                       onClick={() => setInterestedIn(opt)}
-                      className={`py-2 px-2 rounded-xl text-xs font-semibold border transition ${
+                      className={`py-2.5 px-3 rounded-2xl text-xs font-bold border transition ${
                         interestedIn === opt
-                          ? 'bg-brand-500/20 border-brand-500 text-brand-200'
-                          : 'bg-slate-950 border-slate-800 text-slate-400'
+                          ? 'bg-brand-50 border-brand-500 text-brand-700 shadow-sm'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                       }`}
                     >
                       {opt}
@@ -171,13 +185,13 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
           )}
 
           {step === 2 && (
-            <div className="space-y-3.5">
+            <div className="space-y-4">
               <div>
-                <label className="text-xs font-semibold text-slate-400 block mb-1">País</label>
+                <label className="text-xs font-bold text-slate-700 block mb-1.5">País</label>
                 <select
                   value={countryCode}
                   onChange={(e) => setCountryCode(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-sm focus:outline-none focus:border-brand-500"
+                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-medium focus:outline-none focus:bg-white focus:border-brand-500"
                 >
                   {COUNTRIES.map((c) => (
                     <option key={c.code} value={c.code}>
@@ -188,22 +202,22 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-400 block mb-1">Ciudad</label>
+                <label className="text-xs font-bold text-slate-700 block mb-1.5">Ciudad</label>
                 <div className="relative">
-                  <MapPin className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+                  <MapPin className="w-4 h-4 text-brand-500 absolute left-4 top-3.5" />
                   <input
                     type="text"
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
                     placeholder="Ej. Bogotá, Caracas, Madrid, CDMX..."
-                    className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-sm focus:outline-none focus:border-brand-500"
+                    className="w-full pl-11 pr-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-medium focus:outline-none focus:bg-white focus:border-brand-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-400 block mb-1.5">
-                  ¿Qué estás buscando?
+                <label className="text-xs font-bold text-slate-700 block mb-2">
+                  ¿Qué tipo de conexión buscas?
                 </label>
                 <div className="space-y-2">
                   {LOOKING_FOR_OPTIONS.map((opt) => (
@@ -211,14 +225,14 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
                       type="button"
                       key={opt}
                       onClick={() => setLookingFor(opt)}
-                      className={`w-full py-2.5 px-3.5 rounded-2xl text-left text-sm font-medium border flex items-center justify-between transition ${
+                      className={`w-full py-3 px-4 rounded-2xl text-left text-sm font-bold border flex items-center justify-between transition ${
                         lookingFor === opt
-                          ? 'bg-brand-500/20 border-brand-500 text-white'
-                          : 'bg-slate-950 border-slate-800 text-slate-400'
+                          ? 'bg-brand-50 border-brand-500 text-brand-700 shadow-sm'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                       }`}
                     >
                       <span>{opt}</span>
-                      {lookingFor === opt && <Check className="w-4 h-4 text-brand-400" />}
+                      {lookingFor === opt && <Check className="w-4 h-4 text-brand-600" />}
                     </button>
                   ))}
                 </div>
@@ -227,22 +241,22 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
           )}
 
           {step === 3 && (
-            <div className="space-y-4 max-h-[68vh] overflow-y-auto pr-1">
+            <div className="space-y-4 max-h-[66vh] overflow-y-auto pr-1">
               <div>
-                <label className="text-xs font-semibold text-slate-400 block mb-1">Biografía</label>
+                <label className="text-xs font-bold text-slate-700 block mb-1.5">Sobre ti (Biografía)</label>
                 <textarea
                   rows={3}
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
                   maxLength={280}
-                  placeholder="Cuéntale al mundo sobre ti, tus gustos o qué idiomas hablas..."
-                  className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-sm focus:outline-none focus:border-brand-500 resize-none"
+                  placeholder="Cuéntale a la comunidad sobre ti, tus planes favoritos o idiomas..."
+                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-medium focus:outline-none focus:bg-white focus:border-brand-500 resize-none"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-400 block mb-1.5">
-                  Intereses ({interests.length}/10 — mínimo 2)
+                <label className="text-xs font-bold text-slate-700 block mb-2">
+                  Tus Intereses ({interests.length}/10 — elige al menos 2)
                 </label>
                 <div className="flex flex-wrap gap-1.5">
                   {INTERESTS_CATALOG.map((item) => {
@@ -252,10 +266,10 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
                         type="button"
                         key={item}
                         onClick={() => toggleInterest(item)}
-                        className={`px-3 py-1 rounded-full text-xs font-medium border transition ${
+                        className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${
                           active
-                            ? 'bg-brand-500 text-white border-brand-400'
-                            : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
+                            ? 'bg-gradient-to-r from-brand-500 to-rose-500 text-white border-transparent shadow-sm'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-brand-300'
                         }`}
                       >
                         {item}
@@ -269,12 +283,12 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
             </div>
           )}
 
-          <div className="flex items-center gap-2.5 pt-2">
+          <div className="flex items-center gap-2.5 pt-3">
             {step > 1 && (
               <button
                 type="button"
                 onClick={() => setStep((s) => s - 1)}
-                className="px-4 py-3 rounded-2xl bg-slate-800 text-slate-200 text-sm font-semibold hover:bg-slate-700 transition flex items-center gap-1"
+                className="px-4 py-3.5 rounded-2xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition flex items-center gap-1.5"
               >
                 <ArrowLeft className="w-4 h-4" />
                 Atrás
@@ -285,19 +299,19 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
               <button
                 type="button"
                 onClick={handleNext}
-                className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-brand-500 to-pink-500 text-white text-sm font-bold flex items-center justify-center gap-1.5 shadow-lg shadow-brand-500/20"
+                className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-brand-500 to-rose-500 text-white text-sm font-extrabold flex items-center justify-center gap-1.5 shadow-lg shadow-brand-500/20 hover:brightness-105 transition"
               >
-                Siguiente
+                Continuar
                 <ArrowRight className="w-4 h-4" />
               </button>
             ) : (
               <button
                 type="submit"
                 disabled={saving}
-                className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-brand-500 via-pink-500 to-amber-500 text-white text-sm font-bold flex items-center justify-center gap-1.5 shadow-lg shadow-brand-500/25 disabled:opacity-60"
+                className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-brand-500 via-rose-500 to-amber-500 text-white text-sm font-extrabold flex items-center justify-center gap-1.5 shadow-lg shadow-brand-500/25 disabled:opacity-60 transition"
               >
                 <Sparkles className="w-4 h-4" />
-                {saving ? 'Guardando...' : 'Finalizar y Explorar'}
+                {saving ? 'Guardando...' : 'Comenzar a Conectar'}
               </button>
             )}
           </div>

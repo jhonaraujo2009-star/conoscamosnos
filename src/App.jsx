@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Heart } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Heart, Sparkles } from 'lucide-react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { subscribeUserMatches } from './services/chatService';
+import { openOrCreateDirectChat } from './services/discoveryService';
+import { isMatchUnread } from './utils/formatters';
 import AuthScreen from './components/auth/AuthScreen';
 import OnboardingWizard from './components/auth/OnboardingWizard';
 import MobileShell from './components/layout/MobileShell';
@@ -45,6 +47,17 @@ function MainApp() {
     return () => clearTimeout(t);
   }, [toast]);
 
+  // Aislar completamente el estado de navegación y modales cuando cambia el usuario autenticado
+  useEffect(() => {
+    setActiveChat(null);
+    setSelectedProfile(null);
+    setCoinStoreOpen(false);
+    setWithdrawalsOpen(false);
+    setBoostOpen(false);
+    setAdminOpen(false);
+    setActiveTab('home');
+  }, [firebaseUser?.uid]);
+
   useEffect(() => {
     if (!userProfile?.uid || !userProfile?.onboardingCompleted) {
       setMatches([]);
@@ -58,13 +71,55 @@ function MainApp() {
     return () => unsub();
   }, [userProfile?.uid, userProfile?.onboardingCompleted]);
 
+  const unreadChatsCount = useMemo(() => {
+    if (!userProfile?.uid) return 0;
+    const blockedSet = new Set(userProfile.blockedUsers || []);
+    return matches.filter((m) => {
+      const peerId = (m.participants || []).find((p) => p !== userProfile.uid);
+      if (!peerId || blockedSet.has(peerId)) return false;
+      return isMatchUnread(m, userProfile.uid);
+    }).length;
+  }, [matches, userProfile?.uid, userProfile?.blockedUsers]);
+
+  const handleStartDirectChat = useCallback(
+    async (targetUser) => {
+      if (!userProfile?.uid || !targetUser) return;
+      const targetUid = targetUser.uid || targetUser.id;
+      if (!targetUid || targetUid === userProfile.uid) return;
+
+      try {
+        const res = await openOrCreateDirectChat({
+          currentUser: userProfile,
+          targetUser,
+        });
+        setSelectedProfile(null);
+        setActiveChat({
+          match: res.matchData,
+          peerUser: targetUser,
+        });
+        setActiveTab('chat');
+      } catch (err) {
+        handleError(err.message || 'No se pudo abrir la conversación privada.');
+      }
+    },
+    [userProfile, handleError]
+  );
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-3">
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-500 to-amber-400 flex items-center justify-center animate-pulse shadow-xl">
-          <Heart className="w-7 h-7 text-white fill-white" />
+      <div className="min-h-screen bg-luxury-mesh flex flex-col items-center justify-center gap-4 p-6">
+        <div className="relative">
+          <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-brand-500 via-rose-500 to-amber-400 flex items-center justify-center shadow-luxury animate-pulse">
+            <Heart className="w-8 h-8 text-white fill-white" />
+          </div>
+          <span className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-white shadow flex items-center justify-center text-amber-500">
+            <Sparkles className="w-3.5 h-3.5" />
+          </span>
         </div>
-        <p className="text-xs font-semibold text-slate-400">Conectando con Conoscamosnos...</p>
+        <div className="text-center">
+          <p className="text-base font-extrabold text-slate-900 tracking-tight">Conoscamosnos</p>
+          <p className="text-xs font-medium text-slate-500 mt-0.5">Cargando tu espacio personal...</p>
+        </div>
       </div>
     );
   }
@@ -75,8 +130,14 @@ function MainApp() {
 
   if (!userProfile) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-center">
-        <p className="text-sm text-slate-300">Preparando tu perfil en Firestore...</p>
+      <div className="min-h-screen bg-luxury-mesh flex items-center justify-center p-6 text-center">
+        <div className="bg-white/90 backdrop-blur-xl border border-rose-100 rounded-3xl p-6 shadow-soft max-w-xs w-full space-y-2">
+          <div className="w-10 h-10 mx-auto rounded-2xl bg-brand-50 text-brand-500 flex items-center justify-center animate-spin">
+            <Sparkles className="w-5 h-5" />
+          </div>
+          <p className="text-sm font-bold text-slate-800">Preparando tu perfil independiente...</p>
+          <p className="text-xs text-slate-500">Sincronizando datos de forma segura</p>
+        </div>
       </div>
     );
   }
@@ -106,13 +167,16 @@ function MainApp() {
         onOpenWithdrawals={() => setWithdrawalsOpen(true)}
         onOpenBoost={() => setBoostOpen(true)}
         onOpenAdmin={() => setAdminOpen(true)}
-        unreadBadgeCount={matches.length}
+        unreadBadgeCount={unreadChatsCount}
       >
         {activeTab === 'home' && (
           <HomeFeed
             currentUser={userProfile}
             onSelectProfile={setSelectedProfile}
+            onStartChat={handleStartDirectChat}
             onOpenBoost={() => setBoostOpen(true)}
+            onSuccess={handleSuccess}
+            onError={handleError}
           />
         )}
 
@@ -120,6 +184,7 @@ function MainApp() {
           <DiscoverSwipe
             currentUser={userProfile}
             onSelectProfile={setSelectedProfile}
+            onStartChat={handleStartDirectChat}
             onOpenChat={(chatSession) => {
               setActiveChat(chatSession);
               setActiveTab('chat');
@@ -135,12 +200,15 @@ function MainApp() {
             matches={matches}
             currentUser={userProfile}
             onSelectMatch={setActiveChat}
+            onStartChat={handleStartDirectChat}
+            onSelectProfile={setSelectedProfile}
           />
         )}
 
         {activeTab === 'profile' && (
           <ProfileScreen
             userProfile={userProfile}
+            onPreviewOwnProfile={() => setSelectedProfile(userProfile)}
             onOpenCoinStore={() => setCoinStoreOpen(true)}
             onOpenWithdrawals={() => setWithdrawalsOpen(true)}
             onOpenBoost={() => setBoostOpen(true)}
@@ -155,7 +223,9 @@ function MainApp() {
         targetUser={selectedProfile}
         currentUser={userProfile}
         onClose={() => setSelectedProfile(null)}
+        onStartChat={handleStartDirectChat}
         onOpenChat={(chatSession) => {
+          setSelectedProfile(null);
           setActiveChat(chatSession);
           setActiveTab('chat');
         }}
