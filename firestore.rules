@@ -1,0 +1,185 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isValidPackageCoins(amount) {
+      return amount in [100, 550, 1200, 3000];
+    }
+
+    function isValidGiftValue(amount) {
+      return amount in [10, 25, 50, 150, 500];
+    }
+
+    // ==================== USERS ====================
+    match /users/{userId} {
+      allow read: if isSignedIn();
+
+      allow create: if isOwner(userId)
+        && request.resource.data.role == 'user'
+        && request.resource.data.coins == 0
+        && request.resource.data.earningsDiamonds == 0
+        && request.resource.data.get('pendingWithdrawalDiamonds', 0) == 0
+        && request.resource.data.get('totalWithdrawnUSD', 0) == 0
+        && request.resource.data.likesCount == 0
+        && request.resource.data.giftsReceivedCount == 0
+        && request.resource.data.isBoosted == false;
+
+      allow update: if isAdmin()
+        || (
+          // Actualización del propio dueño (perfil, presencia, gasto de monedas, reserva de retiro o simulador)
+          isOwner(userId)
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.get('totalWithdrawnUSD', 0) == resource.data.get('totalWithdrawnUSD', 0)
+          && request.resource.data.likesCount == resource.data.likesCount
+          && request.resource.data.giftsReceivedCount == resource.data.giftsReceivedCount
+          && (
+            // Diamantes sin cambio o congelados atómicamente para un retiro pendiente
+            (
+              request.resource.data.earningsDiamonds == resource.data.earningsDiamonds
+              && request.resource.data.get('pendingWithdrawalDiamonds', 0) == resource.data.get('pendingWithdrawalDiamonds', 0)
+            )
+            || (
+              request.resource.data.earningsDiamonds < resource.data.earningsDiamonds
+              && request.resource.data.earningsDiamonds >= 0
+              && (request.resource.data.earningsDiamonds + request.resource.data.get('pendingWithdrawalDiamonds', 0))
+                 == (resource.data.earningsDiamonds + resource.data.get('pendingWithdrawalDiamonds', 0))
+            )
+          )
+          && (
+            // Monedas sin cambio o gastadas hacia abajo (>= 0)
+            (request.resource.data.coins <= resource.data.coins && request.resource.data.coins >= 0)
+            // [SOLO MODO SIMULADOR/MVP SIN CLOUD FUNCTIONS]:
+            // En producción con webhooks en backend, elimina esta rama OR para impedir recargas desde el cliente.
+            || (
+              isValidPackageCoins(request.resource.data.coins - resource.data.coins)
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coins', 'updatedAt'])
+            )
+          )
+        )
+        || (
+          // Otro usuario enviando un Like (+1 likesCount)
+          isSignedIn()
+          && request.auth.uid != userId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'updatedAt'])
+          && request.resource.data.likesCount == resource.data.likesCount + 1
+        )
+        || (
+          // Otro usuario enviando un Regalo (+1 giftsReceivedCount y diamantes válidos)
+          isSignedIn()
+          && request.auth.uid != userId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['giftsReceivedCount', 'earningsDiamonds', 'updatedAt'])
+          && request.resource.data.giftsReceivedCount == resource.data.giftsReceivedCount + 1
+          && isValidGiftValue(request.resource.data.earningsDiamonds - resource.data.earningsDiamonds)
+        );
+
+      allow delete: if false;
+    }
+
+    // ==================== LIKES ====================
+    match /likes/{likeId} {
+      allow read: if isSignedIn() && (
+        resource == null ||
+        resource.data.fromUserId == request.auth.uid ||
+        resource.data.toUserId == request.auth.uid
+      );
+      allow create: if isSignedIn()
+        && request.resource.data.fromUserId == request.auth.uid
+        && request.resource.data.toUserId != request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.fromUserId == request.auth.uid;
+    }
+
+    // ==================== MATCHES & CHAT ====================
+    match /matches/{matchId} {
+      allow read: if isSignedIn() && (
+        resource == null ||
+        request.auth.uid in resource.data.participants
+      );
+      allow create: if isSignedIn()
+        && request.auth.uid in request.resource.data.participants
+        && request.resource.data.participants.size() == 2;
+      allow update: if isSignedIn()
+        && request.auth.uid in resource.data.participants;
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/matches/$(matchId)).data.participants;
+        allow create: if isSignedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/matches/$(matchId)).data.participants
+          && request.resource.data.senderId == request.auth.uid;
+      }
+    }
+
+    // ==================== SOLICITUDES DE RECARGA MANUAL ====================
+    match /paymentRequests/{requestId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && isValidPackageCoins(request.resource.data.coinsToCredit);
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // ==================== TRANSACCIONES AUTOMÁTICAS / SIMULADAS ====================
+    match /paymentTransactions/{txId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && isValidPackageCoins(request.resource.data.coinsCredited);
+      allow update, delete: if false;
+    }
+
+    // ==================== SOLICITUDES DE RETIRO DE GANANCIAS ====================
+    match /withdrawalRequests/{withdrawalId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.amountDiamonds >= 500;
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // ==================== REGISTRO DE REGALOS ====================
+    match /giftTransactions/{txId} {
+      allow read: if isSignedIn() && (
+        resource.data.senderId == request.auth.uid ||
+        resource.data.receiverId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isSignedIn()
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.receiverId != request.auth.uid
+        && isValidGiftValue(request.resource.data.coinsCost);
+      allow update, delete: if false;
+    }
+
+    // ==================== REPORTES DE SEGURIDAD ====================
+    match /reports/{reportId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn()
+        && request.resource.data.reporterId == request.auth.uid;
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+  }
+}
