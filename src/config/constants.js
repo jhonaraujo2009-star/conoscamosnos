@@ -174,9 +174,20 @@ export const CHECKOUT_CONFIG = {
 };
 
 export const LOOKING_FOR_OPTIONS = [
+  'Nada serio',
+  'Pareja estable',
+  'Compromiso serio',
+  'Estoy libre hoy',
   'Hacer Amigos',
-  'Citas',
   'Chatear / Idiomas',
+];
+
+export const LIFESTYLE_OPTIONS = [
+  'Estilo de vida activo',
+  'Viajero frecuente',
+  'Tranquilo y hogareño',
+  'Nocturno y social',
+  'Emprendedor / Enfoque',
 ];
 
 export const GENDERS = [

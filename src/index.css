@@ -46,6 +46,20 @@
     backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
   }
+  @keyframes photoReveal {
+    0% {
+      opacity: 0.72;
+      transform: scale(1.025) translate3d(0, 0, 0);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1) translate3d(0, 0, 0);
+    }
+  }
+  .animate-photo-reveal {
+    animation: photoReveal 0.22s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    will-change: transform, opacity;
+  }
   .gift-shimmer {
     background: linear-gradient(
       115deg,

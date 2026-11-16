@@ -1,15 +1,20 @@
 import { useEffect, useState } from 'react';
 import {
+  BadgeCheck,
   Ban,
+  Briefcase,
   ChevronLeft,
   ChevronRight,
   Flag,
   Flame,
   Gift,
+  GraduationCap,
   Heart,
   Lock,
   MapPin,
   MessageCircle,
+  Quote,
+  Ruler,
   Sparkles,
   X,
   Zap,
@@ -28,6 +33,7 @@ import {
   getPrimaryPhoto,
   getSharedInterests,
   isBoostActive,
+  isProfileVerified,
   isUserActuallyOnline,
   optimizeCloudinaryUrl,
 } from '../../utils/formatters';
@@ -89,8 +95,18 @@ export default function PublicProfileModal({
 
   const online = isUserActuallyOnline(liveTarget);
   const boosted = isBoostActive(liveTarget);
+  const verified = isProfileVerified(liveTarget);
   const sharedInterests = getSharedInterests(currentUser, liveTarget);
   const sharedSet = new Set(sharedInterests);
+  const userPrompts = Array.isArray(liveTarget.prompts)
+    ? liveTarget.prompts.filter((p) => typeof p === 'string' && p.trim().length > 0)
+    : [];
+  const profileDetails = [
+    liveTarget.job ? { icon: Briefcase, label: liveTarget.job } : null,
+    liveTarget.education ? { icon: GraduationCap, label: liveTarget.education } : null,
+    liveTarget.height ? { icon: Ruler, label: liveTarget.height } : null,
+    liveTarget.lifestyle ? { icon: Sparkles, label: liveTarget.lifestyle } : null,
+  ].filter(Boolean);
 
   const handleLike = async () => {
     if (status.iLiked || isSelf) return;
@@ -269,6 +285,9 @@ export default function PublicProfileModal({
                   {liveTarget.name}
                   {liveTarget.age ? `, ${liveTarget.age}` : ''}
                 </h2>
+                {verified && (
+                  <BadgeCheck className="w-5 h-5 text-sky-400 fill-sky-400 stroke-white shrink-0" />
+                )}
                 {boosted && (
                   <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-extrabold flex items-center gap-0.5 shadow">
                     <Zap className="w-3 h-3 fill-slate-950" /> VIP
@@ -382,6 +401,48 @@ export default function PublicProfileModal({
                 Sobre {liveTarget.name}
               </p>
               <p className="text-sm text-slate-700 leading-relaxed font-medium">{liveTarget.bio}</p>
+            </div>
+          )}
+
+          {/* Atributos reales (Empleo, Educación, Estatura, Estilo de vida) */}
+          {profileDetails.length > 0 && (
+            <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-card">
+              <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mb-2">
+                Detalles
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {profileDetails.map((item, idx) => {
+                  const Icon = item.icon;
+                  return (
+                    <span
+                      key={idx}
+                      className="px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200/80 text-xs font-bold text-slate-700 inline-flex items-center gap-1.5"
+                    >
+                      <Icon className="w-3.5 h-3.5 text-brand-500" />
+                      {item.label}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Frases personales */}
+          {userPrompts.length > 0 && (
+            <div className="space-y-2">
+              {userPrompts.map((promptText, idx) => (
+                <div
+                  key={idx}
+                  className="p-4 rounded-2xl bg-white border border-rose-100/90 shadow-card space-y-1"
+                >
+                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-brand-500 flex items-center gap-1">
+                    <Quote className="w-3 h-3" /> Frase {idx + 1}
+                  </p>
+                  <p className="text-sm font-bold text-slate-800 leading-relaxed">
+                    “{promptText}”
+                  </p>
+                </div>
+              ))}
             </div>
           )}
 

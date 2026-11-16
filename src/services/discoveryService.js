@@ -28,6 +28,19 @@ export function subscribeReceivedLikes(currentUid, callback) {
   );
 }
 
+export function subscribeGivenLikesCount(currentUid, callback) {
+  if (!currentUid || !db) {
+    callback(0);
+    return () => {};
+  }
+  const q = query(collection(db, 'likes'), where('fromUserId', '==', currentUid));
+  return onSnapshot(
+    q,
+    (snap) => callback(snap.size),
+    () => callback(0)
+  );
+}
+
 function buildParticipantSnapshot(user) {
   return {
     uid: user.uid || user.id,

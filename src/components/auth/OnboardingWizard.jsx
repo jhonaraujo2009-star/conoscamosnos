@@ -219,20 +219,20 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
                 <label className="text-xs font-bold text-slate-700 block mb-2">
                   ¿Qué tipo de conexión buscas?
                 </label>
-                <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
                   {LOOKING_FOR_OPTIONS.map((opt) => (
                     <button
                       type="button"
                       key={opt}
                       onClick={() => setLookingFor(opt)}
-                      className={`w-full py-3 px-4 rounded-2xl text-left text-sm font-bold border flex items-center justify-between transition ${
+                      className={`py-2.5 px-3 rounded-2xl text-left text-xs font-bold border flex items-center justify-between gap-1 transition ${
                         lookingFor === opt
                           ? 'bg-brand-50 border-brand-500 text-brand-700 shadow-sm'
                           : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                       }`}
                     >
-                      <span>{opt}</span>
-                      {lookingFor === opt && <Check className="w-4 h-4 text-brand-600" />}
+                      <span className="truncate">{opt}</span>
+                      {lookingFor === opt && <Check className="w-3.5 h-3.5 text-brand-600 shrink-0" />}
                     </button>
                   ))}
                 </div>

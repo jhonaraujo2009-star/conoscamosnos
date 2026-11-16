@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  AlertCircle,
   ArrowRight,
   BadgeCheck,
   Briefcase,
+  CheckCircle2,
   ChevronRight,
   Coins,
   Flame,
@@ -19,7 +19,6 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
-  Star,
   X,
   Zap,
 } from 'lucide-react';
@@ -28,6 +27,7 @@ import {
   GENDERS,
   INTERESTED_IN_OPTIONS,
   INTERESTS_CATALOG,
+  LIFESTYLE_OPTIONS,
   LOOKING_FOR_OPTIONS,
   MAX_PHOTOS,
   MIN_AGE,
@@ -36,8 +36,10 @@ import { logoutUser } from '../../services/authService';
 import { getUserCloudinaryFolder, uploadImageToCloudinary } from '../../services/cloudinaryService';
 import { updateUserProfile } from '../../services/userService';
 import {
+  calculateProfileCompletion,
   getPrimaryPhoto,
   isBoostActive,
+  isProfileVerified,
   optimizeCloudinaryUrl,
 } from '../../utils/formatters';
 import PhotoUploader from './PhotoUploader';
@@ -65,6 +67,10 @@ export default function ProfileScreen({
   const [city, setCity] = useState(userProfile?.city || '');
   const [lookingFor, setLookingFor] = useState(userProfile?.lookingFor || LOOKING_FOR_OPTIONS[0]);
   const [bio, setBio] = useState(userProfile?.bio || '');
+  const [height, setHeight] = useState(userProfile?.height || '');
+  const [job, setJob] = useState(userProfile?.job || '');
+  const [education, setEducation] = useState(userProfile?.education || '');
+  const [lifestyle, setLifestyle] = useState(userProfile?.lifestyle || '');
   const [interests, setInterests] = useState(userProfile?.interests || []);
   const [photos, setPhotos] = useState(userProfile?.photos || []);
   const [prompts, setPrompts] = useState(userProfile?.prompts || ['', '']);
@@ -79,6 +85,10 @@ export default function ProfileScreen({
     setCity(userProfile.city || '');
     setLookingFor(userProfile.lookingFor || LOOKING_FOR_OPTIONS[0]);
     setBio(userProfile.bio || '');
+    setHeight(userProfile.height || '');
+    setJob(userProfile.job || '');
+    setEducation(userProfile.education || '');
+    setLifestyle(userProfile.lifestyle || '');
     setInterests(userProfile.interests || []);
     setPhotos(userProfile.photos || []);
     setPrompts(
@@ -135,6 +145,10 @@ export default function ProfileScreen({
         city,
         lookingFor,
         bio,
+        height,
+        job,
+        education,
+        lifestyle,
         interests,
         photos,
         prompts,
@@ -148,18 +162,50 @@ export default function ProfileScreen({
     }
   };
 
-  const userPhotos = Array.isArray(userProfile?.photos) ? userProfile.photos : [];
-  const missingPhotosCount = Math.max(2, MAX_PHOTOS - userPhotos.length);
-  const boosted = isBoostActive(userProfile);
+  const userPhotos = Array.isArray(userProfile?.photos) ? userProfile.photos.filter(Boolean) : [];
+  const missingPhotosCount = Math.max(0, MAX_PHOTOS - userPhotos.length);
+  const filledPromptsCount = Array.isArray(userProfile?.prompts)
+    ? userProfile.prompts.filter((p) => typeof p === 'string' && p.trim().length > 0).length
+    : 0;
+  const missingPromptsCount = Math.max(0, 2 - filledPromptsCount);
 
+  const boosted = isBoostActive(userProfile);
+  const verified = isProfileVerified(userProfile);
+  const completion = calculateProfileCompletion(userProfile);
+
+  // Chips 100% dinámicos conectados a los campos reales del usuario
   const quickChips = [
-    { label: 'Vivo en +', icon: Home, dot: true },
-    { label: 'Estatura +', icon: Ruler, dot: false },
-    { label: 'Empleo +', icon: Briefcase, dot: true },
-    { label: 'Educación +', icon: GraduationCap, dot: true },
-    { label: 'Básicos +', icon: Sparkles, dot: false },
-    { label: 'Estilo de vida +', icon: Heart, dot: false },
-    { label: 'Nada serio', icon: Flame, dot: false },
+    {
+      label: userProfile?.city ? `${userProfile.country?.flag || '📍'} ${userProfile.city}` : 'Vivo en +',
+      icon: Home,
+      missing: !userProfile?.city?.trim(),
+    },
+    {
+      label: userProfile?.height ? userProfile.height : 'Estatura +',
+      icon: Ruler,
+      missing: !userProfile?.height?.trim(),
+    },
+    {
+      label: userProfile?.job ? userProfile.job : 'Empleo +',
+      icon: Briefcase,
+      missing: !userProfile?.job?.trim(),
+    },
+    {
+      label: userProfile?.education ? userProfile.education : 'Educación +',
+      icon: GraduationCap,
+      missing: !userProfile?.education?.trim(),
+    },
+    {
+      label: userProfile?.lifestyle ? userProfile.lifestyle : 'Estilo de vida +',
+      icon: Sparkles,
+      missing: !userProfile?.lifestyle?.trim(),
+    },
+    {
+      label: userProfile?.lookingFor || 'Intención +',
+      icon: Flame,
+      missing: !userProfile?.lookingFor,
+      highlight: Boolean(userProfile?.lookingFor),
+    },
   ];
 
   return (
@@ -172,14 +218,22 @@ export default function ProfileScreen({
               src={getPrimaryPhoto(userProfile, 200)}
               alt={userProfile?.name}
               onClick={onPreviewOwnProfile}
-              className="w-16 h-16 rounded-2xl object-cover bg-zinc-200 shrink-0 cursor-pointer"
+              className="w-16 h-16 rounded-2xl object-cover bg-zinc-200 shrink-0 cursor-pointer shadow-sm"
             />
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
                 <h1 className="text-2xl font-extrabold text-zinc-900 truncate">
                   {userProfile?.name}
+                  {userProfile?.age ? `, ${userProfile.age}` : ''}
                 </h1>
-                <BadgeCheck className="w-5 h-5 text-zinc-900 fill-zinc-900 stroke-white shrink-0" />
+                <BadgeCheck
+                  className={`w-5 h-5 shrink-0 ${
+                    verified
+                      ? 'text-sky-500 fill-sky-500 stroke-white'
+                      : 'text-zinc-400 fill-zinc-300 stroke-white'
+                  }`}
+                  title={verified ? 'Perfil Verificado' : 'Agrega foto y bio para verificar'}
+                />
               </div>
               <button
                 type="button"
@@ -192,18 +246,14 @@ export default function ProfileScreen({
             </div>
           </div>
 
-          {/* 2 botones circulares grises claros (modo doble y engranaje de ajustes) */}
           <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={onOpenWithdrawals}
               className="w-10 h-10 rounded-full bg-zinc-200/80 text-zinc-800 flex items-center justify-center hover:bg-zinc-300/80 transition"
-              title="Billetera de Diamantes y Modo Doble"
+              title="Mis Diamantes y Retiros USD"
             >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="4" y="5" width="10" height="14" rx="2" />
-                <path d="M17 7h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-8" />
-              </svg>
+              <Gem className="w-5 h-5 text-sky-600" />
             </button>
 
             <button
@@ -217,58 +267,77 @@ export default function ProfileScreen({
           </div>
         </header>
 
-        {/* 2. BOTÓN DE ALERTA DE PERFIL */}
+        {/* 2. BARRA DINÁMICA DE COMPLETITUD DE PERFIL */}
         <button
           type="button"
           onClick={() => setEditorOpen(true)}
           className="w-full bg-white rounded-full px-4 py-3.5 shadow-sm flex items-center justify-between hover:bg-zinc-50 transition"
         >
           <div className="flex items-center gap-2.5">
-            <span className="w-5 h-5 rounded-full bg-[#FF2E54] text-white text-xs font-black flex items-center justify-center">
-              !
+            {completion.percent < 100 ? (
+              <span className="w-5 h-5 rounded-full bg-[#FF2E54] text-white text-xs font-black flex items-center justify-center">
+                !
+              </span>
+            ) : (
+              <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+            )}
+            <span className="text-sm font-extrabold text-zinc-900">
+              {completion.percent < 100
+                ? `Completa tu perfil (${completion.percent}%)`
+                : 'Perfil completo al 100%'}
             </span>
-            <span className="text-sm font-extrabold text-zinc-900">Completa tu perfil</span>
           </div>
           <ChevronRight className="w-4 h-4 text-zinc-400" />
         </button>
 
-        {/* 3. CHIPS / PÍLDORAS DE ATRIBUTOS RÁPIDOS */}
+        {/* 3. CHIPS / PÍLDORAS DE ATRIBUTOS RÁPIDOS (100% REALES) */}
         <div className="flex flex-wrap gap-2">
-          {quickChips.map((chip) => {
+          {quickChips.map((chip, idx) => {
             const Icon = chip.icon;
             return (
               <button
-                key={chip.label}
+                key={idx}
                 type="button"
                 onClick={() => setEditorOpen(true)}
-                className="relative bg-zinc-200/80 hover:bg-zinc-300/70 text-zinc-800 rounded-full px-3.5 py-2 text-xs font-bold inline-flex items-center gap-1.5 transition"
+                className={`relative rounded-full px-3.5 py-2 text-xs font-bold inline-flex items-center gap-1.5 transition ${
+                  chip.highlight
+                    ? 'bg-zinc-900 text-white'
+                    : 'bg-zinc-200/80 hover:bg-zinc-300/70 text-zinc-800'
+                }`}
               >
-                <Icon className="w-3.5 h-3.5 text-zinc-600" />
-                <span>{chip.label}</span>
-                {chip.dot && (
-                  <span className="w-2 h-2 rounded-full bg-[#FF2E54] ml-0.5" />
+                <Icon className={`w-3.5 h-3.5 ${chip.highlight ? 'text-[#FF2E54]' : 'text-zinc-600'}`} />
+                <span className="max-w-[140px] truncate">{chip.label}</span>
+                {chip.missing && (
+                  <span className="w-2 h-2 rounded-full bg-[#FF2E54] ml-0.5 shrink-0" />
                 )}
               </button>
             );
           })}
         </div>
 
-        {/* 4. SECCIÓN "MIS FOTOS" */}
+        {/* 4. SECCIÓN "MIS FOTOS" DINÁMICA */}
         <section className="space-y-2">
           <div>
             <div className="flex items-center gap-1.5">
               <h2 className="text-base font-extrabold text-zinc-900">Mis fotos</h2>
-              <span className="w-4 h-4 rounded-full bg-[#FF2E54] text-white text-[10px] font-black flex items-center justify-center">
-                !
-              </span>
+              {missingPhotosCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-[#FF2E54] text-white text-[10px] font-black flex items-center justify-center">
+                  !
+                </span>
+              )}
             </div>
-            <p className="text-xs font-bold text-[#FF2E54]">
-              Agrega {missingPhotosCount} fotos más
-            </p>
+            {missingPhotosCount > 0 ? (
+              <p className="text-xs font-bold text-[#FF2E54]">
+                Agrega {missingPhotosCount} {missingPhotosCount === 1 ? 'foto más' : 'fotos más'}
+              </p>
+            ) : (
+              <p className="text-xs font-bold text-emerald-600">
+                ✓ Galería completa ({userPhotos.length}/{MAX_PHOTOS})
+              </p>
+            )}
           </div>
 
           <div className="bg-white rounded-3xl p-4 shadow-sm space-y-3">
-            {/* Fila horizontal de 6 espacios de fotos unidas */}
             <div className="grid grid-cols-6 gap-1 rounded-2xl overflow-hidden">
               {Array.from({ length: 6 }).map((_, idx) => {
                 const url = userPhotos[idx];
@@ -328,22 +397,29 @@ export default function ProfileScreen({
           />
         </section>
 
-        {/* 5. SECCIÓN "MIS FRASES" */}
+        {/* 5. SECCIÓN "MIS FRASES" DINÁMICA */}
         <section className="space-y-2">
           <div>
             <div className="flex items-center gap-1.5">
               <h2 className="text-base font-extrabold text-zinc-900">Mis frases</h2>
-              <span className="w-4 h-4 rounded-full bg-[#FF2E54] text-white text-[10px] font-black flex items-center justify-center">
-                !
-              </span>
+              {missingPromptsCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-[#FF2E54] text-white text-[10px] font-black flex items-center justify-center">
+                  !
+                </span>
+              )}
             </div>
-            <p className="text-xs font-bold text-[#FF2E54]">Agregar 2 frases</p>
+            {missingPromptsCount > 0 ? (
+              <p className="text-xs font-bold text-[#FF2E54]">
+                Agregar {missingPromptsCount} {missingPromptsCount === 1 ? 'frase' : 'frases'}
+              </p>
+            ) : (
+              <p className="text-xs font-bold text-emerald-600">✓ Tus 2 frases están activas</p>
+            )}
           </div>
 
-          {/* 2 tarjetas blancas cuadradas lado a lado con botón circular negro + flotando */}
           <div className="grid grid-cols-2 gap-3">
             {[0, 1].map((slotIdx) => {
-              const phraseText = prompts[slotIdx];
+              const phraseText = userProfile?.prompts?.[slotIdx] || prompts[slotIdx];
               return (
                 <button
                   key={slotIdx}
@@ -377,9 +453,8 @@ export default function ProfileScreen({
         </section>
       </div>
 
-      {/* 6. BANNERS FLOTANTES DE MONETIZACIÓN (en la parte inferior sobre el BottomNav) */}
+      {/* 6. BANNERS FLOTANTES DE MONETIZACIÓN (100% CONECTADOS A SALDOS REALES) */}
       <div className="space-y-2.5 pt-2">
-        {/* Banner dorado GOLD */}
         <button
           type="button"
           onClick={onOpenCoinStore}
@@ -402,16 +477,15 @@ export default function ProfileScreen({
           <ArrowRight className="w-5 h-5 text-zinc-900 shrink-0 stroke-[2.5]" />
         </button>
 
-        {/* Píldora blanca flotante con sombra dividida en 3 contadores */}
         <div className="bg-white rounded-full px-3 py-2.5 shadow-md grid grid-cols-3 divide-x divide-zinc-200 items-center text-center">
           <button
             type="button"
             onClick={onOpenCoinStore}
             className="flex items-center justify-center gap-1.5 px-1 py-0.5"
           >
-            <Star className="w-4 h-4 text-sky-500 fill-sky-500 shrink-0" />
+            <Coins className="w-4 h-4 text-amber-500 shrink-0" />
             <span className="text-[11px] font-extrabold text-zinc-800 truncate">
-              0 Super Likes
+              {userProfile?.coins || 0} Monedas
             </span>
           </button>
 
@@ -422,29 +496,34 @@ export default function ProfileScreen({
           >
             <Zap className="w-4 h-4 text-[#A855F7] fill-[#A855F7] shrink-0" />
             <span className="text-[11px] font-extrabold text-zinc-800 truncate">
-              {boosted ? '1 Boost' : '0 Boosts'}
+              {boosted ? 'Boost Activo' : 'Boost VIP'}
             </span>
           </button>
 
           <button
             type="button"
-            onClick={onOpenCoinStore}
+            onClick={onOpenWithdrawals}
             className="flex items-center justify-center gap-1.5 px-1 py-0.5"
           >
-            <Flame className="w-4 h-4 text-[#FF2E54] fill-[#FF2E54] shrink-0" />
+            <Gem className="w-4 h-4 text-sky-500 shrink-0" />
             <span className="text-[11px] font-extrabold text-zinc-800 truncate">
-              Suscripciones
+              {userProfile?.earningsDiamonds || 0} 💎
             </span>
           </button>
         </div>
       </div>
 
-      {/* Modal Completo de Edición de Perfil, Billetera y Cuenta */}
+      {/* Modal Completo de Edición de Perfil, Atributos y Cuenta */}
       {editorOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="w-full max-w-md max-h-[92dvh] bg-white rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden shadow-2xl">
             <div className="px-5 py-4 border-b border-zinc-200 flex items-center justify-between">
-              <h3 className="text-base font-extrabold text-zinc-900">Editar Perfil y Ajustes</h3>
+              <div>
+                <h3 className="text-base font-extrabold text-zinc-900">Editar Perfil y Ajustes</h3>
+                <p className="text-[11px] font-semibold text-zinc-500">
+                  Completado al {completion.percent}%
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => setEditorOpen(false)}
@@ -575,27 +654,88 @@ export default function ProfileScreen({
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-zinc-600 block mb-1">Ciudad</label>
+                    <label className="text-xs font-bold text-zinc-600 block mb-1">Ciudad (Vivo en)</label>
                     <input
                       type="text"
                       value={city}
                       onChange={(e) => setCity(e.target.value)}
+                      placeholder="Ej. Caracas, Bogotá..."
                       className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-100 text-xs font-bold text-zinc-900"
                     />
                   </div>
                 </div>
 
+                {/* Qué buscas — sincronizado directamente con Explorar */}
                 <div>
-                  <label className="text-xs font-bold text-zinc-600 block mb-1">Buscando</label>
-                  <select
-                    value={lookingFor}
-                    onChange={(e) => setLookingFor(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-100 text-xs font-bold text-zinc-900"
-                  >
-                    {LOOKING_FOR_OPTIONS.map((o) => (
-                      <option key={o} value={o}>{o}</option>
+                  <label className="text-xs font-bold text-zinc-600 block mb-1.5">
+                    ¿Qué estás buscando? (Te muestra en Explorar)
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {LOOKING_FOR_OPTIONS.map((opt) => (
+                      <button
+                        type="button"
+                        key={opt}
+                        onClick={() => setLookingFor(opt)}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border text-left transition ${
+                          lookingFor === opt
+                            ? 'bg-zinc-900 text-white border-zinc-900'
+                            : 'bg-zinc-100 text-zinc-700 border-transparent hover:bg-zinc-200'
+                        }`}
+                      >
+                        {opt}
+                      </button>
                     ))}
-                  </select>
+                  </div>
+                </div>
+
+                {/* Atributos adicionales reales (Estatura, Empleo, Educación, Estilo de vida) */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-zinc-600 block mb-1">Estatura</label>
+                    <input
+                      type="text"
+                      value={height}
+                      onChange={(e) => setHeight(e.target.value)}
+                      placeholder="Ej. 1.75 m"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-100 text-xs font-bold text-zinc-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-zinc-600 block mb-1">Empleo / Profesión</label>
+                    <input
+                      type="text"
+                      value={job}
+                      onChange={(e) => setJob(e.target.value)}
+                      placeholder="Ej. Diseñador, Médico"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-100 text-xs font-bold text-zinc-900"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-zinc-600 block mb-1">Educación</label>
+                    <input
+                      type="text"
+                      value={education}
+                      onChange={(e) => setEducation(e.target.value)}
+                      placeholder="Ej. Universitaria"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-100 text-xs font-bold text-zinc-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-zinc-600 block mb-1">Estilo de vida</label>
+                    <select
+                      value={lifestyle}
+                      onChange={(e) => setLifestyle(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-100 text-xs font-bold text-zinc-900"
+                    >
+                      <option value="">Seleccionar...</option>
+                      {LIFESTYLE_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 <div>
@@ -604,11 +744,11 @@ export default function ProfileScreen({
                     rows={3}
                     value={bio}
                     onChange={(e) => setBio(e.target.value)}
+                    placeholder="Cuéntale a la comunidad quién eres..."
                     className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-100 text-xs font-bold text-zinc-900 resize-none"
                   />
                 </div>
 
-                {/* Frases personales */}
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-zinc-600 block">Mis 2 Frases</label>
                   <input

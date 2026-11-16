@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
-import { ArrowLeft, Heart, MessageCircle, User } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, BadgeCheck, Heart, MessageCircle, Sparkles, User, Users } from 'lucide-react';
 import { sendLike } from '../../services/discoveryService';
 import { subscribePopularUsers } from '../../services/userService';
-import { getPrimaryPhoto, isUserActuallyOnline } from '../../utils/formatters';
+import { getPrimaryPhoto, isProfileVerified, isUserActuallyOnline } from '../../utils/formatters';
 
 /* Ilustraciones 3D brillantes en SVG de alta precisión */
 function LollipopHeart3D() {
@@ -19,14 +19,11 @@ function LollipopHeart3D() {
           <stop offset="100%" stopColor="#CBD5E1" />
         </linearGradient>
       </defs>
-      {/* Palito */}
       <rect x="56" y="68" width="8" height="44" rx="4" transform="rotate(-18 60 90)" fill="url(#stickGrad)" />
-      {/* Corazón 3D */}
       <path
         d="M60 86C60 86 20 62 20 37C20 23.5 31 14 44 14C52 14 57.5 18.5 60 23.5C62.5 18.5 68 14 76 14C89 14 100 23.5 100 37C100 62 60 86 60 86Z"
         fill="url(#lollipopGrad)"
       />
-      {/* Brillo especular 3D */}
       <ellipse cx="40" cy="30" rx="10" ry="6" transform="rotate(-25 40 30)" fill="white" fillOpacity="0.55" />
       <circle cx="33" cy="40" r="2.5" fill="white" fillOpacity="0.4" />
     </svg>
@@ -52,11 +49,9 @@ function TulipFlower3D() {
           <stop offset="100%" stopColor="#881337" />
         </radialGradient>
       </defs>
-      {/* Tallo y Hojas */}
       <rect x="56" y="60" width="8" height="48" rx="4" fill="url(#stemGrad)" />
       <path d="M60 98C60 98 88 90 92 66C76 68 64 80 60 98Z" fill="url(#stemGrad)" />
       <path d="M60 102C60 102 32 92 28 70C44 72 56 84 60 102Z" fill="url(#stemGrad)" />
-      {/* Pétalos */}
       <path d="M60 14C45 26 42 52 60 68C78 52 75 26 60 14Z" fill="url(#petalCenter)" />
       <path d="M36 22C30 42 38 64 60 68C50 50 48 34 36 22Z" fill="url(#petalSide)" />
       <path d="M84 22C90 42 82 64 60 68C70 50 72 34 84 22Z" fill="url(#petalSide)" />
@@ -80,10 +75,8 @@ function DiamondRing3D() {
           <stop offset="100%" stopColor="#9D174D" />
         </linearGradient>
       </defs>
-      {/* Aro dorado/plata 3D */}
       <circle cx="60" cy="72" r="30" stroke="url(#ringBand)" strokeWidth="11" />
       <circle cx="60" cy="72" r="30" stroke="white" strokeOpacity="0.35" strokeWidth="3" />
-      {/* Diamante Rosa */}
       <polygon points="44,24 76,24 88,38 60,62 32,38" fill="url(#pinkGem)" />
       <polygon points="44,24 76,24 68,38 52,38" fill="#FCE7F3" fillOpacity="0.7" />
       <polygon points="52,38 68,38 60,62" fill="#F472B6" fillOpacity="0.65" />
@@ -106,13 +99,11 @@ function BlueMoonStar3D() {
           <stop offset="100%" stopColor="#CA8A04" />
         </radialGradient>
       </defs>
-      {/* Luna Creciente Azul 3D */}
       <path
         d="M72 20C50 22 32 40 32 63C32 87 52 104 76 102C86 101 94 96 100 90C82 92 66 78 66 58C66 41 76 27 90 22C84 20 78 19.5 72 20Z"
         fill="url(#moonGrad)"
       />
       <ellipse cx="46" cy="48" rx="5" ry="12" transform="rotate(20 46 48)" fill="white" fillOpacity="0.4" />
-      {/* Estrella 3D */}
       <path
         d="M84 34L88.5 43L98.5 44.5L91 51.5L93 61.5L84 56.5L75 61.5L77 51.5L69.5 44.5L79.5 43L84 34Z"
         fill="url(#starGrad)"
@@ -125,31 +116,33 @@ const EXPLORE_CARDS = [
   {
     id: 'nada_serio',
     title: 'Nada serio',
-    baseCount: 37,
-    filterMatch: 'Chatear / Idiomas',
+    matchValues: ['Nada serio'],
     Illustration: LollipopHeart3D,
   },
   {
     id: 'pareja_estable',
     title: 'Pareja estable',
-    baseCount: 176,
-    filterMatch: 'Citas',
+    matchValues: ['Pareja estable', 'Citas'],
     Illustration: TulipFlower3D,
   },
   {
     id: 'compromiso_serio',
     title: 'Compromiso serio',
-    baseCount: 101,
-    filterMatch: 'Citas',
+    matchValues: ['Compromiso serio'],
     Illustration: DiamondRing3D,
   },
   {
     id: 'libre_hoy',
     title: 'Estoy libre hoy',
-    baseCount: 57,
-    filterMatch: 'Hacer Amigos',
+    matchValues: ['Estoy libre hoy'],
     Illustration: BlueMoonStar3D,
   },
+];
+
+const EXTRA_CATEGORIES = [
+  { id: 'hacer_amigos', title: 'Hacer Amigos', emoji: '🤝', matchValues: ['Hacer Amigos'] },
+  { id: 'idiomas', title: 'Chatear / Idiomas', emoji: '🗣️', matchValues: ['Chatear / Idiomas'] },
+  { id: 'todos', title: 'Ver todos', emoji: '✨', matchValues: null },
 ];
 
 export default function HomeFeed({
@@ -180,6 +173,26 @@ export default function HomeFeed({
     return () => unsub();
   }, [currentUser?.uid, currentUser?.country?.code, blockedKey]);
 
+  const categoryMatchesUser = (category, user) => {
+    if (!category?.matchValues) return true;
+    const userGoal = (user.lookingFor || '').trim();
+    return category.matchValues.includes(userGoal);
+  };
+
+  // Contadores reales dinámicos por categoría
+  const countsByCategoryId = useMemo(() => {
+    const map = {};
+    [...EXPLORE_CARDS, ...EXTRA_CATEGORIES].forEach((cat) => {
+      map[cat.id] = users.filter((u) => categoryMatchesUser(cat, u)).length;
+    });
+    return map;
+  }, [users]);
+
+  const categoryUsers = useMemo(() => {
+    if (!selectedCategory) return [];
+    return users.filter((u) => categoryMatchesUser(selectedCategory, u));
+  }, [users, selectedCategory]);
+
   const handleQuickLike = async (e, targetUser) => {
     e.stopPropagation();
     const uid = targetUser.uid || targetUser.id;
@@ -200,32 +213,54 @@ export default function HomeFeed({
   if (selectedCategory) {
     return (
       <div className="min-h-full bg-[#F4F4F6] text-zinc-900 p-4 space-y-4">
-        <div className="flex items-center gap-3 pt-safe">
-          <button
-            type="button"
-            onClick={() => setSelectedCategory(null)}
-            className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-zinc-800"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h2 className="text-xl font-extrabold text-zinc-900">{selectedCategory.title}</h2>
-            <p className="text-xs text-zinc-500">Perfiles disponibles para conectar</p>
+        <div className="flex items-center justify-between gap-3 pt-safe">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => setSelectedCategory(null)}
+              className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-zinc-800 shrink-0 active:scale-95 transition-transform"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div className="min-w-0">
+              <h2 className="text-xl font-extrabold text-zinc-900 truncate">
+                {selectedCategory.title}
+              </h2>
+              <p className="text-xs font-semibold text-zinc-500">
+                {categoryUsers.length}{' '}
+                {categoryUsers.length === 1 ? 'persona buscando lo mismo' : 'personas buscando lo mismo'}
+              </p>
+            </div>
           </div>
         </div>
 
-        {users.length === 0 ? (
-          <div className="bg-white rounded-2xl p-8 text-center shadow-sm">
-            <p className="text-sm font-bold text-zinc-800">Hasta acá por los momentos</p>
-            <p className="text-xs text-zinc-500 mt-1">
-              No hay más perfiles cargados en esta categoría ahora mismo.
-            </p>
+        {categoryUsers.length === 0 ? (
+          <div className="bg-white rounded-3xl p-8 text-center shadow-sm space-y-3 mt-4">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-zinc-100 text-zinc-500 flex items-center justify-center">
+              <Users className="w-7 h-7" />
+            </div>
+            <div>
+              <p className="text-base font-extrabold text-zinc-900">
+                Hasta acá por los momentos
+              </p>
+              <p className="text-xs text-zinc-500 mt-1 max-w-xs mx-auto leading-relaxed">
+                Aún no hay otras personas que hayan elegido <strong>“{selectedCategory.title}”</strong> en su perfil. ¡Prueba otra categoría o vuelve más tarde!
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedCategory(null)}
+              className="px-5 py-2.5 rounded-full bg-zinc-900 text-white text-xs font-extrabold active:scale-95 transition-transform"
+            >
+              Explorar otras categorías
+            </button>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3">
-            {users.map((u) => {
+            {categoryUsers.map((u) => {
               const uid = u.uid || u.id;
               const online = isUserActuallyOnline(u);
+              const verified = isProfileVerified(u);
               const liked = Boolean(likedIds[uid]);
               return (
                 <div
@@ -240,15 +275,22 @@ export default function HomeFeed({
                       loading="lazy"
                       className="w-full h-full object-cover"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent" />
                     {online && (
-                      <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+                      <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[9px] font-extrabold shadow">
+                        Online
+                      </span>
                     )}
                     <div className="absolute bottom-2.5 inset-x-3 text-white">
-                      <p className="text-sm font-extrabold truncate">
-                        {u.name}, {u.age}
+                      <p className="text-sm font-extrabold truncate flex items-center gap-1">
+                        <span className="truncate">
+                          {u.name}, {u.age}
+                        </span>
+                        {verified && (
+                          <BadgeCheck className="w-4 h-4 text-sky-400 fill-sky-400 stroke-white shrink-0" />
+                        )}
                       </p>
-                      <p className="text-[11px] text-white/80 truncate">
+                      <p className="text-[11px] text-white/85 truncate">
                         {u.country?.flag} {u.city || u.country?.name}
                       </p>
                     </div>
@@ -257,8 +299,8 @@ export default function HomeFeed({
                     <button
                       type="button"
                       onClick={(e) => handleQuickLike(e, u)}
-                      className={`py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 ${
-                        liked ? 'bg-rose-50 text-[#FF2E54]' : 'bg-zinc-100 text-zinc-800'
+                      className={`py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition ${
+                        liked ? 'bg-rose-50 text-[#FF2E54]' : 'bg-zinc-100 text-zinc-800 hover:bg-zinc-200'
                       }`}
                     >
                       <Heart className={`w-3.5 h-3.5 ${liked ? 'fill-[#FF2E54] text-[#FF2E54]' : ''}`} />
@@ -270,7 +312,7 @@ export default function HomeFeed({
                         e.stopPropagation();
                         onStartChat?.(u);
                       }}
-                      className="py-1.5 rounded-xl bg-zinc-900 text-white text-xs font-bold flex items-center justify-center gap-1"
+                      className="py-1.5 rounded-xl bg-zinc-900 text-white text-xs font-bold flex items-center justify-center gap-1 hover:bg-zinc-800 transition"
                     >
                       <MessageCircle className="w-3.5 h-3.5" />
                       Chat
@@ -288,44 +330,79 @@ export default function HomeFeed({
   return (
     <div className="min-h-full bg-[#F4F4F6] text-zinc-900 flex flex-col">
       {/* Cabecera limpia sobre fondo #F4F4F6 */}
-      <header className="px-4 pt-4 pb-1 pt-safe">
-        <h1 className="text-3xl font-extrabold tracking-tight text-zinc-900">Explorar</h1>
-        <p className="text-sm font-medium text-zinc-500 mt-1 leading-snug">
-          Encuentra personas que buscan lo mismo en una relación
-        </p>
+      <header className="px-4 pt-4 pb-1 pt-safe flex items-start justify-between gap-2">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-zinc-900">Explorar</h1>
+          <p className="text-sm font-medium text-zinc-500 mt-1 leading-snug">
+            Encuentra personas que buscan lo mismo en una relación
+          </p>
+        </div>
+        <span className="mt-1 px-2.5 py-1 rounded-full bg-white text-zinc-700 text-[11px] font-extrabold shadow-sm shrink-0">
+          {users.length} activos
+        </span>
       </header>
 
-      {/* Grid de 2 columnas con tarjetas blancas verticales */}
+      {/* Grid de 2 columnas con tarjetas blancas verticales y contadores 100% reales */}
       <div className="grid grid-cols-2 gap-3 p-4">
         {EXPLORE_CARDS.map((card) => {
           const Illustration = card.Illustration;
+          const realCount = countsByCategoryId[card.id] || 0;
           return (
             <button
               key={card.id}
               type="button"
               onClick={() => setSelectedCategory(card)}
-              className="bg-white rounded-2xl p-4 shadow-sm flex flex-col justify-between aspect-[3/4] text-left active:scale-[0.98] transition-transform"
+              className="bg-white rounded-2xl p-4 shadow-sm hover:shadow-md flex flex-col justify-between aspect-[3/4] text-left active:scale-[0.98] transition-all"
             >
-              <div className="w-full" />
+              <div className="w-full flex justify-end">
+                {currentUser?.lookingFor === card.title && (
+                  <span className="px-2 py-0.5 rounded-full bg-rose-50 text-[#FF2E54] text-[10px] font-extrabold">
+                    Tu objetivo
+                  </span>
+                )}
+              </div>
 
               {/* Ilustración estilo 3D grande y brillante en el centro */}
               <div className="flex items-center justify-center my-auto">
                 <Illustration />
               </div>
 
-              {/* Base: título en negrita a la izquierda y contador numérico a la derecha */}
+              {/* Base: título en negrita a la izquierda y contador real a la derecha */}
               <div className="w-full flex items-end justify-between gap-2 pt-2">
                 <span className="text-sm font-extrabold text-zinc-900 leading-tight">
                   {card.title}
                 </span>
-                <span className="text-xs font-bold text-zinc-400 flex items-center gap-0.5 shrink-0">
+                <span className="text-xs font-bold text-zinc-500 flex items-center gap-0.5 shrink-0">
                   <User className="w-3 h-3 fill-zinc-400 text-zinc-400" />
-                  {card.baseCount}
+                  {realCount}
                 </span>
               </div>
             </button>
           );
         })}
+      </div>
+
+      {/* Categorías adicionales dinámicas (Amistad, Idiomas, Ver todos) */}
+      <div className="px-4 pb-6 space-y-2">
+        <p className="text-xs font-extrabold uppercase tracking-wider text-zinc-400 px-1 flex items-center gap-1">
+          <Sparkles className="w-3.5 h-3.5 text-zinc-400" /> Más comunidades
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          {EXTRA_CATEGORIES.map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              onClick={() => setSelectedCategory(cat)}
+              className="bg-white rounded-2xl p-3 shadow-sm text-left hover:bg-zinc-50 active:scale-[0.98] transition"
+            >
+              <span className="text-lg block">{cat.emoji}</span>
+              <p className="text-xs font-extrabold text-zinc-900 mt-1 truncate">{cat.title}</p>
+              <p className="text-[11px] font-bold text-zinc-400 mt-0.5">
+                {countsByCategoryId[cat.id] || 0} perfiles
+              </p>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

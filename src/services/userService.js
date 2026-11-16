@@ -157,44 +157,37 @@ export function subscribePopularUsers({ scope, countryCode, currentUserId, block
   if (scope === 'local' && countryCode) {
     constraints.push(where('country.code', '==', countryCode));
   }
-  constraints.push(orderBy('likesCount', 'desc'), orderBy('giftsReceivedCount', 'desc'), limit(40));
+  constraints.push(limit(100));
 
   const blockedSet = new Set(blockedUsers);
   const filterAndSort = (snapshot) =>
     snapshot.docs
       .map((d) => ({ uid: d.id, id: d.id, ...d.data() }))
       .filter((u) => {
-        if (u.id === currentUserId || blockedSet.has(u.id) || !u.onboardingCompleted) return false;
+        if (u.id === currentUserId || blockedSet.has(u.id)) return false;
+        const hasPhoto = Array.isArray(u.photos) && u.photos.length > 0 && Boolean(u.photos[0]);
+        const isReady = u.onboardingCompleted || hasPhoto || (u.name && u.name !== 'Nuevo Usuario');
+        if (!isReady) return false;
         if (scope === 'local' && countryCode && u.country?.code !== countryCode) return false;
         return true;
       })
       .sort((a, b) => {
+        const boostDiff = Number(isBoostActive(b)) - Number(isBoostActive(a));
+        if (boostDiff !== 0) return boostDiff;
         const likesDiff = (b.likesCount || 0) - (a.likesCount || 0);
         if (likesDiff !== 0) return likesDiff;
         return (b.giftsReceivedCount || 0) - (a.giftsReceivedCount || 0);
       });
 
-  let activeUnsub = () => {};
-  let disposed = false;
-
-  activeUnsub = onSnapshot(
+  const activeUnsub = onSnapshot(
     query(usersRef, ...constraints),
     (snapshot) => onData(filterAndSort(snapshot)),
     (err) => {
-      if (err?.code === 'failed-precondition' && !disposed) {
-        if (onError) onError(err);
-        const fallbackQ = query(usersRef, limit(60));
-        activeUnsub = onSnapshot(fallbackQ, (snap) => onData(filterAndSort(snap)));
-      } else if (onError) {
-        onError(err);
-      }
+      if (onError) onError(err);
     }
   );
 
-  return () => {
-    disposed = true;
-    activeUnsub();
-  };
+  return () => activeUnsub();
 }
 
 function matchesGenderPreference(currentUser, candidate) {

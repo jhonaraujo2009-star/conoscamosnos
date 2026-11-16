@@ -52,6 +52,54 @@ export function isUserActuallyOnline(user) {
   return Date.now() - lastMs < 5 * 60 * 1000;
 }
 
+export function formatSwipeActivity(user) {
+  if (isUserActuallyOnline(user)) {
+    return { label: 'En línea ahora', activeNow: true };
+  }
+  const ms = toMillis(user?.lastSeen);
+  if (!ms) return { label: 'Activo recientemente', activeNow: false };
+  const diffMin = Math.floor((Date.now() - ms) / 60000);
+  if (diffMin < 60) {
+    return { label: `Activo hace ${Math.max(1, diffMin)} min`, activeNow: true };
+  }
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) {
+    return { label: `Activo hace ${diffHours} h`, activeNow: false };
+  }
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays <= 7) {
+    return { label: `Activo hace ${diffDays} d`, activeNow: false };
+  }
+  return { label: 'Miembro de la comunidad', activeNow: false };
+}
+
+export function isProfileVerified(user) {
+  if (!user) return false;
+  const photosCount = Array.isArray(user.photos) ? user.photos.filter(Boolean).length : 0;
+  const hasRealBio = typeof user.bio === 'string' && user.bio.trim().length >= 8;
+  return Boolean(user.onboardingCompleted && photosCount >= 1 && hasRealBio);
+}
+
+export function calculateProfileCompletion(user) {
+  if (!user) return { percent: 0, missingItems: [] };
+  const checks = [
+    { done: Boolean(user.name && user.name !== 'Nuevo Usuario'), label: 'Nombre' },
+    { done: Boolean(user.city?.trim()), label: 'Ciudad' },
+    { done: Boolean(user.bio?.trim() && user.bio.trim().length >= 8), label: 'Biografía' },
+    { done: Array.isArray(user.photos) && user.photos.filter(Boolean).length >= 2, label: 'Al menos 2 fotos' },
+    { done: Array.isArray(user.interests) && user.interests.length >= 2, label: 'Intereses' },
+    { done: Array.isArray(user.prompts) && user.prompts.filter((p) => p?.trim()).length >= 1, label: 'Frases personales' },
+    { done: Boolean(user.job?.trim()), label: 'Empleo' },
+    { done: Boolean(user.height?.trim()), label: 'Estatura' },
+    { done: Boolean(user.education?.trim()), label: 'Educación' },
+    { done: Boolean(user.lifestyle?.trim()), label: 'Estilo de vida' },
+  ];
+  const completed = checks.filter((c) => c.done).length;
+  const percent = Math.round((completed / checks.length) * 100);
+  const missingItems = checks.filter((c) => !c.done).map((c) => c.label);
+  return { percent, missingItems };
+}
+
 export function formatUSD(amount) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',

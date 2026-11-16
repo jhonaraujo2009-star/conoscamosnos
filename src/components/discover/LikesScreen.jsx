@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Heart, MessageCircle, Zap } from 'lucide-react';
+import { BadgeCheck, Heart, Lock, MessageCircle, Zap } from 'lucide-react';
 import { getUserById, subscribePopularUsers } from '../../services/userService';
-import { getPrimaryPhoto, isBoostActive, isUserActuallyOnline } from '../../utils/formatters';
+import {
+  getPrimaryPhoto,
+  isBoostActive,
+  isProfileVerified,
+  isUserActuallyOnline,
+} from '../../utils/formatters';
 
 function HeartArrow3D() {
   return (
@@ -23,7 +28,6 @@ function HeartArrow3D() {
         </linearGradient>
       </defs>
 
-      {/* Cola de la flecha (arriba derecha) */}
       <path d="M100 22L116 20L114 36L100 38Z" fill="#FB7185" />
       <line
         x1="82"
@@ -35,7 +39,6 @@ function HeartArrow3D() {
         strokeLinecap="round"
       />
 
-      {/* Corazón 3D Central */}
       <path
         d="M70 112C70 112 22 82 22 50C22 33 35.5 21 51 21C60.5 21 67 26.5 70 32.5C73 26.5 79.5 21 89 21C104.5 21 118 33 118 50C118 82 70 112 70 112Z"
         fill="url(#heart3dGrad)"
@@ -50,7 +53,6 @@ function HeartArrow3D() {
         fillOpacity="0.55"
       />
 
-      {/* Punta de la flecha atravesando (abajo izquierda) */}
       <line
         x1="24"
         y1="112"
@@ -75,7 +77,7 @@ export default function LikesScreen({
   const [subTab, setSubTab] = useState('likes'); // 'likes' | 'top_picks'
   const [topPicks, setTopPicks] = useState([]);
   const [likerProfiles, setLikerProfiles] = useState([]);
-  const [showUnlockedLikes, setShowUnlockedLikes] = useState(false);
+  const [revealedLikes, setRevealedLikes] = useState(false);
 
   const blockedKey = (currentUser?.blockedUsers || []).join(',');
 
@@ -110,7 +112,7 @@ export default function LikesScreen({
     };
   }, [receivedLikes]);
 
-  const likesCount = receivedLikes.length;
+  const likesCount = likerProfiles.length;
 
   return (
     <div className="min-h-full bg-[#F4F4F6] text-zinc-900 flex flex-col justify-between">
@@ -128,7 +130,7 @@ export default function LikesScreen({
               subTab === 'likes' ? 'text-zinc-900' : 'text-zinc-400'
             }`}
           >
-            {likesCount} Likes
+            {likesCount} {likesCount === 1 ? 'Like' : 'Likes'}
             {subTab === 'likes' && (
               <span className="absolute bottom-0 inset-x-8 h-[3px] rounded-full bg-[#FF2E54]" />
             )}
@@ -152,44 +154,67 @@ export default function LikesScreen({
 
       {/* Contenido Principal */}
       {subTab === 'likes' ? (
-        showUnlockedLikes && likerProfiles.length > 0 ? (
-          <div className="flex-1 p-4">
+        likerProfiles.length > 0 ? (
+          <div className="flex-1 p-4 space-y-3">
+            <p className="text-xs font-semibold text-zinc-500 text-center">
+              {revealedLikes
+                ? 'Personas a las que les gustaste. ¡Toca cualquiera para chatear!'
+                : `Tienes ${likesCount} ${likesCount === 1 ? 'persona interesada' : 'personas interesadas'} en ti`}
+            </p>
             <div className="grid grid-cols-2 gap-3">
-              {likerProfiles.map((user) => (
-                <div
-                  key={user.uid || user.id}
-                  onClick={() => onSelectProfile(user)}
-                  className="bg-white rounded-2xl overflow-hidden shadow-sm cursor-pointer"
-                >
-                  <div className="aspect-[3/4] relative">
-                    <img
-                      src={getPrimaryPhoto(user, 400)}
-                      alt={user.name}
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                    <div className="absolute bottom-2.5 inset-x-3 text-white">
-                      <p className="text-sm font-extrabold truncate">
-                        {user.name}, {user.age}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onStartChat?.(user);
-                        }}
-                        className="mt-1.5 w-full py-1.5 rounded-full bg-[#FF2E54] text-white text-xs font-bold flex items-center justify-center gap-1"
-                      >
-                        <MessageCircle className="w-3.5 h-3.5" /> Chatear
-                      </button>
+              {likerProfiles.map((user) => {
+                const verified = isProfileVerified(user);
+                return (
+                  <div
+                    key={user.uid || user.id}
+                    onClick={() => revealedLikes && onSelectProfile(user)}
+                    className="bg-white rounded-2xl overflow-hidden shadow-sm cursor-pointer relative"
+                  >
+                    <div className="aspect-[3/4] relative bg-zinc-200 overflow-hidden">
+                      <img
+                        src={getPrimaryPhoto(user, 450)}
+                        alt={revealedLikes ? user.name : 'Persona interesada'}
+                        className={`w-full h-full object-cover transition duration-300 ${
+                          revealedLikes ? '' : 'blur-lg scale-110'
+                        }`}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                      {!revealedLikes ? (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-white p-3 text-center">
+                          <div className="w-10 h-10 rounded-full bg-amber-400/90 text-zinc-950 flex items-center justify-center shadow mb-1.5">
+                            <Lock className="w-5 h-5" />
+                          </div>
+                          <span className="text-xs font-extrabold">Le gustas a alguien</span>
+                        </div>
+                      ) : (
+                        <div className="absolute bottom-2.5 inset-x-3 text-white">
+                          <p className="text-sm font-extrabold truncate flex items-center gap-1">
+                            <span className="truncate">
+                              {user.name}, {user.age}
+                            </span>
+                            {verified && (
+                              <BadgeCheck className="w-4 h-4 text-sky-400 fill-sky-400 stroke-white shrink-0" />
+                            )}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onStartChat?.(user);
+                            }}
+                            className="mt-1.5 w-full py-1.5 rounded-full bg-[#FF2E54] text-white text-xs font-bold flex items-center justify-center gap-1"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" /> Chatear
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         ) : (
-          /* Estado vacío centrado verticalmente */
           <div className="flex-1 flex flex-col items-center justify-center px-8 text-center">
             <HeartArrow3D />
             <p className="text-sm font-medium text-zinc-600 mt-4 max-w-[250px] leading-relaxed">
@@ -198,7 +223,6 @@ export default function LikesScreen({
           </div>
         )
       ) : (
-        /* Sub-pestaña Top Picks */
         <div className="flex-1 p-4">
           {topPicks.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center py-16 text-center">
@@ -211,6 +235,7 @@ export default function LikesScreen({
               {topPicks.map((user) => {
                 const online = isUserActuallyOnline(user);
                 const boosted = isBoostActive(user);
+                const verified = isProfileVerified(user);
                 return (
                   <div
                     key={user.uid || user.id}
@@ -234,8 +259,13 @@ export default function LikesScreen({
                         <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
                       )}
                       <div className="absolute bottom-2.5 inset-x-3 text-white">
-                        <p className="text-sm font-extrabold truncate">
-                          {user.name}, {user.age}
+                        <p className="text-sm font-extrabold truncate flex items-center gap-1">
+                          <span className="truncate">
+                            {user.name}, {user.age}
+                          </span>
+                          {verified && (
+                            <BadgeCheck className="w-4 h-4 text-sky-400 fill-sky-400 stroke-white shrink-0" />
+                          )}
                         </p>
                         <p className="text-[11px] text-white/80 truncate">
                           {user.country?.flag} {user.city || user.country?.name}
@@ -255,15 +285,17 @@ export default function LikesScreen({
         <button
           type="button"
           onClick={() => {
-            if (likerProfiles.length > 0 && !showUnlockedLikes) {
-              setShowUnlockedLikes(true);
+            if (likerProfiles.length > 0 && !revealedLikes) {
+              setRevealedLikes(true);
             } else {
               onOpenCoinStore?.();
             }
           }}
           className="w-full bg-zinc-900 text-white rounded-full py-4 text-sm font-bold shadow-md active:scale-[0.99] transition-transform"
         >
-          Ver Likes ahora
+          {likerProfiles.length > 0 && !revealedLikes
+            ? `Ver ${likesCount} ${likesCount === 1 ? 'Like' : 'Likes'} ahora`
+            : 'Ver Likes ahora'}
         </button>
       </div>
     </div>

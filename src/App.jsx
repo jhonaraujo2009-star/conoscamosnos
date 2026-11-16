@@ -168,6 +168,7 @@ function MainApp() {
               setActiveTab('chat');
             }}
             onOpenBoost={() => setBoostOpen(true)}
+            onOpenCoinStore={() => setCoinStoreOpen(true)}
             onSuccess={handleSuccess}
             onError={handleError}
           />
