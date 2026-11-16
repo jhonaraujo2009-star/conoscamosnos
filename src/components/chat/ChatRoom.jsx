@@ -234,8 +234,8 @@ export default function ChatRoom({
   ];
 
   return (
-    <div className="fixed inset-0 z-40 bg-luxury-mesh flex justify-center">
-      <div className="w-full max-w-lg h-full flex flex-col bg-[#FAF7F5] sm:border-x sm:border-rose-100/80 shadow-luxury">
+    <div className="fixed inset-0 z-40 h-[100dvh] w-screen overflow-hidden bg-[#F4F4F6] flex justify-center">
+      <div className="w-full max-w-md h-full flex flex-col bg-[#F4F4F6] sm:border-x sm:border-zinc-200">
         {/* Chat Header */}
         <div className="px-4 py-3 pt-safe border-b border-rose-100/90 bg-white/90 backdrop-blur-xl flex items-center gap-3 shadow-sm">
           <button

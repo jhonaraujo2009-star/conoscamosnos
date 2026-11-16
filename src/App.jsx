@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Heart, Sparkles } from 'lucide-react';
+import { Flame } from 'lucide-react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { subscribeUserMatches } from './services/chatService';
-import { openOrCreateDirectChat } from './services/discoveryService';
+import { openOrCreateDirectChat, subscribeReceivedLikes } from './services/discoveryService';
 import { isMatchUnread } from './utils/formatters';
 import AuthScreen from './components/auth/AuthScreen';
 import OnboardingWizard from './components/auth/OnboardingWizard';
@@ -10,6 +10,7 @@ import MobileShell from './components/layout/MobileShell';
 import NotificationBanner from './components/layout/NotificationBanner';
 import HomeFeed from './components/home/HomeFeed';
 import DiscoverSwipe from './components/discover/DiscoverSwipe';
+import LikesScreen from './components/discover/LikesScreen';
 import PublicProfileModal from './components/discover/PublicProfileModal';
 import ChatList from './components/chat/ChatList';
 import ChatRoom from './components/chat/ChatRoom';
@@ -22,9 +23,10 @@ import AdminPanelModal from './components/admin/AdminPanelModal';
 function MainApp() {
   const { firebaseUser, userProfile, loading } = useAuth();
 
-  // Pantalla principal por defecto: Tarjetas interactivas estilo Tinder Superior ('discover')
-  const [activeTab, setActiveTab] = useState('discover');
+  // 5 Pestañas: 'swipe' | 'explore' | 'likes' | 'chat' | 'profile'
+  const [activeTab, setActiveTab] = useState('swipe');
   const [matches, setMatches] = useState([]);
+  const [receivedLikes, setReceivedLikes] = useState([]);
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [activeChat, setActiveChat] = useState(null);
 
@@ -44,11 +46,11 @@ function MainApp() {
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 4200);
+    const t = setTimeout(() => setToast(null), 4000);
     return () => clearTimeout(t);
   }, [toast]);
 
-  // Aislar completamente el estado de navegación y modales cuando cambia el usuario autenticado
+  // Aislar completamente el estado cuando cambia el usuario autenticado
   useEffect(() => {
     setActiveChat(null);
     setSelectedProfile(null);
@@ -56,20 +58,25 @@ function MainApp() {
     setWithdrawalsOpen(false);
     setBoostOpen(false);
     setAdminOpen(false);
-    setActiveTab('discover');
+    setActiveTab('swipe');
   }, [firebaseUser?.uid]);
 
   useEffect(() => {
     if (!userProfile?.uid || !userProfile?.onboardingCompleted) {
       setMatches([]);
+      setReceivedLikes([]);
       return;
     }
-    const unsub = subscribeUserMatches(
+    const unsubMatches = subscribeUserMatches(
       userProfile.uid,
       setMatches,
       (err) => console.error('Error suscribiendo matches:', err)
     );
-    return () => unsub();
+    const unsubLikes = subscribeReceivedLikes(userProfile.uid, setReceivedLikes);
+    return () => {
+      unsubMatches();
+      unsubLikes();
+    };
   }, [userProfile?.uid, userProfile?.onboardingCompleted]);
 
   const unreadChatsCount = useMemo(() => {
@@ -108,18 +115,9 @@ function MainApp() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-luxury-mesh flex flex-col items-center justify-center gap-4 p-6">
-        <div className="relative">
-          <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-brand-500 via-rose-500 to-amber-400 flex items-center justify-center shadow-luxury animate-pulse">
-            <Heart className="w-8 h-8 text-white fill-white" />
-          </div>
-          <span className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-white shadow flex items-center justify-center text-amber-500">
-            <Sparkles className="w-3.5 h-3.5" />
-          </span>
-        </div>
-        <div className="text-center">
-          <p className="text-base font-extrabold text-slate-900 tracking-tight">Conoscamosnos</p>
-          <p className="text-xs font-medium text-slate-500 mt-0.5">Cargando tu espacio personal...</p>
+      <div className="h-[100dvh] w-screen bg-black flex flex-col items-center justify-center gap-3 overflow-hidden">
+        <div className="w-14 h-14 rounded-full bg-[#FF2E54] flex items-center justify-center animate-pulse">
+          <Flame className="w-8 h-8 text-white fill-white" />
         </div>
       </div>
     );
@@ -131,28 +129,22 @@ function MainApp() {
 
   if (!userProfile) {
     return (
-      <div className="min-h-screen bg-luxury-mesh flex items-center justify-center p-6 text-center">
-        <div className="bg-white/90 backdrop-blur-xl border border-rose-100 rounded-3xl p-6 shadow-soft max-w-xs w-full space-y-2">
-          <div className="w-10 h-10 mx-auto rounded-2xl bg-brand-50 text-brand-500 flex items-center justify-center animate-spin">
-            <Sparkles className="w-5 h-5" />
-          </div>
-          <p className="text-sm font-bold text-slate-800">Preparando tu perfil independiente...</p>
-          <p className="text-xs text-slate-500">Sincronizando datos de forma segura</p>
-        </div>
+      <div className="h-[100dvh] w-screen bg-black flex items-center justify-center p-6 text-center overflow-hidden">
+        <div className="w-10 h-10 rounded-full border-2 border-[#FF2E54] border-t-transparent animate-spin" />
       </div>
     );
   }
 
   if (!userProfile.onboardingCompleted) {
     return (
-      <>
+      <div className="h-[100dvh] w-screen overflow-y-auto bg-[#F4F4F6]">
         <NotificationBanner toast={toast} onDismiss={() => setToast(null)} />
         <OnboardingWizard
           userProfile={userProfile}
           onSuccess={handleSuccess}
           onError={handleError}
         />
-      </>
+      </div>
     );
   }
 
@@ -161,16 +153,12 @@ function MainApp() {
       <NotificationBanner toast={toast} onDismiss={() => setToast(null)} />
 
       <MobileShell
-        userProfile={userProfile}
         activeTab={activeTab}
         onChangeTab={setActiveTab}
-        onOpenCoinStore={() => setCoinStoreOpen(true)}
-        onOpenWithdrawals={() => setWithdrawalsOpen(true)}
-        onOpenBoost={() => setBoostOpen(true)}
-        onOpenAdmin={() => setAdminOpen(true)}
         unreadBadgeCount={unreadChatsCount}
+        likesBadgeCount={receivedLikes.length}
       >
-        {activeTab === 'discover' && (
+        {activeTab === 'swipe' && (
           <DiscoverSwipe
             currentUser={userProfile}
             onSelectProfile={setSelectedProfile}
@@ -179,24 +167,29 @@ function MainApp() {
               setActiveChat(chatSession);
               setActiveTab('chat');
             }}
-            onOpenCoinStore={() => setCoinStoreOpen(true)}
             onOpenBoost={() => setBoostOpen(true)}
-            onSwitchToGrid={() => setActiveTab('home')}
-            onGoToProfile={() => setActiveTab('profile')}
             onSuccess={handleSuccess}
             onError={handleError}
           />
         )}
 
-        {activeTab === 'home' && (
+        {activeTab === 'explore' && (
           <HomeFeed
             currentUser={userProfile}
             onSelectProfile={setSelectedProfile}
             onStartChat={handleStartDirectChat}
-            onOpenBoost={() => setBoostOpen(true)}
-            onSwitchToSwipe={() => setActiveTab('discover')}
             onSuccess={handleSuccess}
             onError={handleError}
+          />
+        )}
+
+        {activeTab === 'likes' && (
+          <LikesScreen
+            currentUser={userProfile}
+            receivedLikes={receivedLikes}
+            onSelectProfile={setSelectedProfile}
+            onStartChat={handleStartDirectChat}
+            onOpenCoinStore={() => setCoinStoreOpen(true)}
           />
         )}
 

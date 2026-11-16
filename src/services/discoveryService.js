@@ -3,12 +3,30 @@ import {
   collection,
   doc,
   getDoc,
+  onSnapshot,
+  query,
   runTransaction,
   serverTimestamp,
+  where,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { VIP_DM_COST } from '../config/constants';
 import { buildMatchId } from '../utils/formatters';
+
+export function subscribeReceivedLikes(currentUid, callback) {
+  if (!currentUid || !db) {
+    callback([]);
+    return () => {};
+  }
+  const q = query(collection(db, 'likes'), where('toUserId', '==', currentUid));
+  return onSnapshot(
+    q,
+    (snap) => {
+      callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    },
+    () => callback([])
+  );
+}
 
 function buildParticipantSnapshot(user) {
   return {

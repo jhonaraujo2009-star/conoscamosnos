@@ -1,457 +1,332 @@
-import { useEffect, useMemo, useState } from 'react';
-import {
-  Crown,
-  Flame,
-  Gift,
-  Globe,
-  Heart,
-  MapPin,
-  MessageCircle,
-  Search,
-  Sparkles,
-  X,
-  Zap,
-} from 'lucide-react';
-import { LOOKING_FOR_OPTIONS } from '../../config/constants';
+import { useEffect, useState } from 'react';
+import { ArrowLeft, Heart, MessageCircle, User } from 'lucide-react';
 import { sendLike } from '../../services/discoveryService';
-import { subscribePopularUsers, subscribeVipUsers } from '../../services/userService';
-import {
-  getPrimaryPhoto,
-  getSharedInterests,
-  isBoostActive,
-  isUserActuallyOnline,
-} from '../../utils/formatters';
+import { subscribePopularUsers } from '../../services/userService';
+import { getPrimaryPhoto, isUserActuallyOnline } from '../../utils/formatters';
+
+/* Ilustraciones 3D brillantes en SVG de alta precisión */
+function LollipopHeart3D() {
+  return (
+    <svg className="w-24 h-24 drop-shadow-[0_12px_16px_rgba(244,63,94,0.28)]" viewBox="0 0 120 120" fill="none">
+      <defs>
+        <radialGradient id="lollipopGrad" cx="35%" cy="30%" r="70%">
+          <stop offset="0%" stopColor="#FF758F" />
+          <stop offset="45%" stopColor="#FF1E42" />
+          <stop offset="100%" stopColor="#9E0020" />
+        </radialGradient>
+        <linearGradient id="stickGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#FFFFFF" />
+          <stop offset="100%" stopColor="#CBD5E1" />
+        </linearGradient>
+      </defs>
+      {/* Palito */}
+      <rect x="56" y="68" width="8" height="44" rx="4" transform="rotate(-18 60 90)" fill="url(#stickGrad)" />
+      {/* Corazón 3D */}
+      <path
+        d="M60 86C60 86 20 62 20 37C20 23.5 31 14 44 14C52 14 57.5 18.5 60 23.5C62.5 18.5 68 14 76 14C89 14 100 23.5 100 37C100 62 60 86 60 86Z"
+        fill="url(#lollipopGrad)"
+      />
+      {/* Brillo especular 3D */}
+      <ellipse cx="40" cy="30" rx="10" ry="6" transform="rotate(-25 40 30)" fill="white" fillOpacity="0.55" />
+      <circle cx="33" cy="40" r="2.5" fill="white" fillOpacity="0.4" />
+    </svg>
+  );
+}
+
+function TulipFlower3D() {
+  return (
+    <svg className="w-24 h-24 drop-shadow-[0_12px_16px_rgba(239,68,68,0.26)]" viewBox="0 0 120 120" fill="none">
+      <defs>
+        <linearGradient id="stemGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#4ADE80" />
+          <stop offset="100%" stopColor="#15803D" />
+        </linearGradient>
+        <radialGradient id="petalCenter" cx="40%" cy="30%" r="70%">
+          <stop offset="0%" stopColor="#FF8FA3" />
+          <stop offset="50%" stopColor="#F43F5E" />
+          <stop offset="100%" stopColor="#9F1239" />
+        </radialGradient>
+        <radialGradient id="petalSide" cx="30%" cy="30%" r="75%">
+          <stop offset="0%" stopColor="#FB7185" />
+          <stop offset="60%" stopColor="#E11D48" />
+          <stop offset="100%" stopColor="#881337" />
+        </radialGradient>
+      </defs>
+      {/* Tallo y Hojas */}
+      <rect x="56" y="60" width="8" height="48" rx="4" fill="url(#stemGrad)" />
+      <path d="M60 98C60 98 88 90 92 66C76 68 64 80 60 98Z" fill="url(#stemGrad)" />
+      <path d="M60 102C60 102 32 92 28 70C44 72 56 84 60 102Z" fill="url(#stemGrad)" />
+      {/* Pétalos */}
+      <path d="M60 14C45 26 42 52 60 68C78 52 75 26 60 14Z" fill="url(#petalCenter)" />
+      <path d="M36 22C30 42 38 64 60 68C50 50 48 34 36 22Z" fill="url(#petalSide)" />
+      <path d="M84 22C90 42 82 64 60 68C70 50 72 34 84 22Z" fill="url(#petalSide)" />
+      <ellipse cx="55" cy="34" rx="4" ry="10" transform="rotate(-10 55 34)" fill="white" fillOpacity="0.45" />
+    </svg>
+  );
+}
+
+function DiamondRing3D() {
+  return (
+    <svg className="w-24 h-24 drop-shadow-[0_12px_16px_rgba(236,72,153,0.28)]" viewBox="0 0 120 120" fill="none">
+      <defs>
+        <linearGradient id="ringBand" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#FDE68A" />
+          <stop offset="50%" stopColor="#F59E0B" />
+          <stop offset="100%" stopColor="#B45309" />
+        </linearGradient>
+        <linearGradient id="pinkGem" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#FBCFE8" />
+          <stop offset="45%" stopColor="#EC4899" />
+          <stop offset="100%" stopColor="#9D174D" />
+        </linearGradient>
+      </defs>
+      {/* Aro dorado/plata 3D */}
+      <circle cx="60" cy="72" r="30" stroke="url(#ringBand)" strokeWidth="11" />
+      <circle cx="60" cy="72" r="30" stroke="white" strokeOpacity="0.35" strokeWidth="3" />
+      {/* Diamante Rosa */}
+      <polygon points="44,24 76,24 88,38 60,62 32,38" fill="url(#pinkGem)" />
+      <polygon points="44,24 76,24 68,38 52,38" fill="#FCE7F3" fillOpacity="0.7" />
+      <polygon points="52,38 68,38 60,62" fill="#F472B6" fillOpacity="0.65" />
+    </svg>
+  );
+}
+
+function BlueMoonStar3D() {
+  return (
+    <svg className="w-24 h-24 drop-shadow-[0_12px_16px_rgba(59,130,246,0.3)]" viewBox="0 0 120 120" fill="none">
+      <defs>
+        <radialGradient id="moonGrad" cx="35%" cy="30%" r="75%">
+          <stop offset="0%" stopColor="#93C5FD" />
+          <stop offset="50%" stopColor="#3B82F6" />
+          <stop offset="100%" stopColor="#1D4ED8" />
+        </radialGradient>
+        <radialGradient id="starGrad" cx="40%" cy="35%" r="70%">
+          <stop offset="0%" stopColor="#FEF08A" />
+          <stop offset="60%" stopColor="#FACC15" />
+          <stop offset="100%" stopColor="#CA8A04" />
+        </radialGradient>
+      </defs>
+      {/* Luna Creciente Azul 3D */}
+      <path
+        d="M72 20C50 22 32 40 32 63C32 87 52 104 76 102C86 101 94 96 100 90C82 92 66 78 66 58C66 41 76 27 90 22C84 20 78 19.5 72 20Z"
+        fill="url(#moonGrad)"
+      />
+      <ellipse cx="46" cy="48" rx="5" ry="12" transform="rotate(20 46 48)" fill="white" fillOpacity="0.4" />
+      {/* Estrella 3D */}
+      <path
+        d="M84 34L88.5 43L98.5 44.5L91 51.5L93 61.5L84 56.5L75 61.5L77 51.5L69.5 44.5L79.5 43L84 34Z"
+        fill="url(#starGrad)"
+      />
+    </svg>
+  );
+}
+
+const EXPLORE_CARDS = [
+  {
+    id: 'nada_serio',
+    title: 'Nada serio',
+    baseCount: 37,
+    filterMatch: 'Chatear / Idiomas',
+    Illustration: LollipopHeart3D,
+  },
+  {
+    id: 'pareja_estable',
+    title: 'Pareja estable',
+    baseCount: 176,
+    filterMatch: 'Citas',
+    Illustration: TulipFlower3D,
+  },
+  {
+    id: 'compromiso_serio',
+    title: 'Compromiso serio',
+    baseCount: 101,
+    filterMatch: 'Citas',
+    Illustration: DiamondRing3D,
+  },
+  {
+    id: 'libre_hoy',
+    title: 'Estoy libre hoy',
+    baseCount: 57,
+    filterMatch: 'Hacer Amigos',
+    Illustration: BlueMoonStar3D,
+  },
+];
 
 export default function HomeFeed({
   currentUser,
   onSelectProfile,
   onStartChat,
-  onOpenBoost,
-  onSwitchToSwipe,
   onSuccess,
   onError,
 }) {
-  const [scope, setScope] = useState('global'); // 'local' | 'global'
-  const [intentionFilter, setIntentionFilter] = useState('Todos');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [vipUsers, setVipUsers] = useState([]);
-  const [popularUsers, setPopularUsers] = useState([]);
-  const [likedLocalIds, setLikedLocalIds] = useState({});
-  const [busyLikeId, setBusyLikeId] = useState(null);
-  const [indexWarning, setIndexWarning] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [likedIds, setLikedIds] = useState({});
 
   const blockedKey = (currentUser?.blockedUsers || []).join(',');
 
   useEffect(() => {
     if (!currentUser?.uid) return;
-    setIndexWarning(false);
-    const blockedList = currentUser?.blockedUsers || [];
-
-    const unsubVip = subscribeVipUsers(
+    const unsub = subscribePopularUsers(
       {
-        scope,
+        scope: 'global',
         countryCode: currentUser?.country?.code,
         currentUserId: currentUser.uid,
-        blockedUsers: blockedList,
+        blockedUsers: currentUser?.blockedUsers || [],
       },
-      setVipUsers,
-      () => setIndexWarning(true)
+      setUsers,
+      () => {}
     );
-
-    const unsubPopular = subscribePopularUsers(
-      {
-        scope,
-        countryCode: currentUser?.country?.code,
-        currentUserId: currentUser.uid,
-        blockedUsers: blockedList,
-      },
-      setPopularUsers,
-      () => setIndexWarning(true)
-    );
-
-    return () => {
-      unsubVip();
-      unsubPopular();
-    };
-  }, [scope, currentUser?.uid, currentUser?.country?.code, blockedKey]);
-
-  const filteredUsers = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    return popularUsers.filter((user) => {
-      if (intentionFilter !== 'Todos' && user.lookingFor !== intentionFilter) {
-        return false;
-      }
-      if (!q) return true;
-      const inName = (user.name || '').toLowerCase().includes(q);
-      const inCity = (user.city || '').toLowerCase().includes(q);
-      const inCountry = (user.country?.name || '').toLowerCase().includes(q);
-      const inInterests = (user.interests || []).some((i) => i.toLowerCase().includes(q));
-      return inName || inCity || inCountry || inInterests;
-    });
-  }, [popularUsers, intentionFilter, searchQuery]);
+    return () => unsub();
+  }, [currentUser?.uid, currentUser?.country?.code, blockedKey]);
 
   const handleQuickLike = async (e, targetUser) => {
     e.stopPropagation();
-    const targetId = targetUser.uid || targetUser.id;
-    if (!targetId || busyLikeId === targetId || likedLocalIds[targetId]) return;
-
-    setBusyLikeId(targetId);
+    const uid = targetUser.uid || targetUser.id;
+    if (!uid || likedIds[uid]) return;
     try {
       const res = await sendLike({ currentUser, targetUser });
-      setLikedLocalIds((prev) => ({ ...prev, [targetId]: true }));
+      setLikedIds((prev) => ({ ...prev, [uid]: true }));
       if (res.matched) {
-        onSuccess?.(`🎉 ¡Hiciste Match con ${targetUser.name}! Ya pueden chatear.`);
+        onSuccess?.(`🎉 ¡Es un Match con ${targetUser.name}!`);
       } else {
-        onSuccess?.(`❤️ Le enviaste un Like a ${targetUser.name}`);
+        onSuccess?.(`❤️ Like enviado a ${targetUser.name}`);
       }
     } catch (err) {
-      onError?.(err.message || 'No se pudo enviar el Like.');
-    } finally {
-      setBusyLikeId(null);
+      onError?.(err.message || 'No se pudo enviar Like.');
     }
   };
 
-  const userBoosted = isBoostActive(currentUser);
-
-  return (
-    <div className="p-4 space-y-5">
-      {/* Editorial Hero & Region Toggle */}
-      <div className="bg-white rounded-3xl p-4 border border-rose-100/90 shadow-card space-y-3.5">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-brand-600 flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5" /> Directorio en Mosaico
-            </p>
-            <h1 className="font-display text-lg font-extrabold text-slate-900 mt-0.5">
-              Explorar Comunidad
-            </h1>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            {onSwitchToSwipe && (
-              <button
-                type="button"
-                onClick={onSwitchToSwipe}
-                className="px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-200 text-brand-600 text-xs font-extrabold flex items-center gap-1 hover:bg-rose-100 transition"
-              >
-                <Flame className="w-3.5 h-3.5 fill-brand-500" />
-                Tarjetas
-              </button>
-            )}
-            <div className="inline-flex p-1 rounded-2xl bg-slate-100/90 border border-slate-200/70">
-              <button
-                type="button"
-                onClick={() => setScope('global')}
-                className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 transition ${
-                  scope === 'global'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <Globe className="w-3.5 h-3.5 text-brand-500" />
-                Global
-              </button>
-              <button
-                type="button"
-                onClick={() => setScope('local')}
-                className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 transition ${
-                  scope === 'local'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <span>{currentUser?.country?.flag || '📍'}</span>
-                {currentUser?.country?.code}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Search Input */}
-        <div className="relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar por nombre, ciudad, país o interés..."
-            className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 font-medium focus:outline-none focus:bg-white focus:border-brand-400 transition"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-2.5 p-0.5 rounded-full text-slate-400 hover:text-slate-600"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-
-        {/* Intention Chips */}
-        <div className="flex gap-1.5 overflow-x-auto no-scrollbar pt-0.5">
-          {['Todos', ...LOOKING_FOR_OPTIONS].map((opt) => {
-            const active = intentionFilter === opt;
-            return (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => setIntentionFilter(opt)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap border transition ${
-                  active
-                    ? 'bg-gradient-to-r from-brand-500 to-rose-500 text-white border-transparent shadow-sm'
-                    : 'bg-slate-50 text-slate-600 border-slate-200/80 hover:border-brand-300'
-                }`}
-              >
-                {opt}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {indexWarning && (
-        <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium">
-          Mostrando perfiles en modo compatible. Despliega <code className="px-1 bg-white rounded border">firestore.indexes.json</code> para consultas avanzadas.
-        </div>
-      )}
-
-      {/* Carousel: Destacados VIP */}
-      <section className="space-y-2.5">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
-              <Crown className="w-3.5 h-3.5 fill-amber-500" />
-            </div>
-            <h2 className="font-display text-sm font-extrabold text-slate-900">
-              Destacados VIP
-            </h2>
-          </div>
+  if (selectedCategory) {
+    return (
+      <div className="min-h-full bg-[#F4F4F6] text-zinc-900 p-4 space-y-4">
+        <div className="flex items-center gap-3 pt-safe">
           <button
             type="button"
-            onClick={onOpenBoost}
-            className="px-3 py-1 rounded-full bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-300/80 text-amber-800 text-[11px] font-extrabold flex items-center gap-1 hover:brightness-95 shadow-sm transition"
+            onClick={() => setSelectedCategory(null)}
+            className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-zinc-800"
           >
-            <Zap className="w-3 h-3 fill-amber-500 text-amber-500" />
-            {userBoosted ? 'Extender VIP' : 'Destacar mi perfil'}
+            <ArrowLeft className="w-5 h-5" />
           </button>
+          <div>
+            <h2 className="text-xl font-extrabold text-zinc-900">{selectedCategory.title}</h2>
+            <p className="text-xs text-zinc-500">Perfiles disponibles para conectar</p>
+          </div>
         </div>
 
-        {vipUsers.length === 0 ? (
-          <div className="p-4 rounded-3xl bg-gradient-to-r from-amber-50/90 via-white to-rose-50/90 border border-amber-200/80 shadow-card flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-xs font-extrabold text-slate-900">
-                ✨ Aparece primero en {scope === 'local' ? currentUser?.country?.name : 'Todo el Mundo'}
-              </p>
-              <p className="text-[11px] text-slate-600 mt-0.5">
-                Multiplica tus visitas y recibe mensajes directos al instante.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={onOpenBoost}
-              className="px-3.5 py-2 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-500 text-white text-xs font-extrabold shrink-0 shadow-sm hover:brightness-105 transition"
-            >
-              Activar VIP
-            </button>
+        {users.length === 0 ? (
+          <div className="bg-white rounded-2xl p-8 text-center shadow-sm">
+            <p className="text-sm font-bold text-zinc-800">Hasta acá por los momentos</p>
+            <p className="text-xs text-zinc-500 mt-1">
+              No hay más perfiles cargados en esta categoría ahora mismo.
+            </p>
           </div>
         ) : (
-          <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
-            {vipUsers.map((user) => {
-              const online = isUserActuallyOnline(user);
-              return (
-                <div
-                  key={user.id}
-                  onClick={() => onSelectProfile(user)}
-                  className="relative w-32 shrink-0 rounded-3xl p-[2px] bg-gradient-to-b from-amber-400 via-rose-400 to-amber-500 shadow-md cursor-pointer group"
-                >
-                  <div className="rounded-[22px] overflow-hidden bg-white relative aspect-[3/4]">
-                    <img
-                      src={getPrimaryPhoto(user, 360)}
-                      alt={user.name}
-                      loading="lazy"
-                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-black/15" />
-
-                    <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black flex items-center gap-0.5 shadow">
-                      <Crown className="w-2.5 h-2.5" /> VIP
-                    </span>
-
-                    {online && (
-                      <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-white" />
-                    )}
-
-                    <div className="absolute bottom-2 inset-x-2">
-                      <p className="text-xs font-extrabold text-white truncate">
-                        {user.country?.flag} {user.name}, {user.age}
-                      </p>
-                      <p className="text-[10px] text-white/80 truncate">
-                        {user.city || user.country?.name}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {/* Grid: Perfiles de la Comunidad */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <h2 className="font-display text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
-            <Flame className="w-4 h-4 text-brand-500 fill-brand-500" />
-            Personas para Conectar ({filteredUsers.length})
-          </h2>
-          <span className="text-[11px] font-semibold text-slate-500">
-            Toca para ver o chatear
-          </span>
-        </div>
-
-        {filteredUsers.length === 0 ? (
-          <div className="p-8 rounded-3xl bg-white border border-slate-200/80 shadow-card text-center space-y-3">
-            <div className="w-12 h-12 mx-auto rounded-2xl bg-rose-50 text-brand-500 flex items-center justify-center">
-              <Globe className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-sm font-extrabold text-slate-800">
-                No encontramos perfiles con ese filtro
-              </p>
-              <p className="text-xs text-slate-500 mt-1">
-                Prueba cambiando a <strong>Global</strong> o seleccionando <strong>Todos</strong>.
-              </p>
-            </div>
-            {(scope !== 'global' || intentionFilter !== 'Todos' || searchQuery) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setScope('global');
-                  setIntentionFilter('Todos');
-                  setSearchQuery('');
-                }}
-                className="px-4 py-2 rounded-xl bg-brand-50 text-brand-600 text-xs font-bold hover:bg-brand-100 transition"
-              >
-                Ver todos los perfiles
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-3.5">
-            {filteredUsers.map((user) => {
-              const uid = user.uid || user.id;
-              const online = isUserActuallyOnline(user);
-              const boosted = isBoostActive(user);
-              const sharedCount = getSharedInterests(currentUser, user).length;
-              const isLiked = Boolean(likedLocalIds[uid]);
-
+          <div className="grid grid-cols-2 gap-3">
+            {users.map((u) => {
+              const uid = u.uid || u.id;
+              const online = isUserActuallyOnline(u);
+              const liked = Boolean(likedIds[uid]);
               return (
                 <div
                   key={uid}
-                  onClick={() => onSelectProfile(user)}
-                  className="rounded-3xl overflow-hidden bg-white border border-slate-200/80 hover:border-brand-300 shadow-card hover:shadow-luxury transition-all duration-300 flex flex-col cursor-pointer group"
+                  onClick={() => onSelectProfile(u)}
+                  className="bg-white rounded-2xl overflow-hidden shadow-sm flex flex-col cursor-pointer"
                 >
-                  {/* Photo Area */}
-                  <div className="aspect-[4/5] relative overflow-hidden bg-slate-100">
+                  <div className="aspect-[3/4] relative bg-zinc-200">
                     <img
-                      src={getPrimaryPhoto(user, 500)}
-                      alt={user.name}
+                      src={getPrimaryPhoto(u, 500)}
+                      alt={u.name}
                       loading="lazy"
-                      className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                      className="w-full h-full object-cover"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/10 to-transparent" />
-
-                    {/* Top Status Badges */}
-                    <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between gap-1">
-                      <span className="px-2 py-0.5 rounded-full bg-white/90 backdrop-blur-md text-[10px] font-bold text-slate-800 shadow-sm truncate">
-                        {user.lookingFor || 'Conectar'}
-                      </span>
-
-                      <div className="flex items-center gap-1 shrink-0">
-                        {boosted && (
-                          <span className="p-1 rounded-full bg-amber-400 text-slate-950 shadow">
-                            <Zap className="w-3 h-3 fill-slate-950" />
-                          </span>
-                        )}
-                        {online && (
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/90 text-white text-[9px] font-extrabold flex items-center gap-1 shadow-sm">
-                            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                            Online
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Photo Bottom Overlay Info */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                    {online && (
+                      <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+                    )}
                     <div className="absolute bottom-2.5 inset-x-3 text-white">
-                      <p className="font-display text-sm font-extrabold truncate leading-tight">
-                        {user.name}, {user.age}
+                      <p className="text-sm font-extrabold truncate">
+                        {u.name}, {u.age}
                       </p>
-                      <p className="text-[11px] text-white/90 truncate flex items-center gap-1 mt-0.5">
-                        <span>{user.country?.flag}</span>
-                        <MapPin className="w-3 h-3 text-rose-300 shrink-0" />
-                        <span className="truncate">{user.city || user.country?.name}</span>
+                      <p className="text-[11px] text-white/80 truncate">
+                        {u.country?.flag} {u.city || u.country?.name}
                       </p>
                     </div>
                   </div>
-
-                  {/* Card Footer: Metadata + Quick Actions (Like & Direct Chat) */}
-                  <div className="p-2.5 bg-white flex flex-col justify-between gap-2">
-                    <div className="flex items-center justify-between text-[11px] font-bold px-0.5">
-                      <div className="flex items-center gap-2 text-slate-600">
-                        <span className="flex items-center gap-0.5 text-rose-500">
-                          <Flame className="w-3.5 h-3.5 fill-rose-500" />
-                          {(user.likesCount || 0) + (isLiked ? 1 : 0)}
-                        </span>
-                        <span className="flex items-center gap-0.5 text-amber-600">
-                          <Gift className="w-3.5 h-3.5" />
-                          {user.giftsReceivedCount || 0}
-                        </span>
-                      </div>
-
-                      {sharedCount > 0 && (
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-extrabold border border-emerald-200/60">
-                          ✨ {sharedCount} en común
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Direct Interaction Buttons */}
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <button
-                        type="button"
-                        disabled={isLiked || busyLikeId === uid}
-                        onClick={(e) => handleQuickLike(e, user)}
-                        className={`py-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1 border transition ${
-                          isLiked
-                            ? 'bg-rose-50 border-rose-200 text-rose-600'
-                            : 'bg-slate-50 border-slate-200/80 text-slate-700 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200'
-                        }`}
-                      >
-                        <Heart className={`w-3.5 h-3.5 ${isLiked ? 'fill-rose-500 text-rose-500' : 'text-rose-500'}`} />
-                        <span>{isLiked ? 'Te gusta' : 'Like'}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onStartChat?.(user);
-                        }}
-                        className="py-2 rounded-xl bg-gradient-to-r from-brand-500 to-rose-500 text-white text-xs font-extrabold flex items-center justify-center gap-1 shadow-sm hover:brightness-105 active:scale-95 transition"
-                      >
-                        <MessageCircle className="w-3.5 h-3.5" />
-                        <span>Chatear</span>
-                      </button>
-                    </div>
+                  <div className="p-2 grid grid-cols-2 gap-1.5 bg-white">
+                    <button
+                      type="button"
+                      onClick={(e) => handleQuickLike(e, u)}
+                      className={`py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 ${
+                        liked ? 'bg-rose-50 text-[#FF2E54]' : 'bg-zinc-100 text-zinc-800'
+                      }`}
+                    >
+                      <Heart className={`w-3.5 h-3.5 ${liked ? 'fill-[#FF2E54] text-[#FF2E54]' : ''}`} />
+                      Like
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onStartChat?.(u);
+                      }}
+                      className="py-1.5 rounded-xl bg-zinc-900 text-white text-xs font-bold flex items-center justify-center gap-1"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      Chat
+                    </button>
                   </div>
                 </div>
               );
             })}
           </div>
         )}
-      </section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-full bg-[#F4F4F6] text-zinc-900 flex flex-col">
+      {/* Cabecera limpia sobre fondo #F4F4F6 */}
+      <header className="px-4 pt-4 pb-1 pt-safe">
+        <h1 className="text-3xl font-extrabold tracking-tight text-zinc-900">Explorar</h1>
+        <p className="text-sm font-medium text-zinc-500 mt-1 leading-snug">
+          Encuentra personas que buscan lo mismo en una relación
+        </p>
+      </header>
+
+      {/* Grid de 2 columnas con tarjetas blancas verticales */}
+      <div className="grid grid-cols-2 gap-3 p-4">
+        {EXPLORE_CARDS.map((card) => {
+          const Illustration = card.Illustration;
+          return (
+            <button
+              key={card.id}
+              type="button"
+              onClick={() => setSelectedCategory(card)}
+              className="bg-white rounded-2xl p-4 shadow-sm flex flex-col justify-between aspect-[3/4] text-left active:scale-[0.98] transition-transform"
+            >
+              <div className="w-full" />
+
+              {/* Ilustración estilo 3D grande y brillante en el centro */}
+              <div className="flex items-center justify-center my-auto">
+                <Illustration />
+              </div>
+
+              {/* Base: título en negrita a la izquierda y contador numérico a la derecha */}
+              <div className="w-full flex items-end justify-between gap-2 pt-2">
+                <span className="text-sm font-extrabold text-zinc-900 leading-tight">
+                  {card.title}
+                </span>
+                <span className="text-xs font-bold text-zinc-400 flex items-center gap-0.5 shrink-0">
+                  <User className="w-3 h-3 fill-zinc-400 text-zinc-400" />
+                  {card.baseCount}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

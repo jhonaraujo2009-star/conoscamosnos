@@ -71,7 +71,7 @@ export default function AuthScreen() {
   };
 
   return (
-    <div className="min-h-screen bg-luxury-mesh flex items-center justify-center p-4 sm:p-6 relative overflow-hidden">
+    <div className="h-[100dvh] w-screen overflow-y-auto bg-[#F4F4F6] flex items-center justify-center p-4 sm:p-6 relative">
       {/* Ambient soft decorative blobs */}
       <div className="absolute -top-32 -left-24 w-96 h-96 rounded-full bg-rose-200/50 blur-3xl pointer-events-none" />
       <div className="absolute -bottom-32 -right-24 w-96 h-96 rounded-full bg-amber-200/45 blur-3xl pointer-events-none" />

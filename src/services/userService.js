@@ -64,6 +64,11 @@ export async function updateUserProfile(uid, updates) {
   if (updates.lookingFor) sanitized.lookingFor = updates.lookingFor;
   if (Array.isArray(updates.interests)) sanitized.interests = updates.interests;
   if (Array.isArray(updates.photos)) sanitized.photos = updates.photos.slice(0, MAX_PHOTOS);
+  if (Array.isArray(updates.prompts)) sanitized.prompts = updates.prompts.slice(0, 4);
+  if (typeof updates.height === 'string') sanitized.height = updates.height.trim();
+  if (typeof updates.job === 'string') sanitized.job = updates.job.trim();
+  if (typeof updates.education === 'string') sanitized.education = updates.education.trim();
+  if (typeof updates.lifestyle === 'string') sanitized.lifestyle = updates.lifestyle.trim();
 
   await updateDoc(doc(db, 'users', uid), sanitized);
 }
