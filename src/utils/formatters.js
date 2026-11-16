@@ -74,6 +74,48 @@ export function calculateWithdrawalBreakdown(diamonds) {
   };
 }
 
+export const INTEREST_ICONS = {
+  Viajes: '✈️',
+  Música: '🎵',
+  Café: '☕',
+  Cine: '🎬',
+  Fitness: '💪',
+  Idiomas: '🗣️',
+  Fotografía: '📸',
+  Gastronomía: '🍷',
+  Gaming: '🎮',
+  Arte: '🎨',
+  Lectura: '📚',
+  Baile: '💃',
+  Tecnología: '💻',
+  Senderismo: '🏔️',
+  Mascotas: '🐾',
+  Emprendimiento: '🚀',
+  Playa: '🏖️',
+  Anime: '✨',
+};
+
+export function formatInterestWithIcon(interest) {
+  const icon = INTEREST_ICONS[interest] || '✨';
+  return `${icon} ${interest}`;
+}
+
+export function calculateAffinityScore(userA, userB) {
+  if (!userA || !userB) return 85;
+  let score = 76;
+  const shared = getSharedInterests(userA, userB).length;
+  score += Math.min(14, shared * 5);
+  if (userA.lookingFor && userA.lookingFor === userB.lookingFor) {
+    score += 5;
+  }
+  if (userA.country?.code && userA.country?.code === userB.country?.code) {
+    score += 3;
+  }
+  const ageDiff = Math.abs(Number(userA.age || 24) - Number(userB.age || 24));
+  if (ageDiff <= 5) score += 2;
+  return Math.min(99, Math.max(75, score));
+}
+
 export function getSharedInterests(userA, userB) {
   const listA = Array.isArray(userA?.interests) ? userA.interests : [];
   const listB = Array.isArray(userB?.interests) ? userB.interests : [];

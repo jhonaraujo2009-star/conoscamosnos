@@ -22,7 +22,8 @@ import AdminPanelModal from './components/admin/AdminPanelModal';
 function MainApp() {
   const { firebaseUser, userProfile, loading } = useAuth();
 
-  const [activeTab, setActiveTab] = useState('home');
+  // Pantalla principal por defecto: Tarjetas interactivas estilo Tinder Superior ('discover')
+  const [activeTab, setActiveTab] = useState('discover');
   const [matches, setMatches] = useState([]);
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [activeChat, setActiveChat] = useState(null);
@@ -55,7 +56,7 @@ function MainApp() {
     setWithdrawalsOpen(false);
     setBoostOpen(false);
     setAdminOpen(false);
-    setActiveTab('home');
+    setActiveTab('discover');
   }, [firebaseUser?.uid]);
 
   useEffect(() => {
@@ -169,17 +170,6 @@ function MainApp() {
         onOpenAdmin={() => setAdminOpen(true)}
         unreadBadgeCount={unreadChatsCount}
       >
-        {activeTab === 'home' && (
-          <HomeFeed
-            currentUser={userProfile}
-            onSelectProfile={setSelectedProfile}
-            onStartChat={handleStartDirectChat}
-            onOpenBoost={() => setBoostOpen(true)}
-            onSuccess={handleSuccess}
-            onError={handleError}
-          />
-        )}
-
         {activeTab === 'discover' && (
           <DiscoverSwipe
             currentUser={userProfile}
@@ -190,6 +180,21 @@ function MainApp() {
               setActiveTab('chat');
             }}
             onOpenCoinStore={() => setCoinStoreOpen(true)}
+            onOpenBoost={() => setBoostOpen(true)}
+            onSwitchToGrid={() => setActiveTab('home')}
+            onGoToProfile={() => setActiveTab('profile')}
+            onSuccess={handleSuccess}
+            onError={handleError}
+          />
+        )}
+
+        {activeTab === 'home' && (
+          <HomeFeed
+            currentUser={userProfile}
+            onSelectProfile={setSelectedProfile}
+            onStartChat={handleStartDirectChat}
+            onOpenBoost={() => setBoostOpen(true)}
+            onSwitchToSwipe={() => setActiveTab('discover')}
             onSuccess={handleSuccess}
             onError={handleError}
           />

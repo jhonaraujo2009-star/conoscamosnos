@@ -200,14 +200,19 @@ function matchesGenderPreference(currentUser, candidate) {
   return true;
 }
 
-export async function fetchDiscoverProfiles({ currentUser, scope = 'global', lookingForFilter = 'Todos' }) {
+export async function fetchDiscoverProfiles({
+  currentUser,
+  scope = 'global',
+  lookingForFilter = 'Todos',
+  includeAlreadyLiked = false,
+}) {
   const usersRef = collection(db, 'users');
   const constraints = [];
 
   if (scope === 'local' && currentUser?.country?.code) {
     constraints.push(where('country.code', '==', currentUser.country.code));
   }
-  constraints.push(limit(60));
+  constraints.push(limit(80));
 
   const [usersSnap, myLikesSnap] = await Promise.all([
     getDocs(query(usersRef, ...constraints)),
@@ -217,19 +222,36 @@ export async function fetchDiscoverProfiles({ currentUser, scope = 'global', loo
   const likedIds = new Set(myLikesSnap.docs.map((d) => d.data().toUserId));
   const blockedSet = new Set(currentUser.blockedUsers || []);
 
+  const hasUploadedPhotos = (u) => Array.isArray(u?.photos) && u.photos.length > 0 && Boolean(u.photos[0]);
+
   const candidates = usersSnap.docs
-    .map((d) => ({ uid: d.id, id: d.id, ...d.data() }))
+    .map((d) => {
+      const data = d.data();
+      return {
+        uid: d.id,
+        id: d.id,
+        ...data,
+        alreadyLiked: likedIds.has(d.id),
+      };
+    })
     .filter((u) => {
       if (u.id === currentUser.uid) return false;
-      if (!u.onboardingCompleted) return false;
       if (blockedSet.has(u.id)) return false;
-      if (likedIds.has(u.id)) return false;
+      const isProfileReady =
+        u.onboardingCompleted || hasUploadedPhotos(u) || (u.name && u.name !== 'Nuevo Usuario');
+      if (!isProfileReady) return false;
+      if (!includeAlreadyLiked && likedIds.has(u.id)) return false;
       if (lookingForFilter !== 'Todos' && u.lookingFor !== lookingForFilter) return false;
-      if (!matchesGenderPreference(currentUser, u)) return false;
       return true;
     })
-    // Priorizar perfiles con Boost VIP activo primero
-    .sort((a, b) => Number(isBoostActive(b)) - Number(isBoostActive(a)));
+    // Priorizar perfiles con fotos reales subidas y con Boost VIP activo
+    .sort((a, b) => {
+      const photoDiff = Number(hasUploadedPhotos(b)) - Number(hasUploadedPhotos(a));
+      if (photoDiff !== 0) return photoDiff;
+      const boostDiff = Number(isBoostActive(b)) - Number(isBoostActive(a));
+      if (boostDiff !== 0) return boostDiff;
+      return Number(matchesGenderPreference(currentUser, b)) - Number(matchesGenderPreference(currentUser, a));
+    });
 
   return candidates;
 }

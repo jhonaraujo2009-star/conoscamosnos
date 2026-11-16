@@ -23,6 +23,7 @@ import {
 } from '../../services/discoveryService';
 import { blockUser, reportUser, subscribeUserById } from '../../services/userService';
 import {
+  formatInterestWithIcon,
   formatRelativeLastSeen,
   getPrimaryPhoto,
   getSharedInterests,
@@ -409,7 +410,7 @@ export default function PublicProfileModal({
                           : 'bg-slate-50 border-slate-200/80 text-slate-700'
                       }`}
                     >
-                      {isCommon ? `✨ ${interest}` : interest}
+                      {isCommon ? `✨ ${interest}` : formatInterestWithIcon(interest)}
                     </span>
                   );
                 })}

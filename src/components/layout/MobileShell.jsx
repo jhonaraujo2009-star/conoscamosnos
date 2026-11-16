@@ -15,8 +15,8 @@ export default function MobileShell({
   const boosted = isBoostActive(userProfile);
 
   const navItems = [
-    { id: 'home', label: 'Explorar', icon: Flame },
-    { id: 'discover', label: 'Conectar', icon: Compass },
+    { id: 'discover', label: 'Tarjetas', icon: Flame },
+    { id: 'home', label: 'Explorar', icon: Compass },
     { id: 'chat', label: 'Mensajes', icon: MessageCircle, badge: unreadBadgeCount },
     { id: 'profile', label: 'Mi Perfil', icon: User },
   ];
@@ -28,7 +28,7 @@ export default function MobileShell({
         <header className="sticky top-0 z-30 bg-white/85 backdrop-blur-xl border-b border-rose-100/80 px-4 py-2.5 pt-safe flex items-center justify-between gap-2 shadow-[0_2px_15px_-3px_rgba(15,23,42,0.04)]">
           <button
             type="button"
-            onClick={() => onChangeTab('home')}
+            onClick={() => onChangeTab('discover')}
             className="flex items-center gap-2.5 min-w-0 text-left group"
           >
             <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-brand-500 via-rose-500 to-amber-400 flex items-center justify-center shrink-0 shadow-md shadow-brand-500/20 group-hover:scale-105 transition">

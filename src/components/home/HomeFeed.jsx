@@ -27,6 +27,7 @@ export default function HomeFeed({
   onSelectProfile,
   onStartChat,
   onOpenBoost,
+  onSwitchToSwipe,
   onSuccess,
   onError,
 }) {
@@ -119,38 +120,50 @@ export default function HomeFeed({
         <div className="flex items-center justify-between gap-2">
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-brand-600 flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5" /> Comunidad Activa
+              <Sparkles className="w-3.5 h-3.5" /> Directorio en Mosaico
             </p>
             <h1 className="font-display text-lg font-extrabold text-slate-900 mt-0.5">
-              Hola, {currentUser?.name?.split(' ')[0]} 👋
+              Explorar Comunidad
             </h1>
           </div>
 
-          <div className="inline-flex p-1 rounded-2xl bg-slate-100/90 border border-slate-200/70">
-            <button
-              type="button"
-              onClick={() => setScope('global')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ${
-                scope === 'global'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <Globe className="w-3.5 h-3.5 text-brand-500" />
-              Global
-            </button>
-            <button
-              type="button"
-              onClick={() => setScope('local')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ${
-                scope === 'local'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <span>{currentUser?.country?.flag || '📍'}</span>
-              {currentUser?.country?.name}
-            </button>
+          <div className="flex items-center gap-1.5">
+            {onSwitchToSwipe && (
+              <button
+                type="button"
+                onClick={onSwitchToSwipe}
+                className="px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-200 text-brand-600 text-xs font-extrabold flex items-center gap-1 hover:bg-rose-100 transition"
+              >
+                <Flame className="w-3.5 h-3.5 fill-brand-500" />
+                Tarjetas
+              </button>
+            )}
+            <div className="inline-flex p-1 rounded-2xl bg-slate-100/90 border border-slate-200/70">
+              <button
+                type="button"
+                onClick={() => setScope('global')}
+                className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 transition ${
+                  scope === 'global'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5 text-brand-500" />
+                Global
+              </button>
+              <button
+                type="button"
+                onClick={() => setScope('local')}
+                className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 transition ${
+                  scope === 'local'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <span>{currentUser?.country?.flag || '📍'}</span>
+                {currentUser?.country?.code}
+              </button>
+            </div>
           </div>
         </div>
 
