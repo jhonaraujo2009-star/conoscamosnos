@@ -177,6 +177,11 @@ export async function sendVirtualGift({ matchId = null, sender, receiver, gift }
 
     const receiverGiftsCount = Number(receiverData.giftsReceivedCount || 0);
     const receiverDiamonds = Number(receiverData.earningsDiamonds || 0);
+    const prevGiftCounts =
+      receiverData.giftCounts && typeof receiverData.giftCounts === 'object'
+        ? { ...receiverData.giftCounts }
+        : {};
+    prevGiftCounts[gift.id] = Number(prevGiftCounts[gift.id] || 0) + 1;
 
     transaction.update(senderRef, {
       coins: senderCoins - gift.price,
@@ -186,6 +191,7 @@ export async function sendVirtualGift({ matchId = null, sender, receiver, gift }
     transaction.update(receiverRef, {
       giftsReceivedCount: receiverGiftsCount + 1,
       earningsDiamonds: receiverDiamonds + diamondsToCredit,
+      giftCounts: prevGiftCounts,
       updatedAt: serverTimestamp(),
     });
 
@@ -255,4 +261,30 @@ export async function sendVirtualGift({ matchId = null, sender, receiver, gift }
   });
 
   return { giftTxId: giftTxRef.id, diamondsCredited: diamondsToCredit, matchId: resolvedMatchId };
+}
+
+/**
+ * Suscribe únicamente a los regalos recibidos por el usuario autenticado (estrictamente privado por receiverId).
+ */
+export function subscribeReceivedGiftTransactions(receiverUid, callback, onError) {
+  if (!receiverUid || !db) {
+    callback([]);
+    return () => {};
+  }
+  const q = query(
+    collection(db, 'giftTransactions'),
+    where('receiverId', '==', receiverUid)
+  );
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
+      callback(list);
+    },
+    (err) => {
+      if (onError) onError(err);
+    }
+  );
 }

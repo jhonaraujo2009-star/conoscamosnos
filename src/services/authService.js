@@ -32,6 +32,7 @@ export async function ensureUserDocument(firebaseUser, extra = {}) {
       interests: [],
       likesCount: 0,
       giftsReceivedCount: 0,
+      giftCounts: {},
       isOnline: true,
       lastSeen: serverTimestamp(),
       coins: 0,

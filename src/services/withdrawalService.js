@@ -198,3 +198,37 @@ export async function rejectWithdrawalRequest({
     });
   });
 }
+
+/**
+ * Permite únicamente al receptor de regalos canjear sus diamantes ganados por monedas internas (1:1)
+ * para enviar regalos sin retirar a efectivo. Nunca permite convertir monedas compradas en dinero.
+ */
+export async function convertDiamondsToCoins({ userId, amountDiamonds }) {
+  const cleanAmount = Math.floor(Number(amountDiamonds || 0));
+  if (cleanAmount < 10) {
+    throw new Error('El canje mínimo es de 10 diamantes.');
+  }
+
+  const userRef = doc(db, 'users', userId);
+  await runTransaction(db, async (transaction) => {
+    const userSnap = await transaction.get(userRef);
+    if (!userSnap.exists()) {
+      throw new Error('Usuario no encontrado.');
+    }
+    const data = userSnap.data();
+    const availableDiamonds = Number(data.earningsDiamonds || 0);
+    const currentCoins = Number(data.coins || 0);
+
+    if (availableDiamonds < cleanAmount) {
+      throw new Error('No tienes suficientes diamantes disponibles para este canje.');
+    }
+
+    transaction.update(userRef, {
+      earningsDiamonds: availableDiamonds - cleanAmount,
+      coins: currentCoins + cleanAmount,
+      updatedAt: serverTimestamp(),
+    });
+  });
+
+  return { converted: cleanAmount };
+}

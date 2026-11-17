@@ -4,27 +4,41 @@ import {
   Building2,
   CheckCircle2,
   Clock,
+  Coins,
   DollarSign,
   Gem,
   Info,
+  Lock,
+  RefreshCw,
   X,
   XCircle,
 } from 'lucide-react';
 import { ECONOMY_CONFIG, WITHDRAWAL_PAYOUT_METHODS } from '../../config/constants';
-import { requestDiamondsWithdrawal, subscribeMyWithdrawals } from '../../services/withdrawalService';
+import {
+  convertDiamondsToCoins,
+  requestDiamondsWithdrawal,
+  subscribeMyWithdrawals,
+} from '../../services/withdrawalService';
 import { calculateWithdrawalBreakdown, formatUSD } from '../../utils/formatters';
+import GiftShowcaseCard from './GiftShowcaseCard';
+
+const MIN_SWAP_DIAMONDS = 10;
 
 export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, onSuccess, onError }) {
   const availableDiamonds = Number(userProfile?.earningsDiamonds || 0);
+  const currentCoins = Number(userProfile?.coins || 0);
   const pendingDiamonds = Number(userProfile?.pendingWithdrawalDiamonds || 0);
   const totalWithdrawnUSD = Number(userProfile?.totalWithdrawnUSD || 0);
 
+  const [activeMode, setActiveMode] = useState('withdraw');
   const [amountDiamonds, setAmountDiamonds] = useState(
     Math.max(ECONOMY_CONFIG.minWithdrawalDiamonds, availableDiamonds)
   );
+  const [swapAmount, setSwapAmount] = useState(Math.max(MIN_SWAP_DIAMONDS, availableDiamonds));
   const [selectedMethod, setSelectedMethod] = useState(WITHDRAWAL_PAYOUT_METHODS[0]);
   const [payoutDetails, setPayoutDetails] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [swapping, setSwapping] = useState(false);
   const [withdrawals, setWithdrawals] = useState([]);
 
   useEffect(() => {
@@ -34,6 +48,7 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
         ? availableDiamonds
         : ECONOMY_CONFIG.minWithdrawalDiamonds
     );
+    setSwapAmount(availableDiamonds >= MIN_SWAP_DIAMONDS ? availableDiamonds : MIN_SWAP_DIAMONDS);
     const unsub = subscribeMyWithdrawals(userProfile.uid, setWithdrawals);
     return () => unsub();
   }, [isOpen, userProfile?.uid, availableDiamonds]);
@@ -43,6 +58,7 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
   const availableSummary = calculateWithdrawalBreakdown(availableDiamonds);
   const preview = calculateWithdrawalBreakdown(amountDiamonds);
   const canWithdraw = availableDiamonds >= ECONOMY_CONFIG.minWithdrawalDiamonds;
+  const canSwap = availableDiamonds >= MIN_SWAP_DIAMONDS;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -62,6 +78,23 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
       onError?.(err.message || 'No se pudo procesar tu solicitud de retiro.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleSwapToCoins = async (e) => {
+    e.preventDefault();
+    if (!userProfile?.uid || swapping) return;
+    setSwapping(true);
+    try {
+      const res = await convertDiamondsToCoins({
+        userId: userProfile.uid,
+        amountDiamonds: swapAmount,
+      });
+      onSuccess?.(`🪙 Canjeaste ${res.converted} 💎 por ${res.converted} Monedas internas.`);
+    } catch (err) {
+      onError?.(err.message || 'No se pudo completar el canje a monedas.');
+    } finally {
+      setSwapping(false);
     }
   };
 
@@ -142,10 +175,51 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
             <p className="text-[10px] font-semibold text-emerald-700">
               💡 Con <strong>Binance Pay</strong> cobras en USDT (1 USDT = $1.00 USD) directo a tu Binance Pay ID o correo.
             </p>
+            <div className="flex items-start gap-1.5 pt-1 border-t border-slate-100 text-[10px] text-slate-500">
+              <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+              <span>
+                Economía separada: tus <strong>{currentCoins} monedas compradas</strong> solo sirven para regalar y nunca se retiran; únicamente los <strong>diamantes que recibes</strong> pueden venderse en $ USD o canjearse 1:1 a monedas.
+              </span>
+            </div>
           </div>
 
-          {/* Withdrawal Request Form */}
-          <form onSubmit={handleSubmit} className="space-y-3.5 p-4 rounded-2xl bg-white border border-slate-200/90 shadow-card">
+          <GiftShowcaseCard
+            user={userProfile}
+            title="Regalos que has recibido"
+            emptyText="Cuando alguien te envíe un regalo, se mostrará aquí del más valioso al menor."
+          />
+
+          {/* Selector de acción: Vender por $ USD vs Canjear a Monedas */}
+          <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-white border border-slate-200/90 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setActiveMode('withdraw')}
+              className={`py-2.5 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
+                activeMode === 'withdraw'
+                  ? 'bg-slate-900 text-white shadow'
+                  : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <DollarSign className="w-3.5 h-3.5" />
+              Vender por $ USD
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveMode('convert')}
+              className={`py-2.5 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
+                activeMode === 'convert'
+                  ? 'bg-amber-500 text-white shadow'
+                  : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Canjear a Monedas
+            </button>
+          </div>
+
+          {activeMode === 'withdraw' ? (
+            /* Withdrawal Request Form */
+            <form onSubmit={handleSubmit} className="space-y-3.5 p-4 rounded-2xl bg-white border border-slate-200/90 shadow-card">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
                 <ArrowDownToLine className="w-4 h-4 text-emerald-600" />
@@ -250,6 +324,70 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
               {submitting ? 'Enviando solicitud...' : `Solicitar Retiro (${formatUSD(preview.netPayoutUSD)})`}
             </button>
           </form>
+          ) : (
+            <form onSubmit={handleSwapToCoins} className="space-y-3.5 p-4 rounded-2xl bg-white border border-slate-200/90 shadow-card">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
+                  <Coins className="w-4 h-4 text-amber-500" />
+                  Vender Diamantes por Monedas (1:1)
+                </h4>
+                <span className="text-[11px] font-bold text-slate-400">
+                  Mín: {MIN_SWAP_DIAMONDS} 💎
+                </span>
+              </div>
+
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Convierte parte de los regalos que recibiste en monedas internas para enviar regalos o activar Boost sin esperar al mínimo de retiro en dólares. Esta conversión es irreversible y las monedas resultantes no son retirables en efectivo.
+              </p>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs text-slate-600 font-bold">Diamantes a canjear</label>
+                  {canSwap && (
+                    <button
+                      type="button"
+                      onClick={() => setSwapAmount(availableDiamonds)}
+                      className="text-[11px] font-extrabold text-amber-600 hover:underline"
+                    >
+                      Canjear todo ({availableDiamonds})
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="number"
+                  min={MIN_SWAP_DIAMONDS}
+                  max={Math.max(MIN_SWAP_DIAMONDS, availableDiamonds)}
+                  value={swapAmount}
+                  onChange={(e) => setSwapAmount(Number(e.target.value))}
+                  disabled={!canSwap}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm font-extrabold text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 disabled:opacity-50"
+                />
+              </div>
+
+              <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-200/80 text-xs flex items-center justify-between font-extrabold text-amber-900">
+                <span>Recibirás al instante:</span>
+                <span>+{Math.max(0, Math.floor(Number(swapAmount || 0)))} 🪙</span>
+              </div>
+
+              {!canSwap && (
+                <div className="flex items-center gap-2 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3 font-medium">
+                  <Info className="w-4 h-4 shrink-0 text-amber-600" />
+                  <span>
+                    Necesitas al menos <strong>{MIN_SWAP_DIAMONDS} diamantes</strong> recibidos para convertirlos a monedas.
+                  </span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={!canSwap || swapping || Number(swapAmount || 0) > availableDiamonds || Number(swapAmount || 0) < MIN_SWAP_DIAMONDS}
+                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-md hover:brightness-105 disabled:opacity-40 transition"
+              >
+                <Coins className="w-4 h-4" />
+                {swapping ? 'Canjeando...' : `Convertir ${Math.max(0, Math.floor(Number(swapAmount || 0)))} 💎 en Monedas`}
+              </button>
+            </form>
+          )}
 
           {/* Withdrawal History */}
           {withdrawals.length > 0 && (

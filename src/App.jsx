@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Flame } from 'lucide-react';
 import { getIntentionMood, MIN_AGE } from './config/constants';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { subscribeUserMatches } from './services/chatService';
+import { subscribeReceivedGiftTransactions, subscribeUserMatches } from './services/chatService';
 import { openOrCreateDirectChat, subscribeReceivedLikes } from './services/discoveryService';
 import { isMatchUnread } from './utils/formatters';
 import AuthScreen from './components/auth/AuthScreen';
@@ -19,8 +19,17 @@ import ProfileScreen from './components/profile/ProfileScreen';
 import SafetyCenterModal from './components/profile/SafetyCenterModal';
 import CoinStoreModal from './components/monetization/CoinStoreModal';
 import EarningsWithdrawModal from './components/monetization/EarningsWithdrawModal';
+import GiftNotificationsModal from './components/monetization/GiftNotificationsModal';
 import BoostModal from './components/home/BoostModal';
 import AdminPanelModal from './components/admin/AdminPanelModal';
+
+function getGiftMillis(ts) {
+  if (!ts) return 0;
+  if (typeof ts.toMillis === 'function') return ts.toMillis();
+  if (typeof ts.seconds === 'number') return ts.seconds * 1000;
+  const parsed = new Date(ts).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
 
 function MainApp() {
   const { firebaseUser, userProfile, loading } = useAuth();
@@ -34,17 +43,22 @@ function MainApp() {
   const [swipeMoodKey, setSwipeMoodKey] = useState('Todos');
   const [matches, setMatches] = useState([]);
   const [receivedLikes, setReceivedLikes] = useState([]);
+  const [receivedGifts, setReceivedGifts] = useState([]);
+  const [giftsSeenAt, setGiftsSeenAt] = useState(0);
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [activeChat, setActiveChat] = useState(null);
 
   const [coinStoreOpen, setCoinStoreOpen] = useState(false);
   const [withdrawalsOpen, setWithdrawalsOpen] = useState(false);
+  const [giftNotificationsOpen, setGiftNotificationsOpen] = useState(false);
   const [boostOpen, setBoostOpen] = useState(false);
   const [safetyCenterOpen, setSafetyCenterOpen] = useState(false);
   const [safetyInitialTab, setSafetyInitialTab] = useState('blocked');
   const [adminOpen, setAdminOpen] = useState(false);
 
   const [toast, setToast] = useState(null);
+  const seenGiftIdsRef = useRef(new Set());
+  const giftsLoadedRef = useRef(false);
 
   const showToast = useCallback((type, message) => {
     setToast({ type, message, id: Date.now() });
@@ -77,10 +91,22 @@ function MainApp() {
     setSelectedProfile(null);
     setCoinStoreOpen(false);
     setWithdrawalsOpen(false);
+    setGiftNotificationsOpen(false);
     setBoostOpen(false);
     setSafetyCenterOpen(false);
     setSafetyInitialTab('blocked');
     setAdminOpen(false);
+    setReceivedGifts([]);
+    seenGiftIdsRef.current = new Set();
+    giftsLoadedRef.current = false;
+    try {
+      const savedSeen = firebaseUser?.uid
+        ? Number(localStorage.getItem(`conoscamosnos_gifts_seen_${firebaseUser.uid}`) || 0)
+        : 0;
+      setGiftsSeenAt(Number.isNaN(savedSeen) ? 0 : savedSeen);
+    } catch {
+      setGiftsSeenAt(0);
+    }
     setSwipeScope('global');
     setSwipeIntention('Todos');
     setSwipeGenderPref(null);
@@ -93,6 +119,9 @@ function MainApp() {
     if (!userProfile?.uid || !userProfile?.onboardingCompleted) {
       setMatches([]);
       setReceivedLikes([]);
+      setReceivedGifts([]);
+      seenGiftIdsRef.current = new Set();
+      giftsLoadedRef.current = false;
       return;
     }
     const unsubMatches = subscribeUserMatches(
@@ -101,11 +130,58 @@ function MainApp() {
       (err) => console.error('Error suscribiendo matches:', err)
     );
     const unsubLikes = subscribeReceivedLikes(userProfile.uid, setReceivedLikes);
+    const unsubGifts = subscribeReceivedGiftTransactions(
+      userProfile.uid,
+      (list) => {
+        if (!giftsLoadedRef.current) {
+          seenGiftIdsRef.current = new Set(list.map((g) => g.id));
+          giftsLoadedRef.current = true;
+        } else {
+          const freshGift = list.find(
+            (g) => g.receiverId === userProfile.uid && !seenGiftIdsRef.current.has(g.id)
+          );
+          list.forEach((g) => seenGiftIdsRef.current.add(g.id));
+          if (freshGift) {
+            handleSuccess(
+              `${freshGift.giftIcon || '🎁'} ¡${freshGift.senderName || 'Alguien'} te regaló ${
+                freshGift.giftName || 'un regalo'
+              } (+${freshGift.diamondsCredited || 0} 💎)!`
+            );
+          }
+        }
+        setReceivedGifts(list);
+      },
+      (err) => console.error('Error suscribiendo regalos recibidos:', err)
+    );
     return () => {
       unsubMatches();
       unsubLikes();
+      unsubGifts();
     };
-  }, [userProfile?.uid, userProfile?.onboardingCompleted]);
+  }, [userProfile?.uid, userProfile?.onboardingCompleted, handleSuccess]);
+
+  const unreadGiftsCount = useMemo(() => {
+    if (!userProfile?.uid) return 0;
+    return receivedGifts.filter((g) => {
+      if (g.receiverId !== userProfile.uid) return false;
+      const ms = getGiftMillis(g.createdAt);
+      if (!giftsSeenAt) return true;
+      return ms === 0 || ms > giftsSeenAt;
+    }).length;
+  }, [receivedGifts, userProfile?.uid, giftsSeenAt]);
+
+  const handleOpenGiftNotifications = useCallback(() => {
+    const now = Date.now();
+    setGiftsSeenAt(now);
+    if (userProfile?.uid) {
+      try {
+        localStorage.setItem(`conoscamosnos_gifts_seen_${userProfile.uid}`, String(now));
+      } catch {
+        // ignore storage restrictions
+      }
+    }
+    setGiftNotificationsOpen(true);
+  }, [userProfile?.uid]);
 
   const unreadChatsCount = useMemo(() => {
     if (!userProfile?.uid) return 0;
@@ -262,7 +338,10 @@ function MainApp() {
           <ProfileScreen
             key={`profile-${userProfile.uid}`}
             userProfile={userProfile}
+            currentAuthUid={firebaseUser.uid}
             receivedLikes={receivedLikes}
+            receivedGifts={receivedGifts}
+            unreadGiftsCount={unreadGiftsCount}
             onPreviewOwnProfile={() => setSelectedProfile(userProfile)}
             onOpenCoinStore={() => setCoinStoreOpen(true)}
             onOpenWithdrawals={() => setWithdrawalsOpen(true)}
@@ -271,6 +350,7 @@ function MainApp() {
               setSafetyInitialTab(tab);
               setSafetyCenterOpen(true);
             }}
+            onOpenGiftNotifications={handleOpenGiftNotifications}
             onOpenAdmin={() => setAdminOpen(true)}
             onSuccess={handleSuccess}
             onError={handleError}
@@ -322,6 +402,26 @@ function MainApp() {
         userProfile={userProfile}
         onSuccess={handleSuccess}
         onError={handleError}
+      />
+
+      <GiftNotificationsModal
+        key={`gifts-${userProfile.uid}`}
+        isOpen={giftNotificationsOpen}
+        onClose={() => setGiftNotificationsOpen(false)}
+        userProfile={userProfile}
+        receivedGifts={receivedGifts}
+        onSelectProfile={(profile) => {
+          setGiftNotificationsOpen(false);
+          setSelectedProfile(profile);
+        }}
+        onStartChat={(profile) => {
+          setGiftNotificationsOpen(false);
+          handleStartDirectChat(profile);
+        }}
+        onOpenWithdrawals={() => {
+          setGiftNotificationsOpen(false);
+          setWithdrawalsOpen(true);
+        }}
       />
 
       <BoostModal

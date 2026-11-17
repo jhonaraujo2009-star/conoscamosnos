@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   AlertCircle,
+  Download,
   Eye,
   EyeOff,
   Flame,
@@ -9,9 +10,11 @@ import {
   Mail,
   MessageCircleHeart,
   ShieldCheck,
+  Smartphone,
   User,
 } from 'lucide-react';
 import { isFirebaseConfigured } from '../../config/firebase';
+import { usePwaInstall } from '../../hooks/usePwaInstall';
 import { loginWithEmail, loginWithGoogle, registerWithEmail } from '../../services/authService';
 
 function GoogleLogo() {
@@ -57,6 +60,8 @@ export default function AuthScreen() {
   const [adultConfirmed, setAdultConfirmed] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [installHint, setInstallHint] = useState('');
+  const { isInstalled, canInstallNative, isIOS, promptInstall } = usePwaInstall();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -92,6 +97,31 @@ export default function AuthScreen() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleInstallAndroid = async () => {
+    if (canInstallNative) {
+      const res = await promptInstall();
+      if (res?.outcome === 'accepted') {
+        setInstallHint('¡Listo! La app se está instalando en tu dispositivo.');
+      } else {
+        setInstallHint('Si cerraste el aviso, abre el menú (⋮) de Chrome → «Instalar aplicación».');
+      }
+      return;
+    }
+
+    if (isIOS) {
+      setInstallHint((prev) =>
+        prev ? '' : 'En iPhone/iPad: abre en Safari, toca Compartir (↑) y selecciona «Agregar a pantalla de inicio».'
+      );
+      return;
+    }
+
+    setInstallHint((prev) =>
+      prev
+        ? ''
+        : 'Para instalar en Android: abre esta web en Google Chrome, toca el menú (⋮) arriba a la derecha y elige «Instalar aplicación».'
+    );
   };
 
   return (
@@ -257,6 +287,32 @@ export default function AuthScreen() {
           <GoogleLogo />
           Continuar con Google
         </button>
+
+        {!isInstalled && (
+          <div className="mt-3.5 space-y-2">
+            <button
+              type="button"
+              onClick={handleInstallAndroid}
+              className="w-full py-2.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200/90 text-emerald-900 font-extrabold text-xs hover:brightness-95 transition flex items-center justify-between gap-2"
+            >
+              <span className="flex items-center gap-2 min-w-0">
+                <Smartphone className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="truncate">
+                  {canInstallNative ? 'Descargar App para Android ahora' : 'Descargar App para Android'}
+                </span>
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-black shrink-0 inline-flex items-center gap-1">
+                <Download className="w-3 h-3" /> App
+              </span>
+            </button>
+
+            {installHint && (
+              <p className="text-[11px] text-zinc-600 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 leading-relaxed">
+                {installHint}
+              </p>
+            )}
+          </div>
+        )}
 
         <p className="text-[11px] text-center text-zinc-400 mt-5 leading-relaxed">
           Cada perfil es independiente y tus conversaciones privadas son visibles únicamente para ti y tu contacto.

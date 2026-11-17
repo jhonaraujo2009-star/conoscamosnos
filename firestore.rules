@@ -39,33 +39,47 @@ service cloud.firestore {
 
       allow update: if isAdmin()
         || (
-          // Actualización del propio dueño (perfil, presencia, gasto de monedas, reserva de retiro o simulador)
+          // Actualización del propio dueño (perfil, presencia, gasto de monedas, reserva de retiro, canje de diamantes a monedas o simulador)
           isOwner(userId)
           && request.resource.data.role == resource.data.role
           && request.resource.data.get('totalWithdrawnUSD', 0) == resource.data.get('totalWithdrawnUSD', 0)
           && request.resource.data.likesCount == resource.data.likesCount
           && request.resource.data.giftsReceivedCount == resource.data.giftsReceivedCount
+          && request.resource.data.get('giftCounts', {}) == resource.data.get('giftCounts', {})
           && (
-            // Diamantes sin cambio o congelados atómicamente para un retiro pendiente
             (
-              request.resource.data.earningsDiamonds == resource.data.earningsDiamonds
-              && request.resource.data.get('pendingWithdrawalDiamonds', 0) == resource.data.get('pendingWithdrawalDiamonds', 0)
+              // Operación estándar: retiro de diamantes o gasto/compra de monedas
+              (
+                (
+                  request.resource.data.earningsDiamonds == resource.data.earningsDiamonds
+                  && request.resource.data.get('pendingWithdrawalDiamonds', 0) == resource.data.get('pendingWithdrawalDiamonds', 0)
+                )
+                || (
+                  request.resource.data.earningsDiamonds < resource.data.earningsDiamonds
+                  && request.resource.data.earningsDiamonds >= 0
+                  && (request.resource.data.earningsDiamonds + request.resource.data.get('pendingWithdrawalDiamonds', 0))
+                     == (resource.data.earningsDiamonds + resource.data.get('pendingWithdrawalDiamonds', 0))
+                )
+              )
+              && (
+                (request.resource.data.coins <= resource.data.coins && request.resource.data.coins >= 0)
+                // [SOLO MODO SIMULADOR/MVP SIN CLOUD FUNCTIONS]:
+                // En producción con webhooks en backend, elimina esta rama OR para impedir recargas desde el cliente.
+                || (
+                  isValidPackageCoins(request.resource.data.coins - resource.data.coins)
+                  && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coins', 'updatedAt'])
+                )
+              )
             )
             || (
+              // Canje 1:1 de diamantes recibidos -> monedas internas (solo el receptor reduce diamantes y suma exacto a monedas)
               request.resource.data.earningsDiamonds < resource.data.earningsDiamonds
               && request.resource.data.earningsDiamonds >= 0
-              && (request.resource.data.earningsDiamonds + request.resource.data.get('pendingWithdrawalDiamonds', 0))
-                 == (resource.data.earningsDiamonds + resource.data.get('pendingWithdrawalDiamonds', 0))
-            )
-          )
-          && (
-            // Monedas sin cambio o gastadas hacia abajo (>= 0)
-            (request.resource.data.coins <= resource.data.coins && request.resource.data.coins >= 0)
-            // [SOLO MODO SIMULADOR/MVP SIN CLOUD FUNCTIONS]:
-            // En producción con webhooks en backend, elimina esta rama OR para impedir recargas desde el cliente.
-            || (
-              isValidPackageCoins(request.resource.data.coins - resource.data.coins)
-              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coins', 'updatedAt'])
+              && request.resource.data.get('pendingWithdrawalDiamonds', 0) == resource.data.get('pendingWithdrawalDiamonds', 0)
+              && request.resource.data.coins > resource.data.coins
+              && (request.resource.data.coins - resource.data.coins)
+                 == (resource.data.earningsDiamonds - request.resource.data.earningsDiamonds)
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['earningsDiamonds', 'coins', 'updatedAt'])
             )
           )
         )
@@ -77,11 +91,12 @@ service cloud.firestore {
           && request.resource.data.likesCount == resource.data.get('likesCount', 0) + 1
         )
         || (
-          // Otro usuario enviando un Regalo (+1 giftsReceivedCount y diamantes válidos)
+          // Otro usuario enviando un Regalo (+1 giftsReceivedCount, diamantes válidos y conteo anónimo por regalo)
           isSignedIn()
           && request.auth.uid != userId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['giftsReceivedCount', 'earningsDiamonds', 'updatedAt'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['giftsReceivedCount', 'earningsDiamonds', 'giftCounts', 'updatedAt'])
           && request.resource.data.giftsReceivedCount == resource.data.get('giftsReceivedCount', 0) + 1
+          && request.resource.data.giftCounts is map
           && isValidGiftValue(request.resource.data.earningsDiamonds - resource.data.get('earningsDiamonds', 0))
         );
 

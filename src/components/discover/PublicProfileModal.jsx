@@ -43,6 +43,7 @@ import {
   optimizeCloudinaryUrl,
 } from '../../utils/formatters';
 import GiftAnimationOverlay from '../chat/GiftAnimationOverlay';
+import GiftShowcaseCard from '../monetization/GiftShowcaseCard';
 import GiftPickerModal from '../chat/GiftPickerModal';
 
 export default function PublicProfileModal({
@@ -413,6 +414,12 @@ export default function PublicProfileModal({
               <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wide mt-0.5">Busca</p>
             </div>
           </div>
+
+          <GiftShowcaseCard
+            user={liveTarget}
+            title="Regalos recibidos"
+            emptyText="Aún no ha recibido regalos virtuales. ¡Envíale uno abajo!"
+          />
 
           {liveTarget.bio && (
             <div className="p-4 rounded-2xl bg-white shadow-card">
