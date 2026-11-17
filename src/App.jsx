@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Flame } from 'lucide-react';
+import { getIntentionMood, MIN_AGE } from './config/constants';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { subscribeUserMatches } from './services/chatService';
 import { openOrCreateDirectChat, subscribeReceivedLikes } from './services/discoveryService';
@@ -15,6 +16,7 @@ import PublicProfileModal from './components/discover/PublicProfileModal';
 import ChatList from './components/chat/ChatList';
 import ChatRoom from './components/chat/ChatRoom';
 import ProfileScreen from './components/profile/ProfileScreen';
+import SafetyCenterModal from './components/profile/SafetyCenterModal';
 import CoinStoreModal from './components/monetization/CoinStoreModal';
 import EarningsWithdrawModal from './components/monetization/EarningsWithdrawModal';
 import BoostModal from './components/home/BoostModal';
@@ -25,6 +27,11 @@ function MainApp() {
 
   // 5 Pestañas: 'swipe' | 'explore' | 'likes' | 'chat' | 'profile'
   const [activeTab, setActiveTab] = useState('swipe');
+  const [swipeScope, setSwipeScope] = useState('global');
+  const [swipeIntention, setSwipeIntention] = useState('Todos');
+  const [swipeGenderPref, setSwipeGenderPref] = useState(null);
+  const [swipeAgeRange, setSwipeAgeRange] = useState({ min: MIN_AGE, max: 60 });
+  const [swipeMoodKey, setSwipeMoodKey] = useState('Todos');
   const [matches, setMatches] = useState([]);
   const [receivedLikes, setReceivedLikes] = useState([]);
   const [selectedProfile, setSelectedProfile] = useState(null);
@@ -33,6 +40,8 @@ function MainApp() {
   const [coinStoreOpen, setCoinStoreOpen] = useState(false);
   const [withdrawalsOpen, setWithdrawalsOpen] = useState(false);
   const [boostOpen, setBoostOpen] = useState(false);
+  const [safetyCenterOpen, setSafetyCenterOpen] = useState(false);
+  const [safetyInitialTab, setSafetyInitialTab] = useState('blocked');
   const [adminOpen, setAdminOpen] = useState(false);
 
   const [toast, setToast] = useState(null);
@@ -50,6 +59,18 @@ function MainApp() {
     return () => clearTimeout(t);
   }, [toast]);
 
+  const activeMood = useMemo(() => getIntentionMood(swipeMoodKey), [swipeMoodKey]);
+
+  // Actualizar dinámicamente la barra de estado del dispositivo según el tema romántico activo
+  useEffect(() => {
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (!metaTheme) return;
+    metaTheme.setAttribute(
+      'content',
+      activeTab === 'swipe' && firebaseUser ? activeMood.themeColor : '#F4F4F6'
+    );
+  }, [activeTab, firebaseUser, activeMood.themeColor]);
+
   // Aislar completamente el estado cuando cambia el usuario autenticado
   useEffect(() => {
     setActiveChat(null);
@@ -57,7 +78,14 @@ function MainApp() {
     setCoinStoreOpen(false);
     setWithdrawalsOpen(false);
     setBoostOpen(false);
+    setSafetyCenterOpen(false);
+    setSafetyInitialTab('blocked');
     setAdminOpen(false);
+    setSwipeScope('global');
+    setSwipeIntention('Todos');
+    setSwipeGenderPref(null);
+    setSwipeAgeRange({ min: MIN_AGE, max: 60 });
+    setSwipeMoodKey('Todos');
     setActiveTab('swipe');
   }, [firebaseUser?.uid]);
 
@@ -157,10 +185,22 @@ function MainApp() {
         onChangeTab={setActiveTab}
         unreadBadgeCount={unreadChatsCount}
         likesBadgeCount={receivedLikes.length}
+        themeMood={activeMood}
       >
-        {activeTab === 'swipe' && (
+        <div className={activeTab === 'swipe' ? 'flex-1 h-full min-h-0 flex flex-col' : 'hidden'}>
           <DiscoverSwipe
+            key={userProfile.uid}
             currentUser={userProfile}
+            isActive={activeTab === 'swipe'}
+            scope={swipeScope}
+            onScopeChange={setSwipeScope}
+            intention={swipeIntention}
+            onIntentionChange={setSwipeIntention}
+            genderPreference={swipeGenderPref ?? (userProfile?.interestedIn || 'Todos')}
+            onGenderPreferenceChange={setSwipeGenderPref}
+            ageRange={swipeAgeRange}
+            onAgeRangeChange={setSwipeAgeRange}
+            onMoodChange={setSwipeMoodKey}
             onSelectProfile={setSelectedProfile}
             onStartChat={handleStartDirectChat}
             onOpenChat={(chatSession) => {
@@ -172,13 +212,18 @@ function MainApp() {
             onSuccess={handleSuccess}
             onError={handleError}
           />
-        )}
+        </div>
 
         {activeTab === 'explore' && (
           <HomeFeed
+            key={`explore-${userProfile.uid}`}
             currentUser={userProfile}
             onSelectProfile={setSelectedProfile}
             onStartChat={handleStartDirectChat}
+            onSwipeCategory={(categoryIntention) => {
+              setSwipeIntention(categoryIntention || 'Todos');
+              setActiveTab('swipe');
+            }}
             onSuccess={handleSuccess}
             onError={handleError}
           />
@@ -186,31 +231,46 @@ function MainApp() {
 
         {activeTab === 'likes' && (
           <LikesScreen
+            key={`likes-${userProfile.uid}`}
             currentUser={userProfile}
             receivedLikes={receivedLikes}
             onSelectProfile={setSelectedProfile}
             onStartChat={handleStartDirectChat}
             onOpenCoinStore={() => setCoinStoreOpen(true)}
+            onGoToSwipe={() => setActiveTab('swipe')}
+            onOpenBoost={() => setBoostOpen(true)}
           />
         )}
 
         {activeTab === 'chat' && (
           <ChatList
+            key={`chatlist-${userProfile.uid}`}
             matches={matches}
             currentUser={userProfile}
             onSelectMatch={setActiveChat}
             onStartChat={handleStartDirectChat}
             onSelectProfile={setSelectedProfile}
+            onOpenSafetyCenter={(tab = 'blocked') => {
+              setSafetyInitialTab(tab);
+              setSafetyCenterOpen(true);
+            }}
+            onGoToSwipe={() => setActiveTab('swipe')}
           />
         )}
 
         {activeTab === 'profile' && (
           <ProfileScreen
+            key={`profile-${userProfile.uid}`}
             userProfile={userProfile}
+            receivedLikes={receivedLikes}
             onPreviewOwnProfile={() => setSelectedProfile(userProfile)}
             onOpenCoinStore={() => setCoinStoreOpen(true)}
             onOpenWithdrawals={() => setWithdrawalsOpen(true)}
             onOpenBoost={() => setBoostOpen(true)}
+            onOpenSafetyCenter={(tab = 'blocked') => {
+              setSafetyInitialTab(tab);
+              setSafetyCenterOpen(true);
+            }}
             onOpenAdmin={() => setAdminOpen(true)}
             onSuccess={handleSuccess}
             onError={handleError}
@@ -247,6 +307,7 @@ function MainApp() {
       )}
 
       <CoinStoreModal
+        key={`coins-${userProfile.uid}`}
         isOpen={coinStoreOpen}
         onClose={() => setCoinStoreOpen(false)}
         userProfile={userProfile}
@@ -255,6 +316,7 @@ function MainApp() {
       />
 
       <EarningsWithdrawModal
+        key={`withdraw-${userProfile.uid}`}
         isOpen={withdrawalsOpen}
         onClose={() => setWithdrawalsOpen(false)}
         userProfile={userProfile}
@@ -263,6 +325,7 @@ function MainApp() {
       />
 
       <BoostModal
+        key={`boost-${userProfile.uid}`}
         isOpen={boostOpen}
         onClose={() => setBoostOpen(false)}
         userProfile={userProfile}
@@ -272,9 +335,24 @@ function MainApp() {
       />
 
       <AdminPanelModal
+        key={`admin-${userProfile.uid}`}
         isOpen={adminOpen}
         onClose={() => setAdminOpen(false)}
         userProfile={userProfile}
+        onSuccess={handleSuccess}
+        onError={handleError}
+      />
+
+      <SafetyCenterModal
+        key={`safety-${userProfile.uid}`}
+        isOpen={safetyCenterOpen}
+        onClose={() => setSafetyCenterOpen(false)}
+        userProfile={userProfile}
+        initialTab={safetyInitialTab}
+        onSelectProfile={(profile) => {
+          setSafetyCenterOpen(false);
+          setSelectedProfile(profile);
+        }}
         onSuccess={handleSuccess}
         onError={handleError}
       />

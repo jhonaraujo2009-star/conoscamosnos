@@ -9,7 +9,6 @@ import {
   Heart,
   MapPin,
   MessageCircle,
-  MessageCircleHeart,
   Quote,
   RefreshCw,
   RotateCcw,
@@ -19,27 +18,117 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { LOOKING_FOR_OPTIONS } from '../../config/constants';
-import { sendVirtualGift } from '../../services/chatService';
+import {
+  getIntentionMood,
+  INTERESTED_IN_OPTIONS,
+  LOOKING_FOR_OPTIONS,
+  MIN_AGE,
+} from '../../config/constants';
+import { sendTextMessage, sendVirtualGift } from '../../services/chatService';
 import { sendLike, subscribeGivenLikesCount } from '../../services/discoveryService';
 import { fetchDiscoverProfiles } from '../../services/userService';
 import {
   calculateAffinityScore,
   formatInterestWithIcon,
   formatSwipeActivity,
+  formatUserDistanceLabel,
+  getDisplayAge,
+  getOrderedPhotos,
   getPrimaryPhoto,
   getSharedInterests,
   isBoostActive,
   isProfileVerified,
   optimizeCloudinaryUrl,
+  triggerHaptic,
 } from '../../utils/formatters';
 import GiftAnimationOverlay from '../chat/GiftAnimationOverlay';
 import GiftPickerModal from '../chat/GiftPickerModal';
 
 const TUTORIAL_STORAGE_KEY = 'conoscamosnos_swipe_tutorial_seen_v2';
+const PASS_TTL_MS = 24 * 60 * 60 * 1000;
+
+const AGE_PRESETS = [
+  { label: '18+', min: MIN_AGE, max: 99 },
+  { label: '18-26', min: 18, max: 26 },
+  { label: '25-35', min: 25, max: 35 },
+  { label: '30-45', min: 30, max: 45 },
+  { label: '40+', min: 40, max: 99 },
+];
+
+function getPassedKey(uid) {
+  return `conoscamosnos_passed_v1_${uid}`;
+}
+
+function readPassedIds(uid) {
+  if (!uid) return [];
+  try {
+    const raw = localStorage.getItem(getPassedKey(uid));
+    if (!raw) return [];
+    const map = JSON.parse(raw);
+    const now = Date.now();
+    const cleaned = {};
+    const valid = [];
+    Object.entries(map || {}).forEach(([id, ts]) => {
+      if (typeof ts === 'number' && now - ts < PASS_TTL_MS) {
+        cleaned[id] = ts;
+        valid.push(id);
+      }
+    });
+    localStorage.setItem(getPassedKey(uid), JSON.stringify(cleaned));
+    return valid;
+  } catch {
+    return [];
+  }
+}
+
+function persistPassedId(uid, targetId) {
+  if (!uid || !targetId) return;
+  try {
+    const raw = localStorage.getItem(getPassedKey(uid));
+    const map = raw ? JSON.parse(raw) : {};
+    map[targetId] = Date.now();
+    localStorage.setItem(getPassedKey(uid), JSON.stringify(map));
+  } catch {
+    // Ignorar si localStorage no está disponible
+  }
+}
+
+function unpersistPassedId(uid, targetId) {
+  if (!uid || !targetId) return;
+  try {
+    const raw = localStorage.getItem(getPassedKey(uid));
+    if (!raw) return;
+    const map = JSON.parse(raw);
+    if (map && map[targetId]) {
+      delete map[targetId];
+      localStorage.setItem(getPassedKey(uid), JSON.stringify(map));
+    }
+  } catch {
+    // Ignorar
+  }
+}
+
+function clearPassedIds(uid) {
+  if (!uid) return;
+  try {
+    localStorage.removeItem(getPassedKey(uid));
+  } catch {
+    // Ignorar
+  }
+}
 
 export default function DiscoverSwipe({
   currentUser,
+  isActive = true,
+  scope: controlledScope,
+  onScopeChange,
+  intention: controlledIntention,
+  onIntentionChange,
+  genderPreference: controlledGenderPref,
+  onGenderPreferenceChange,
+  ageRange: controlledAgeRange,
+  onAgeRangeChange,
+  onMoodChange,
   onSelectProfile,
   onStartChat,
   onOpenChat,
@@ -48,8 +137,20 @@ export default function DiscoverSwipe({
   onSuccess,
   onError,
 }) {
-  const [scope, setScope] = useState('global');
-  const [intention, setIntention] = useState('Todos');
+  const [localScope, setLocalScope] = useState('global');
+  const [localIntention, setLocalIntention] = useState('Todos');
+  const [localGenderPref, setLocalGenderPref] = useState(currentUser?.interestedIn || 'Todos');
+  const [localAgeRange, setLocalAgeRange] = useState({ min: MIN_AGE, max: 60 });
+
+  const scope = controlledScope ?? localScope;
+  const setScope = onScopeChange ?? setLocalScope;
+  const intention = controlledIntention ?? localIntention;
+  const setIntention = onIntentionChange ?? setLocalIntention;
+  const genderPreference = controlledGenderPref ?? localGenderPref;
+  const setGenderPreference = onGenderPreferenceChange ?? setLocalGenderPref;
+  const ageRange = controlledAgeRange ?? localAgeRange;
+  const setAgeRange = onAgeRangeChange ?? setLocalAgeRange;
+
   const [showFiltersModal, setShowFiltersModal] = useState(false);
   const [showTasteBanner, setShowTasteBanner] = useState(false);
   const [givenLikesTotal, setGivenLikesTotal] = useState(0);
@@ -60,6 +161,7 @@ export default function DiscoverSwipe({
   const [photoIdx, setPhotoIdx] = useState(0);
   const [loading, setLoading] = useState(true);
   const [matchPopup, setMatchPopup] = useState(null);
+  const [sendingIcebreaker, setSendingIcebreaker] = useState(false);
 
   // Regalos desde la tarjeta
   const [giftPickerOpen, setGiftPickerOpen] = useState(false);
@@ -80,6 +182,7 @@ export default function DiscoverSwipe({
   const likeStampRef = useRef(null);
   const nopeStampRef = useRef(null);
   const busyRef = useRef(false);
+  const hapticCrossedRef = useRef(false);
   const currentUserRef = useRef(currentUser);
   currentUserRef.current = currentUser;
 
@@ -123,18 +226,32 @@ export default function DiscoverSwipe({
       busyRef.current = false;
 
       try {
+        if (forceIncludeAll) {
+          clearPassedIds(user.uid);
+        }
+
+        const passedIds = forceIncludeAll ? [] : readPassedIds(user.uid);
+
         let list = await fetchDiscoverProfiles({
           currentUser: user,
           scope,
           lookingForFilter: intention,
+          genderPreference,
+          minAge: ageRange?.min ?? MIN_AGE,
+          maxAge: ageRange?.max ?? 99,
+          passedIds,
           includeAlreadyLiked: forceIncludeAll,
         });
 
-        if (list.length === 0 && !forceIncludeAll && intention === 'Todos') {
+        if (list.length === 0 && !forceIncludeAll && intention === 'Todos' && passedIds.length === 0) {
           list = await fetchDiscoverProfiles({
             currentUser: user,
             scope,
             lookingForFilter: intention,
+            genderPreference,
+            minAge: ageRange?.min ?? MIN_AGE,
+            maxAge: ageRange?.max ?? 99,
+            passedIds: [],
             includeAlreadyLiked: true,
           });
         }
@@ -147,7 +264,17 @@ export default function DiscoverSwipe({
         setLoading(false);
       }
     },
-    [currentUser?.uid, currentUser?.country?.code, blockedKey, scope, intention, onError]
+    [
+      currentUser?.uid,
+      currentUser?.country?.code,
+      blockedKey,
+      scope,
+      intention,
+      genderPreference,
+      ageRange?.min,
+      ageRange?.max,
+      onError,
+    ]
   );
 
   useEffect(() => {
@@ -167,13 +294,23 @@ export default function DiscoverSwipe({
   const topCard = visibleDeck[0] || null;
   const nextCard = visibleDeck[1] || null;
 
+  // Tema romántico adaptativo según lo que busca la persona visible o el filtro activo
+  const activeMoodKey =
+    intention !== 'Todos'
+      ? intention
+      : topCard?.lookingFor || currentUser?.lookingFor || 'Todos';
+  const mood = useMemo(() => getIntentionMood(activeMoodKey), [activeMoodKey]);
+
+  useEffect(() => {
+    onMoodChange?.(activeMoodKey);
+  }, [activeMoodKey, onMoodChange]);
+
   const topCardPhotos = useMemo(() => {
     if (!topCard) return [];
-    if (Array.isArray(topCard.photos) && topCard.photos.filter(Boolean).length > 0) {
-      return topCard.photos.filter(Boolean);
-    }
-    return [getPrimaryPhoto(topCard, 1000)];
-  }, [topCard]);
+    const ordered = getOrderedPhotos(topCard, currentUser?.uid);
+    if (ordered.length > 0) return ordered;
+    return [getPrimaryPhoto(topCard, 1000, { seed: currentUser?.uid })];
+  }, [topCard, currentUser?.uid]);
 
   // Precarga silenciosa de todas las fotos de la tarjeta actual y siguiente para cambio instantáneo sin parpadeos
   useEffect(() => {
@@ -183,9 +320,9 @@ export default function DiscoverSwipe({
     });
     if (nextCard) {
       const nextImg = new Image();
-      nextImg.src = getPrimaryPhoto(nextCard, 900);
+      nextImg.src = getPrimaryPhoto(nextCard, 900, { seed: currentUser?.uid });
     }
-  }, [topCardPhotos, nextCard]);
+  }, [topCardPhotos, nextCard, currentUser?.uid]);
 
   const dismissTutorial = () => {
     try {
@@ -230,34 +367,72 @@ export default function DiscoverSwipe({
   const triggerPass = useCallback(() => {
     if (!topCard || busyRef.current) return;
     busyRef.current = true;
-    flyOutAndAdvance('left', topCard);
+    const target = topCard;
+    triggerHaptic(10);
+    persistPassedId(currentUserRef.current?.uid, target.uid || target.id);
+    flyOutAndAdvance('left', target);
   }, [topCard, flyOutAndAdvance]);
 
   const triggerLike = useCallback(() => {
     if (!topCard || busyRef.current) return;
     busyRef.current = true;
     const target = topCard;
+    const likedPhotoUrl = topCardPhotos[photoIdx] || topCardPhotos[0] || '';
+    triggerHaptic(14);
 
     flyOutAndAdvance('right', target, async () => {
       try {
-        const res = await sendLike({ currentUser: currentUserRef.current, targetUser: target });
+        const res = await sendLike({
+          currentUser: currentUserRef.current,
+          targetUser: target,
+          likedPhotoUrl,
+        });
         if (res.matched && !res.alreadyLiked) {
+          triggerHaptic([18, 40, 24]);
           setMatchPopup({ targetUser: target, matchId: res.matchId });
         }
       } catch (err) {
         onError?.(err.message || 'No se pudo enviar Like.');
       }
     });
-  }, [topCard, flyOutAndAdvance, onError]);
+  }, [topCard, topCardPhotos, photoIdx, flyOutAndAdvance, onError]);
 
   const handleRewind = useCallback(() => {
     if (history.length === 0 || busyRef.current) return;
+    triggerHaptic(10);
     const [lastCard, ...rest] = history;
+    unpersistPassedId(currentUserRef.current?.uid, lastCard.uid || lastCard.id);
     setHistory(rest);
     setCards((prev) => [lastCard, ...prev]);
     setPhotoIdx(0);
     resetCardDomStyle(false);
   }, [history, resetCardDomStyle]);
+
+  // Navegación por teclado en desktop cuando la pestaña Swipe está activa
+  useEffect(() => {
+    if (!isActive || showTutorial || showFiltersModal || giftPickerOpen || matchPopup) return;
+    const onKeyDown = (e) => {
+      const tag = e.target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        triggerLike();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        triggerPass();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [
+    isActive,
+    showTutorial,
+    showFiltersModal,
+    giftPickerOpen,
+    matchPopup,
+    triggerLike,
+    triggerPass,
+  ]);
 
   const handleSendGift = async (gift) => {
     if (!topCard) return;
@@ -294,6 +469,13 @@ export default function DiscoverSwipe({
     const rot = x * 0.045;
     el.style.transform = `translate3d(${x}px, ${y * 0.22}px, 0px) rotate(${rot}deg)`;
 
+    if (Math.abs(x) > 90 && !hapticCrossedRef.current) {
+      hapticCrossedRef.current = true;
+      triggerHaptic(8);
+    } else if (Math.abs(x) < 70 && hapticCrossedRef.current) {
+      hapticCrossedRef.current = false;
+    }
+
     if (likeStampRef.current) {
       const likeOpacity = x > 20 ? Math.min(1, (x - 20) / 85) : 0;
       likeStampRef.current.style.opacity = String(likeOpacity);
@@ -308,6 +490,7 @@ export default function DiscoverSwipe({
     if (busyRef.current || showTutorial) return;
     if (e.target.closest('button')) return;
 
+    hapticCrossedRef.current = false;
     const el = activeCardRef.current;
     if (el) {
       el.style.transition = 'none';
@@ -339,6 +522,7 @@ export default function DiscoverSwipe({
   const handlePointerUp = (e) => {
     if (!dragRef.current.active) return;
     dragRef.current.active = false;
+    hapticCrossedRef.current = false;
     if (dragRef.current.rafId) {
       cancelAnimationFrame(dragRef.current.rafId);
       dragRef.current.rafId = null;
@@ -382,52 +566,66 @@ export default function DiscoverSwipe({
   const activity = topCard ? formatSwipeActivity(topCard) : { label: '', activeNow: false };
   const verified = topCard ? isProfileVerified(topCard) : false;
   const boosted = topCard ? isBoostActive(topCard) : false;
-  const affinity = topCard ? calculateAffinityScore(currentUser, topCard) : 90;
+  const affinity = topCard ? calculateAffinityScore(currentUser, topCard) : null;
+  const visibleAge = topCard ? getDisplayAge(topCard) : null;
+  const distanceInfo = topCard
+    ? formatUserDistanceLabel(topCard, currentUser)
+    : { text: '', isHidden: false };
   const activePrompt =
     topCard && Array.isArray(topCard.prompts)
       ? topCard.prompts.find((p) => typeof p === 'string' && p.trim().length > 0)
       : '';
 
+  const hasCustomFilters =
+    scope !== 'global' ||
+    genderPreference !== (currentUser?.interestedIn || 'Todos') ||
+    ageRange?.min > MIN_AGE ||
+    ageRange?.max < 60;
+
   return (
-    <div className="flex-1 h-full w-full bg-black text-white flex flex-col overflow-hidden select-none relative">
-      {/* CABECERA PREMIUM */}
-      <header className="shrink-0 px-4 pt-2.5 pb-2 pt-safe z-20">
+    <div
+      style={{ background: mood.backdropStyle }}
+      className="flex-1 h-full w-full text-white flex flex-col overflow-hidden select-none relative transition-all duration-700"
+    >
+      {/* CABECERA ROMÁNTICA ADAPTATIVA */}
+      <header className="shrink-0 px-3.5 pt-2.5 pb-1.5 pt-safe z-20 space-y-2">
         {!showTasteBanner ? (
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2 min-w-0">
               <button
                 type="button"
                 onClick={() => setShowFiltersModal((v) => !v)}
-                className={`w-9 h-9 rounded-full flex items-center justify-center border transition ${
-                  showFiltersModal || intention !== 'Todos' || scope !== 'global'
+                className={`relative w-9 h-9 rounded-full flex items-center justify-center border transition shrink-0 ${
+                  showFiltersModal || hasCustomFilters
                     ? 'bg-white text-black border-white'
-                    : 'bg-zinc-900/90 text-zinc-300 border-zinc-800 hover:text-white'
+                    : 'bg-black/35 text-zinc-200 border-white/15 hover:bg-black/50'
                 }`}
                 title="Filtros de búsqueda"
               >
                 <SlidersHorizontal className="w-4 h-4 stroke-[2.2]" />
+                {hasCustomFilters && !showFiltersModal && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#FF2E54] border-2 border-[#1A0710]" />
+                )}
               </button>
 
-              <div className="flex items-center gap-1.5">
-                <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-[#FF2E54] to-amber-400 flex items-center justify-center shadow-sm">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-[#FF2E54] to-amber-400 flex items-center justify-center shadow-sm shrink-0">
                   <Flame className="w-3.5 h-3.5 text-white fill-white" />
                 </div>
                 <h1 className="text-lg font-extrabold tracking-tight text-white">Para ti</h1>
               </div>
 
-              {(scope === 'local' || intention !== 'Todos') && (
-                <span className="px-2.5 py-0.5 rounded-full bg-zinc-900 border border-zinc-700 text-[10px] font-bold text-zinc-200 truncate max-w-[120px]">
-                  {scope === 'local' ? `${currentUser?.country?.flag} ` : ''}
-                  {intention !== 'Todos' ? intention : currentUser?.country?.code}
-                </span>
-              )}
+              <span className="hidden xs:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/30 border border-white/10 text-[10px] font-bold text-white/90 truncate max-w-[130px]">
+                <span>{mood.emoji}</span>
+                <span className="truncate">{mood.label}</span>
+              </span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 type="button"
                 onClick={() => setShowTasteBanner(true)}
-                className="w-9 h-9 rounded-full bg-zinc-900/90 border border-zinc-800 text-zinc-300 hover:text-white flex items-center justify-center transition"
+                className="w-9 h-9 rounded-full bg-black/35 border border-white/15 text-zinc-200 hover:text-white flex items-center justify-center transition"
                 title="Afinidad y gustos"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -439,10 +637,10 @@ export default function DiscoverSwipe({
               <button
                 type="button"
                 onClick={onOpenBoost}
-                className="h-9 px-3 rounded-full bg-gradient-to-r from-purple-600/30 to-fuchsia-600/30 border border-purple-500/50 text-purple-300 text-xs font-extrabold flex items-center gap-1 hover:brightness-110 transition"
+                className="h-9 px-3 rounded-full bg-gradient-to-r from-purple-600/35 to-fuchsia-600/35 border border-purple-400/50 text-purple-200 text-xs font-extrabold flex items-center gap-1 hover:brightness-110 transition"
                 title="Activar Boost VIP"
               >
-                <Zap className="w-3.5 h-3.5 fill-[#A855F7] text-[#A855F7]" />
+                <Zap className="w-3.5 h-3.5 fill-[#C084FC] text-[#C084FC]" />
                 <span>Boost</span>
               </button>
             </div>
@@ -464,30 +662,71 @@ export default function DiscoverSwipe({
               </p>
               <div className="w-full h-1.5 rounded-full bg-zinc-100 mt-1.5 overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-400 transition-all"
+                  className={`h-full rounded-full bg-gradient-to-r ${mood.progressGrad} transition-all`}
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
             </div>
           </div>
         )}
+
+        {/* Chips rápidos de vibra / intención que adaptan mazo + degradado en vivo */}
+        {!showTasteBanner && !showFiltersModal && (
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+            {['Todos', ...LOOKING_FOR_OPTIONS].map((opt) => {
+              const optMood = getIntentionMood(opt);
+              const selected = intention === opt;
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => setIntention(opt)}
+                  className={`shrink-0 px-3 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1 transition-all duration-300 ${
+                    selected
+                      ? optMood.pillActive
+                      : 'bg-black/30 border-white/15 text-white/80 hover:bg-black/45 hover:text-white'
+                  }`}
+                >
+                  <span>{optMood.emoji}</span>
+                  <span>{opt === 'Todos' ? 'Todos' : optMood.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </header>
 
       {/* Panel de Filtros Dinámicos */}
       {showFiltersModal && (
-        <div className="mx-3 mb-2 p-3.5 rounded-3xl bg-[#141417] border border-zinc-800 z-30 space-y-3 shadow-2xl">
+        <div className="mx-3 mb-2 p-3.5 rounded-3xl bg-[#160A13]/95 border border-white/15 z-30 space-y-3 shadow-2xl">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-extrabold text-zinc-200 flex items-center gap-1.5">
+            <span className="text-xs font-extrabold text-zinc-100 flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
               Personaliza a quién ves
             </span>
-            <button
-              type="button"
-              onClick={() => setShowFiltersModal(false)}
-              className="px-2.5 py-1 rounded-full bg-white text-black text-[11px] font-extrabold"
-            >
-              Listo
-            </button>
+            <div className="flex items-center gap-1.5">
+              {(hasCustomFilters || intention !== 'Todos') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScope('global');
+                    setIntention('Todos');
+                    setGenderPreference(currentUser?.interestedIn || 'Todos');
+                    setAgeRange({ min: MIN_AGE, max: 60 });
+                  }}
+                  className="px-2.5 py-1 rounded-full bg-white/10 text-zinc-200 text-[11px] font-bold hover:bg-white/20"
+                >
+                  Restablecer
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowFiltersModal(false)}
+                className="px-3 py-1 rounded-full bg-white text-black text-[11px] font-extrabold"
+              >
+                Listo
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
@@ -497,7 +736,7 @@ export default function DiscoverSwipe({
               className={`py-2 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
                 scope === 'global'
                   ? 'bg-white text-black'
-                  : 'bg-zinc-900 text-zinc-400 border border-zinc-800'
+                  : 'bg-black/35 text-zinc-300 border border-white/10'
               }`}
             >
               <Globe className="w-3.5 h-3.5" /> Todo el Mundo
@@ -508,28 +747,92 @@ export default function DiscoverSwipe({
               className={`py-2 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
                 scope === 'local'
                   ? 'bg-white text-black'
-                  : 'bg-zinc-900 text-zinc-400 border border-zinc-800'
+                  : 'bg-black/35 text-zinc-300 border border-white/10'
               }`}
             >
               <span>{currentUser?.country?.flag || '📍'}</span> Mi País ({currentUser?.country?.code})
             </button>
           </div>
 
-          <div className="flex flex-wrap gap-1.5">
-            {['Todos', ...LOOKING_FOR_OPTIONS].map((opt) => (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => setIntention(opt)}
-                className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition ${
-                  intention === opt
-                    ? 'bg-[#FF2E54] text-white shadow'
-                    : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-zinc-200'
-                }`}
-              >
-                {opt}
-              </button>
-            ))}
+          {/* Filtro por preferencia (Mujeres / Hombres / Todos) */}
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400">
+              Me interesa ver
+            </p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {INTERESTED_IN_OPTIONS.map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => setGenderPreference(opt)}
+                  className={`py-1.5 rounded-xl text-[11px] font-bold transition ${
+                    genderPreference === opt
+                      ? 'bg-[#FF2E54] text-white shadow'
+                      : 'bg-black/35 text-zinc-300 border border-white/10 hover:text-white'
+                  }`}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Rango de edad */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400">
+                Edad
+              </p>
+              <span className="text-[11px] font-extrabold text-rose-300">
+                {ageRange.min} – {ageRange.max >= 99 ? '60+' : ageRange.max} años
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {AGE_PRESETS.map((preset) => {
+                const selected = ageRange.min === preset.min && ageRange.max === preset.max;
+                return (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => setAgeRange({ min: preset.min, max: preset.max })}
+                    className={`px-3 py-1 rounded-full text-[11px] font-bold transition ${
+                      selected
+                        ? 'bg-white text-black'
+                        : 'bg-black/35 text-zinc-300 border border-white/10 hover:text-white'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Intención / Vibra romántica */}
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400">
+              Qué buscan
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {['Todos', ...LOOKING_FOR_OPTIONS].map((opt) => {
+                const optMood = getIntentionMood(opt);
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => setIntention(opt)}
+                    className={`px-3 py-1.5 rounded-full text-[11px] font-bold border transition flex items-center gap-1 ${
+                      intention === opt
+                        ? optMood.pillActive
+                        : 'bg-black/35 text-zinc-300 border-white/10 hover:text-white'
+                    }`}
+                  >
+                    <span>{optMood.emoji}</span>
+                    <span>{opt}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
@@ -537,9 +840,9 @@ export default function DiscoverSwipe({
       {/* CONTENEDOR DEL MAZO VIRTUALIZADO (Máximo 2 tarjetas en el DOM a 60fps) */}
       <div className="flex-1 min-h-0 relative px-2 pb-2 flex flex-col">
         {loading ? (
-          <div className="flex-1 rounded-[32px] bg-[#111114] border border-zinc-800/80 flex flex-col items-center justify-center gap-4 p-6 text-center">
+          <div className="flex-1 rounded-[32px] bg-black/30 border border-white/10 flex flex-col items-center justify-center gap-4 p-6 text-center">
             <div className="relative flex items-center justify-center">
-              <div className="w-24 h-24 rounded-full border border-[#FF2E54]/40 animate-ping absolute" />
+              <div className="w-24 h-24 rounded-full border border-rose-400/40 animate-ping absolute" />
               <img
                 src={getPrimaryPhoto(currentUser, 200)}
                 alt={currentUser?.name}
@@ -548,15 +851,17 @@ export default function DiscoverSwipe({
             </div>
             <div>
               <p className="text-sm font-extrabold text-white">Encontrando perfiles reales...</p>
-              <p className="text-xs text-zinc-400 mt-1">Verificando fotos y conexiones cercanas</p>
+              <p className="text-xs text-rose-200/75 mt-1">
+                Adaptando la vibra {mood.emoji} {mood.label}
+              </p>
             </div>
           </div>
         ) : !topCard ? (
           /* Estado de fin del mazo: "Hasta acá por los momentos" */
-          <div className="flex-1 rounded-[32px] bg-gradient-to-b from-[#16161A] to-[#0B0B0D] border border-zinc-800/80 flex flex-col items-center justify-center p-6 text-center relative overflow-hidden">
+          <div className="flex-1 rounded-[32px] bg-black/35 border border-white/10 flex flex-col items-center justify-center p-6 text-center relative overflow-hidden">
             <div className="relative flex items-center justify-center mb-5">
-              <div className="w-32 h-32 rounded-full border border-[#FF2E54]/25 animate-ping absolute" />
-              <div className="w-24 h-24 rounded-full border border-[#FF2E54]/40 absolute" />
+              <div className="w-32 h-32 rounded-full border border-rose-400/25 animate-ping absolute" />
+              <div className="w-24 h-24 rounded-full border border-rose-400/40 absolute" />
               <img
                 src={getPrimaryPhoto(currentUser, 240)}
                 alt={currentUser?.name}
@@ -564,7 +869,7 @@ export default function DiscoverSwipe({
               />
             </div>
 
-            <span className="px-3 py-1 rounded-full bg-zinc-800/90 border border-zinc-700 text-[11px] font-bold text-zinc-300 mb-2">
+            <span className="px-3 py-1 rounded-full bg-black/40 border border-white/15 text-[11px] font-bold text-rose-200 mb-2">
               {totalDeckCount > 0
                 ? `${totalDeckCount} perfiles revisados`
                 : 'Sin coincidencias en este filtro'}
@@ -573,29 +878,34 @@ export default function DiscoverSwipe({
             <h2 className="text-2xl font-extrabold text-white tracking-tight">
               Hasta acá por los momentos
             </h2>
-            <p className="text-xs sm:text-sm text-zinc-400 mt-2 max-w-xs leading-relaxed">
+            <p className="text-xs sm:text-sm text-zinc-300 mt-2 max-w-xs leading-relaxed">
               {intention !== 'Todos'
-                ? `Ya viste todas las personas disponibles en "${intention}". Prueba cambiar el filtro o volver a verlos.`
-                : 'Ya recorriste todas las fotos de los perfiles disponibles en este momento.'}
+                ? `Ya viste todas las personas disponibles en "${intention}". Prueba cambiar la vibra o volver a verlos.`
+                : 'Ya recorriste todos los perfiles disponibles por ahora según tus filtros.'}
             </p>
 
             <div className="w-full max-w-xs space-y-2.5 mt-6">
               <button
                 type="button"
                 onClick={() => loadCandidates(true)}
-                className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#FF2E54] to-[#FF6B6B] text-white text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 shadow-lg shadow-[#FF2E54]/25 active:scale-95 transition-transform"
+                className={`w-full py-3.5 rounded-full bg-gradient-to-r ${mood.heartButton} text-white text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 active:scale-95 transition-transform`}
               >
                 <RefreshCw className="w-4 h-4" />
                 Volver a ver perfiles
               </button>
 
-              {intention !== 'Todos' && (
+              {(intention !== 'Todos' || hasCustomFilters) && (
                 <button
                   type="button"
-                  onClick={() => setIntention('Todos')}
-                  className="w-full py-3 rounded-full bg-zinc-900 border border-zinc-700 text-zinc-200 text-xs font-bold active:scale-95 transition-transform"
+                  onClick={() => {
+                    setScope('global');
+                    setIntention('Todos');
+                    setGenderPreference('Todos');
+                    setAgeRange({ min: MIN_AGE, max: 99 });
+                  }}
+                  className="w-full py-3 rounded-full bg-black/45 border border-white/15 text-zinc-100 text-xs font-bold active:scale-95 transition-transform"
                 >
-                  Mostrar todas las intenciones
+                  Ampliar todos los filtros
                 </button>
               )}
             </div>
@@ -609,7 +919,7 @@ export default function DiscoverSwipe({
                 className="absolute inset-0 rounded-[32px] overflow-hidden bg-zinc-900 border border-white/10 pointer-events-none"
               >
                 <img
-                  src={getPrimaryPhoto(nextCard, 900)}
+                  src={getPrimaryPhoto(nextCard, 900, { seed: currentUser?.uid })}
                   alt={nextCard.name}
                   className="w-full h-full object-cover opacity-85 scale-[0.98]"
                   draggable={false}
@@ -626,7 +936,7 @@ export default function DiscoverSwipe({
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerUp}
-              className="gpu-card touch-none absolute inset-0 rounded-[32px] overflow-hidden bg-zinc-950 ring-1 ring-white/15 select-none cursor-grab active:cursor-grabbing"
+              className={`gpu-card touch-none absolute inset-0 rounded-[32px] overflow-hidden bg-zinc-950 ring-1 ${mood.cardRing} select-none cursor-grab active:cursor-grabbing`}
             >
               {/* Foto con transición suave GPU al cambiar entre las fotos del usuario */}
               <img
@@ -738,16 +1048,18 @@ export default function DiscoverSwipe({
                   )}
                 </div>
 
-                {/* Nombre grande + Edad + Sello Verificado + Botón Ver Perfil (↑) */}
+                {/* Nombre grande + Edad (si el usuario no la ocultó) + Sello Verificado + Botón Ver Perfil (↑) */}
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <h2 className="text-3xl font-black text-white tracking-tight truncate leading-none">
                         {topCard.name}
                       </h2>
-                      <span className="text-2xl font-semibold text-white/90 shrink-0 leading-none">
-                        {topCard.age || 24}
-                      </span>
+                      {visibleAge !== null && (
+                        <span className="text-2xl font-semibold text-white/90 shrink-0 leading-none">
+                          {visibleAge}
+                        </span>
+                      )}
                       {verified && (
                         <BadgeCheck
                           className="w-6 h-6 text-sky-400 fill-sky-400 stroke-white shrink-0"
@@ -757,12 +1069,9 @@ export default function DiscoverSwipe({
                     </div>
 
                     <p className="text-xs font-medium text-zinc-300 flex items-center gap-1.5 mt-1.5">
-                      <span>{topCard.country?.flag || '🌎'}</span>
+                      {!distanceInfo.isHidden && <span>{topCard.country?.flag || '🌎'}</span>}
                       <MapPin className="w-3.5 h-3.5 text-[#FF2E54] shrink-0" />
-                      <span className="truncate">
-                        {topCard.city ? `${topCard.city}, ` : ''}
-                        {topCard.country?.name || 'Global'}
-                      </span>
+                      <span className="truncate">{distanceInfo.text}</span>
                       {topCard.job && (
                         <>
                           <span className="text-zinc-600">•</span>
@@ -851,11 +1160,11 @@ export default function DiscoverSwipe({
                   <X className="w-8 h-8 stroke-[3]" />
                 </button>
 
-                {/* Botón Corazón (Me Gusta) con degradado carmesí-coral */}
+                {/* Botón Corazón (Me Gusta) con degradado romántico adaptativo */}
                 <button
                   type="button"
                   onClick={triggerLike}
-                  className="w-16 h-16 rounded-full bg-gradient-to-br from-[#FF2E54] to-[#FF5E7E] border-2 border-white/25 text-white flex items-center justify-center shadow-[0_8px_24px_rgba(255,46,84,0.45)] active:scale-90 transition-transform"
+                  className={`w-16 h-16 rounded-full bg-gradient-to-br ${mood.heartButton} border-2 border-white/25 text-white flex items-center justify-center active:scale-90 transition-all duration-300`}
                   aria-label="Me gusta"
                 >
                   <Heart className="w-8 h-8 fill-white text-white" />
@@ -904,52 +1213,123 @@ export default function DiscoverSwipe({
         )}
       </div>
 
-      {/* Match Celebration Popup */}
-      {matchPopup && (
-        <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-5">
-          <div className="w-full max-w-sm rounded-3xl bg-[#16161A] border border-zinc-800 p-6 text-center space-y-4">
-            <div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-400 flex items-center justify-center shadow-lg">
-              <MessageCircleHeart className="w-8 h-8 text-white" />
-            </div>
-            <h3 className="text-2xl font-black text-white">¡Es un Match!</h3>
-            <p className="text-xs text-zinc-400">
-              A ti y a <strong className="text-white">{matchPopup.targetUser.name}</strong> se gustaron mutuamente.
-            </p>
-            <img
-              src={getPrimaryPhoto(matchPopup.targetUser, 300)}
-              alt={matchPopup.targetUser.name}
-              className="w-28 h-28 mx-auto rounded-full object-cover border-2 border-[#FF2E54]"
-            />
-            <div className="grid grid-cols-2 gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setMatchPopup(null)}
-                className="py-3 rounded-full bg-zinc-800 text-white text-xs font-bold"
-              >
-                Seguir deslizando
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const target = matchPopup.targetUser;
-                  const matchId = matchPopup.matchId;
-                  setMatchPopup(null);
-                  onOpenChat({
-                    match: {
-                      id: matchId,
-                      participants: [currentUser.uid, target.uid || target.id].sort(),
-                    },
-                    peerUser: target,
-                  });
-                }}
-                className="py-3 rounded-full bg-[#FF2E54] text-white text-xs font-extrabold"
-              >
-                Enviar mensaje
-              </button>
+      {/* Match Celebration Popup con avatares dobles + rompehielos con 1 toque */}
+      {matchPopup && (() => {
+        const target = matchPopup.targetUser;
+        const matchId = matchPopup.matchId;
+        const commonTags = getSharedInterests(currentUser, target);
+        const icebreakers = [
+          commonTags[0]
+            ? `✨ ¡Hola ${target.name}! Vi que también te gusta ${commonTags[0]}`
+            : `💘 ¡Hola ${target.name}! Qué gusto hacer match contigo`,
+          target.lookingFor === 'Estoy libre hoy'
+            ? '🌙 ¿Qué planes te provocan para hoy?'
+            : '☕ ¿Conversamos un rato para conocernos mejor?',
+          '👋 ¡Hola! ¿Cómo va tu día?',
+        ];
+
+        const openMatchConversation = () => {
+          setMatchPopup(null);
+          onOpenChat({
+            match: {
+              id: matchId,
+              participants: [currentUser.uid, target.uid || target.id].sort(),
+            },
+            peerUser: target,
+          });
+        };
+
+        const sendQuickIcebreaker = async (text) => {
+          if (sendingIcebreaker) return;
+          setSendingIcebreaker(true);
+          try {
+            await sendTextMessage({
+              matchId,
+              senderId: currentUser.uid,
+              text,
+            });
+            openMatchConversation();
+          } catch (err) {
+            onError?.(err.message || 'No se pudo enviar el mensaje.');
+          } finally {
+            setSendingIcebreaker(false);
+          }
+        };
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-5">
+            <div
+              style={{ background: mood.backdropStyle }}
+              className="w-full max-w-sm rounded-[32px] border border-white/15 p-6 text-center space-y-4 shadow-2xl"
+            >
+              <div className="flex items-center justify-center">
+                <div className="flex items-center -space-x-4">
+                  <img
+                    src={getPrimaryPhoto(currentUser, 240)}
+                    alt={currentUser?.name}
+                    className="w-20 h-20 rounded-full object-cover border-2 border-white shadow-lg"
+                  />
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#FF2E54] to-amber-400 flex items-center justify-center z-10 border-2 border-[#1A0710] shadow-lg">
+                    <Heart className="w-5 h-5 text-white fill-white" />
+                  </div>
+                  <img
+                    src={getPrimaryPhoto(target, 240)}
+                    alt={target.name}
+                    className="w-20 h-20 rounded-full object-cover border-2 border-white shadow-lg"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[11px] font-extrabold uppercase tracking-widest text-rose-300">
+                  ¡Conexión mutua!
+                </p>
+                <h3 className="font-serif-display text-3xl font-bold text-white mt-0.5">
+                  ¡Es un Match!
+                </h3>
+                <p className="text-xs text-rose-100/80 mt-1">
+                  A ti y a <strong className="text-white">{target.name}</strong> se gustaron mutuamente.
+                </p>
+              </div>
+
+              {/* Rompehielos instantáneos */}
+              <div className="space-y-1.5 text-left pt-1">
+                <p className="text-[10px] font-extrabold uppercase tracking-wider text-rose-200/75 text-center">
+                  Rompe el hielo con 1 toque
+                </p>
+                {icebreakers.map((msg) => (
+                  <button
+                    key={msg}
+                    type="button"
+                    disabled={sendingIcebreaker}
+                    onClick={() => sendQuickIcebreaker(msg)}
+                    className="w-full px-3.5 py-2.5 rounded-2xl bg-black/35 hover:bg-black/55 border border-white/15 text-white text-xs font-semibold text-left transition active:scale-[0.99] disabled:opacity-50"
+                  >
+                    {msg}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setMatchPopup(null)}
+                  className="py-3 rounded-full bg-black/40 border border-white/15 text-white text-xs font-bold"
+                >
+                  Seguir deslizando
+                </button>
+                <button
+                  type="button"
+                  onClick={openMatchConversation}
+                  className={`py-3 rounded-full bg-gradient-to-r ${mood.heartButton} text-white text-xs font-extrabold`}
+                >
+                  Abrir chat
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       <GiftPickerModal
         isOpen={giftPickerOpen}

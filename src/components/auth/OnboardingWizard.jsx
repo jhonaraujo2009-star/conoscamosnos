@@ -11,6 +11,12 @@ import {
 import { completeOnboarding } from '../../services/userService';
 import PhotoUploader from '../profile/PhotoUploader';
 
+const STEP_META = [
+  { num: 1, title: 'Tu identidad', subtitle: 'Paso 1 de 3 • Cuéntanos quién eres' },
+  { num: 2, title: 'Ubicación y meta', subtitle: 'Paso 2 de 3 • Qué buscas en la comunidad' },
+  { num: 3, title: 'Fotos y gustos', subtitle: 'Paso 3 de 3 • Destaca con fotos reales' },
+];
+
 export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
@@ -83,7 +89,7 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
         interests,
         photos,
       });
-      onSuccess?.('¡Perfil creado! Ya puedes explorar y chatear en privado.');
+      onSuccess?.('¡Perfil listo! Ya puedes deslizar y chatear en privado.');
     } catch (err) {
       onError?.(err.message || 'No se pudo guardar tu perfil.');
     } finally {
@@ -91,25 +97,27 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
     }
   };
 
+  const meta = STEP_META[step - 1];
+
   return (
-    <div className="min-h-screen bg-luxury-mesh flex items-center justify-center p-4 sm:p-6">
-      <div className="w-full max-w-md bg-white/95 border border-rose-100 rounded-[32px] p-6 sm:p-7 shadow-luxury backdrop-blur-xl">
+    <div className="min-h-full bg-luxury-mesh flex items-center justify-center p-4 sm:p-6">
+      <div className="w-full max-w-md bg-white border border-zinc-200/80 rounded-[32px] p-6 sm:p-7 shadow-luxury animate-sheet-up">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-brand-50 to-rose-100 text-brand-600 flex items-center justify-center border border-rose-200/60 shadow-sm">
+            <div className="w-11 h-11 rounded-2xl bg-rose-50 text-[#FF2E54] flex items-center justify-center border border-rose-100">
               <UserCheck className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="font-display text-lg font-extrabold text-slate-900">Personaliza tu Perfil</h2>
-              <p className="text-xs font-medium text-slate-500">Paso {step} de 3 • Perfil independiente</p>
+              <h2 className="font-display text-lg font-extrabold text-zinc-900">{meta.title}</h2>
+              <p className="text-xs font-medium text-zinc-500">{meta.subtitle}</p>
             </div>
           </div>
           <div className="flex gap-1.5">
             {[1, 2, 3].map((s) => (
               <div
                 key={s}
-                className={`h-2 w-7 rounded-full transition-all ${
-                  s <= step ? 'bg-gradient-to-r from-brand-500 to-rose-500' : 'bg-slate-200'
+                className={`h-2 w-6 rounded-full transition-all ${
+                  s <= step ? 'bg-[#FF2E54]' : 'bg-zinc-200'
                 }`}
               />
             ))}
@@ -120,19 +128,19 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
           {step === 1 && (
             <div className="space-y-4">
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1.5">¿Cómo te llamas?</label>
+                <label className="text-xs font-bold text-zinc-700 block mb-1.5">¿Cómo te llamas?</label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-medium focus:outline-none focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
+                  className="w-full px-4 py-3 rounded-2xl bg-zinc-50 border border-zinc-200 text-zinc-900 text-sm font-semibold focus:outline-none focus:bg-white focus:border-zinc-900 transition"
                   placeholder="Tu nombre o apodo visible"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1.5">
+                  <label className="text-xs font-bold text-zinc-700 block mb-1.5">
                     Edad (+{MIN_AGE})
                   </label>
                   <input
@@ -141,15 +149,15 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
                     max={99}
                     value={age}
                     onChange={(e) => setAge(e.target.value)}
-                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-medium focus:outline-none focus:bg-white focus:border-brand-500"
+                    className="w-full px-4 py-3 rounded-2xl bg-zinc-50 border border-zinc-200 text-zinc-900 text-sm font-semibold focus:outline-none focus:bg-white focus:border-zinc-900"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1.5">Soy</label>
+                  <label className="text-xs font-bold text-zinc-700 block mb-1.5">Soy</label>
                   <select
                     value={gender}
                     onChange={(e) => setGender(e.target.value)}
-                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-medium focus:outline-none focus:bg-white focus:border-brand-500"
+                    className="w-full px-4 py-3 rounded-2xl bg-zinc-50 border border-zinc-200 text-zinc-900 text-sm font-semibold focus:outline-none focus:bg-white focus:border-zinc-900"
                   >
                     {GENDERS.map((g) => (
                       <option key={g} value={g}>
@@ -161,7 +169,7 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-2">
+                <label className="text-xs font-bold text-zinc-700 block mb-2">
                   Me interesa conocer
                 </label>
                 <div className="grid grid-cols-3 gap-2">
@@ -170,10 +178,10 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
                       type="button"
                       key={opt}
                       onClick={() => setInterestedIn(opt)}
-                      className={`py-2.5 px-3 rounded-2xl text-xs font-bold border transition ${
+                      className={`py-2.5 px-3 rounded-2xl text-xs font-extrabold border transition ${
                         interestedIn === opt
-                          ? 'bg-brand-50 border-brand-500 text-brand-700 shadow-sm'
-                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                          ? 'bg-zinc-900 border-zinc-900 text-white shadow-sm'
+                          : 'bg-zinc-50 border-zinc-200 text-zinc-600 hover:bg-zinc-100'
                       }`}
                     >
                       {opt}
@@ -187,11 +195,11 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
           {step === 2 && (
             <div className="space-y-4">
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1.5">País</label>
+                <label className="text-xs font-bold text-zinc-700 block mb-1.5">País</label>
                 <select
                   value={countryCode}
                   onChange={(e) => setCountryCode(e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-medium focus:outline-none focus:bg-white focus:border-brand-500"
+                  className="w-full px-4 py-3 rounded-2xl bg-zinc-50 border border-zinc-200 text-zinc-900 text-sm font-semibold focus:outline-none focus:bg-white focus:border-zinc-900"
                 >
                   {COUNTRIES.map((c) => (
                     <option key={c.code} value={c.code}>
@@ -202,21 +210,21 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1.5">Ciudad</label>
+                <label className="text-xs font-bold text-zinc-700 block mb-1.5">Ciudad</label>
                 <div className="relative">
-                  <MapPin className="w-4 h-4 text-brand-500 absolute left-4 top-3.5" />
+                  <MapPin className="w-4 h-4 text-[#FF2E54] absolute left-4 top-3.5" />
                   <input
                     type="text"
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
                     placeholder="Ej. Bogotá, Caracas, Madrid, CDMX..."
-                    className="w-full pl-11 pr-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-medium focus:outline-none focus:bg-white focus:border-brand-500"
+                    className="w-full pl-11 pr-4 py-3 rounded-2xl bg-zinc-50 border border-zinc-200 text-zinc-900 text-sm font-semibold focus:outline-none focus:bg-white focus:border-zinc-900"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-2">
+                <label className="text-xs font-bold text-zinc-700 block mb-2">
                   ¿Qué tipo de conexión buscas?
                 </label>
                 <div className="grid grid-cols-2 gap-2">
@@ -225,14 +233,14 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
                       type="button"
                       key={opt}
                       onClick={() => setLookingFor(opt)}
-                      className={`py-2.5 px-3 rounded-2xl text-left text-xs font-bold border flex items-center justify-between gap-1 transition ${
+                      className={`py-2.5 px-3 rounded-2xl text-left text-xs font-extrabold border flex items-center justify-between gap-1 transition ${
                         lookingFor === opt
-                          ? 'bg-brand-50 border-brand-500 text-brand-700 shadow-sm'
-                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                          ? 'bg-zinc-900 border-zinc-900 text-white shadow-sm'
+                          : 'bg-zinc-50 border-zinc-200 text-zinc-600 hover:bg-zinc-100'
                       }`}
                     >
                       <span className="truncate">{opt}</span>
-                      {lookingFor === opt && <Check className="w-3.5 h-3.5 text-brand-600 shrink-0" />}
+                      {lookingFor === opt && <Check className="w-3.5 h-3.5 text-[#FF2E54] shrink-0" />}
                     </button>
                   ))}
                 </div>
@@ -241,22 +249,22 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
           )}
 
           {step === 3 && (
-            <div className="space-y-4 max-h-[66vh] overflow-y-auto pr-1">
+            <div className="space-y-4 max-h-[64vh] overflow-y-auto no-scrollbar pr-0.5">
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1.5">Sobre ti (Biografía)</label>
+                <label className="text-xs font-bold text-zinc-700 block mb-1.5">Sobre ti (Biografía)</label>
                 <textarea
                   rows={3}
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
                   maxLength={280}
                   placeholder="Cuéntale a la comunidad sobre ti, tus planes favoritos o idiomas..."
-                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-medium focus:outline-none focus:bg-white focus:border-brand-500 resize-none"
+                  className="w-full px-4 py-3 rounded-2xl bg-zinc-50 border border-zinc-200 text-zinc-900 text-sm font-medium focus:outline-none focus:bg-white focus:border-zinc-900 resize-none"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-2">
-                  Tus Intereses ({interests.length}/10 — elige al menos 2)
+                <label className="text-xs font-bold text-zinc-700 block mb-2">
+                  Tus Intereses ({interests.length}/10 — mínimo 2)
                 </label>
                 <div className="flex flex-wrap gap-1.5">
                   {INTERESTS_CATALOG.map((item) => {
@@ -268,8 +276,8 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
                         onClick={() => toggleInterest(item)}
                         className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${
                           active
-                            ? 'bg-gradient-to-r from-brand-500 to-rose-500 text-white border-transparent shadow-sm'
-                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-brand-300'
+                            ? 'bg-zinc-900 text-white border-zinc-900'
+                            : 'bg-zinc-50 text-zinc-600 border-zinc-200 hover:border-zinc-400'
                         }`}
                       >
                         {item}
@@ -283,12 +291,12 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
             </div>
           )}
 
-          <div className="flex items-center gap-2.5 pt-3">
+          <div className="flex items-center gap-2.5 pt-2">
             {step > 1 && (
               <button
                 type="button"
                 onClick={() => setStep((s) => s - 1)}
-                className="px-4 py-3.5 rounded-2xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition flex items-center gap-1.5"
+                className="px-4 py-3.5 rounded-full bg-zinc-100 text-zinc-700 text-sm font-bold hover:bg-zinc-200 transition flex items-center gap-1.5"
               >
                 <ArrowLeft className="w-4 h-4" />
                 Atrás
@@ -299,7 +307,7 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
               <button
                 type="button"
                 onClick={handleNext}
-                className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-brand-500 to-rose-500 text-white text-sm font-extrabold flex items-center justify-center gap-1.5 shadow-lg shadow-brand-500/20 hover:brightness-105 transition"
+                className="flex-1 py-3.5 rounded-full bg-zinc-900 text-white text-sm font-extrabold flex items-center justify-center gap-1.5 shadow-md hover:bg-zinc-800 transition"
               >
                 Continuar
                 <ArrowRight className="w-4 h-4" />
@@ -308,7 +316,7 @@ export default function OnboardingWizard({ userProfile, onError, onSuccess }) {
               <button
                 type="submit"
                 disabled={saving}
-                className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-brand-500 via-rose-500 to-amber-500 text-white text-sm font-extrabold flex items-center justify-center gap-1.5 shadow-lg shadow-brand-500/25 disabled:opacity-60 transition"
+                className="flex-1 py-3.5 rounded-full bg-gradient-to-r from-[#FF2E54] to-[#FF5E7E] text-white text-sm font-extrabold flex items-center justify-center gap-1.5 shadow-lg shadow-[#FF2E54]/25 disabled:opacity-60 transition"
               >
                 <Sparkles className="w-4 h-4" />
                 {saving ? 'Guardando...' : 'Comenzar a Conectar'}

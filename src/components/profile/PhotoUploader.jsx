@@ -1,12 +1,19 @@
 import { useRef, useState } from 'react';
-import { Camera, Loader2, Star, Trash2 } from 'lucide-react';
+import { Camera, Heart, Loader2, Sparkles, Star, Trash2 } from 'lucide-react';
 import { MAX_PHOTOS } from '../../config/constants';
 import { isCloudinaryConfigured } from '../../config/cloudinary';
 import { useAuth } from '../../contexts/AuthContext';
 import { getUserCloudinaryFolder, uploadImageToCloudinary } from '../../services/cloudinaryService';
 import { optimizeCloudinaryUrl } from '../../utils/formatters';
 
-export default function PhotoUploader({ photos = [], onChange, onError }) {
+export default function PhotoUploader({
+  photos = [],
+  onChange,
+  onError,
+  smartPhotos = false,
+  photoLikeCounts = {},
+  bestPhotoUrl = '',
+}) {
   const { userProfile } = useAuth();
   const inputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
@@ -57,11 +64,11 @@ export default function PhotoUploader({ photos = [], onChange, onError }) {
   return (
     <div className="space-y-2.5">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
+        <span className="text-xs font-extrabold uppercase tracking-wider text-zinc-500">
           Galería ({photos.length}/{MAX_PHOTOS} fotos)
         </span>
         {!isCloudinaryConfigured && (
-          <span className="text-[11px] font-semibold text-amber-600">
+          <span className="text-[11px] font-bold text-amber-600">
             Configura Cloudinary en .env
           </span>
         )}
@@ -74,7 +81,7 @@ export default function PhotoUploader({ photos = [], onChange, onError }) {
             return (
               <div
                 key={`${url}-${idx}`}
-                className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 shadow-sm group"
+                className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-zinc-100 border border-zinc-200 shadow-sm group"
               >
                 <img
                   src={optimizeCloudinaryUrl(url, 400)}
@@ -82,9 +89,20 @@ export default function PhotoUploader({ photos = [], onChange, onError }) {
                   loading="lazy"
                   className="w-full h-full object-cover"
                 />
-                {idx === 0 && (
-                  <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-brand-500 text-[10px] font-extrabold text-white shadow">
+                {idx === 0 && !smartPhotos && (
+                  <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-zinc-900/90 text-[10px] font-extrabold text-white shadow">
                     Principal
+                  </span>
+                )}
+                {smartPhotos && bestPhotoUrl === url && (
+                  <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-[10px] font-extrabold text-white shadow flex items-center gap-0.5">
+                    <Sparkles className="w-2.5 h-2.5" /> Top
+                  </span>
+                )}
+                {Number(photoLikeCounts[url] || 0) > 0 && (
+                  <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-full bg-black/70 text-[10px] font-extrabold text-white flex items-center gap-1">
+                    <Heart className="w-2.5 h-2.5 fill-[#FF2E54] text-[#FF2E54]" />
+                    {photoLikeCounts[url]}
                   </span>
                 )}
                 <div className="absolute bottom-1.5 right-1.5 flex gap-1">
@@ -92,8 +110,8 @@ export default function PhotoUploader({ photos = [], onChange, onError }) {
                     <button
                       type="button"
                       onClick={() => handleSetPrimary(idx)}
-                      className="p-1.5 rounded-full bg-white/90 text-amber-500 hover:bg-amber-500 hover:text-white shadow transition"
-                      title="Hacer principal"
+                      className="p-1.5 rounded-full bg-white/95 text-amber-500 hover:bg-amber-500 hover:text-white shadow transition"
+                      title="Hacer foto principal"
                     >
                       <Star className="w-3.5 h-3.5" />
                     </button>
@@ -101,7 +119,7 @@ export default function PhotoUploader({ photos = [], onChange, onError }) {
                   <button
                     type="button"
                     onClick={() => handleRemove(idx)}
-                    className="p-1.5 rounded-full bg-white/90 text-rose-500 hover:bg-rose-500 hover:text-white shadow transition"
+                    className="p-1.5 rounded-full bg-white/95 text-[#FF2E54] hover:bg-[#FF2E54] hover:text-white shadow transition"
                     title="Eliminar foto"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -120,14 +138,14 @@ export default function PhotoUploader({ photos = [], onChange, onError }) {
               onClick={() => isNextSlot && inputRef.current?.click()}
               className={`aspect-[3/4] rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition ${
                 isNextSlot
-                  ? 'border-brand-300 bg-rose-50/50 hover:bg-rose-50 text-brand-600 cursor-pointer'
-                  : 'border-slate-200 bg-slate-50/70 text-slate-400 cursor-default'
+                  ? 'border-[#FF2E54]/60 bg-rose-50/40 hover:bg-rose-50 text-[#FF2E54] cursor-pointer'
+                  : 'border-zinc-200 bg-zinc-50 text-zinc-400 cursor-default'
               }`}
             >
               {isNextSlot && uploading ? (
                 <>
-                  <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
-                  <span className="text-xs font-bold">{progress}%</span>
+                  <Loader2 className="w-6 h-6 animate-spin text-[#FF2E54]" />
+                  <span className="text-xs font-extrabold">{progress}%</span>
                 </>
               ) : (
                 <>

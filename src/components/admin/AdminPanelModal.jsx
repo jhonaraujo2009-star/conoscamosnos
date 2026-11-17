@@ -7,6 +7,7 @@ import {
   Coins,
   DollarSign,
   ExternalLink,
+  Flag,
   Gem,
   ShieldCheck,
   X,
@@ -18,6 +19,7 @@ import {
   subscribeAllPaymentRequests,
   subscribeAllPaymentTransactions,
 } from '../../services/monetizationService';
+import { subscribeAllReports, updateReportStatus } from '../../services/userService';
 import {
   markWithdrawalPaid,
   rejectWithdrawalRequest,
@@ -26,11 +28,12 @@ import {
 import { formatUSD } from '../../utils/formatters';
 
 export default function AdminPanelModal({ isOpen, onClose, userProfile, onSuccess, onError }) {
-  const [activeTab, setActiveTab] = useState('recharges'); // 'recharges' | 'withdrawals'
+  const [activeTab, setActiveTab] = useState('recharges'); // 'recharges' | 'withdrawals' | 'reports'
   const [statusFilter, setStatusFilter] = useState('pending');
   const [paymentRequests, setPaymentRequests] = useState([]);
   const [paymentTxs, setPaymentTxs] = useState([]);
   const [withdrawals, setWithdrawals] = useState([]);
+  const [reports, setReports] = useState([]);
   const [busyId, setBusyId] = useState(null);
   const [payoutRefs, setPayoutRefs] = useState({});
   const [previewImg, setPreviewImg] = useState(null);
@@ -40,10 +43,12 @@ export default function AdminPanelModal({ isOpen, onClose, userProfile, onSucces
     const unsubReqs = subscribeAllPaymentRequests(setPaymentRequests);
     const unsubTxs = subscribeAllPaymentTransactions(setPaymentTxs);
     const unsubWithdrawals = subscribeAllWithdrawals(setWithdrawals);
+    const unsubReports = subscribeAllReports(setReports);
     return () => {
       unsubReqs();
       unsubTxs();
       unsubWithdrawals();
+      unsubReports();
     };
   }, [isOpen, userProfile?.role]);
 
@@ -73,8 +78,9 @@ export default function AdminPanelModal({ isOpen, onClose, userProfile, onSucces
       netCompanyBalanceUSD,
       pendingRechargesCount: paymentRequests.filter((r) => r.status === 'pending').length,
       pendingWithdrawalsCount: withdrawals.filter((w) => w.status === 'pending').length,
+      openReportsCount: reports.filter((r) => !r.status || r.status === 'open').length,
     };
-  }, [paymentRequests, paymentTxs, withdrawals]);
+  }, [paymentRequests, paymentTxs, withdrawals, reports]);
 
   if (!isOpen || userProfile?.role !== 'admin') return null;
 
@@ -84,6 +90,30 @@ export default function AdminPanelModal({ isOpen, onClose, userProfile, onSucces
   const filteredWithdrawals = withdrawals.filter((w) =>
     statusFilter === 'all' ? true : w.status === statusFilter
   );
+  const filteredReports = reports.filter((rep) => {
+    if (statusFilter === 'all') return true;
+    const normStatus = rep.status || 'open';
+    if (statusFilter === 'pending') return normStatus === 'open';
+    return normStatus === statusFilter;
+  });
+
+  const handleReportStatus = async (rep, nextStatus) => {
+    setBusyId(rep.id);
+    try {
+      await updateReportStatus({
+        reportId: rep.id,
+        adminId: userProfile.uid,
+        status: nextStatus,
+      });
+      onSuccess?.(
+        nextStatus === 'resolved' ? 'Reporte marcado como revisado.' : 'Reporte cerrado.'
+      );
+    } catch (err) {
+      onError?.(err.message || 'No se pudo actualizar el reporte.');
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const handleApproveRecharge = async (req) => {
     setBusyId(req.id);
@@ -145,29 +175,29 @@ export default function AdminPanelModal({ isOpen, onClose, userProfile, onSucces
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/45 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="w-full max-w-lg max-h-[94vh] bg-white border border-rose-100 rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-luxury">
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="w-full max-w-lg max-h-[94dvh] bg-white rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-2xl animate-sheet-up">
         {/* Header */}
-        <div className="px-5 py-4 border-b border-rose-100 flex items-center justify-between bg-white">
+        <div className="px-5 py-4 border-b border-zinc-200/80 flex items-center justify-between bg-white">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600">
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-display text-base font-extrabold text-slate-900">Panel Super Admin</h3>
-              <p className="text-xs text-slate-500">Tesorería Global, Auditoría y Pagos</p>
+              <h3 className="font-display text-base font-extrabold text-zinc-900">Panel Super Admin</h3>
+              <p className="text-xs text-zinc-500">Tesorería Global, Auditoría y Pagos</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-full bg-slate-100 text-slate-500 hover:text-slate-800 hover:bg-slate-200 transition"
+            className="p-2 rounded-full bg-zinc-100 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200 transition"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#FAF7F5]">
+        <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-4 bg-[#F4F4F6]">
           {/* Company Treasury Overview */}
           <div className="grid grid-cols-2 gap-2.5">
             <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200">
@@ -208,11 +238,11 @@ export default function AdminPanelModal({ isOpen, onClose, userProfile, onSucces
           </div>
 
           {/* Section Switcher */}
-          <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-slate-200/70 border border-slate-200">
+          <div className="grid grid-cols-3 gap-1.5 p-1 rounded-2xl bg-slate-200/70 border border-slate-200">
             <button
               type="button"
               onClick={() => { setActiveTab('recharges'); setStatusFilter('pending'); }}
-              className={`py-2 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
+              className={`py-2 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1 transition ${
                 activeTab === 'recharges'
                   ? 'bg-white text-indigo-700 shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
@@ -224,7 +254,7 @@ export default function AdminPanelModal({ isOpen, onClose, userProfile, onSucces
             <button
               type="button"
               onClick={() => { setActiveTab('withdrawals'); setStatusFilter('pending'); }}
-              className={`py-2 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
+              className={`py-2 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1 transition ${
                 activeTab === 'withdrawals'
                   ? 'bg-white text-sky-700 shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
@@ -233,14 +263,32 @@ export default function AdminPanelModal({ isOpen, onClose, userProfile, onSucces
               <Gem className="w-3.5 h-3.5" />
               Retiros ({companyStats.pendingWithdrawalsCount})
             </button>
+            <button
+              type="button"
+              onClick={() => { setActiveTab('reports'); setStatusFilter('pending'); }}
+              className={`py-2 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1 transition ${
+                activeTab === 'reports'
+                  ? 'bg-white text-rose-600 shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Flag className="w-3.5 h-3.5" />
+              Reportes ({companyStats.openReportsCount})
+            </button>
           </div>
 
           {/* Status Filter */}
           <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
             {[
-              { id: 'pending', label: 'Pendientes' },
-              { id: activeTab === 'recharges' ? 'approved' : 'paid', label: activeTab === 'recharges' ? 'Aprobados' : 'Pagados' },
-              { id: 'rejected', label: 'Rechazados' },
+              { id: 'pending', label: activeTab === 'reports' ? 'Abiertos' : 'Pendientes' },
+              {
+                id: activeTab === 'recharges' ? 'approved' : activeTab === 'reports' ? 'resolved' : 'paid',
+                label: activeTab === 'recharges' ? 'Aprobados' : activeTab === 'reports' ? 'Revisados' : 'Pagados',
+              },
+              {
+                id: activeTab === 'reports' ? 'dismissed' : 'rejected',
+                label: activeTab === 'reports' ? 'Cerrados' : 'Rechazados',
+              },
               { id: 'all', label: 'Todos' },
             ].map((f) => (
               <button
@@ -406,6 +454,66 @@ export default function AdminPanelModal({ isOpen, onClose, userProfile, onSucces
                       <div className="text-[11px] text-slate-500 flex justify-between">
                         <span>Estado: <strong className="uppercase">{w.status}</strong></span>
                         {w.payoutReference && <span className="font-mono font-bold text-emerald-700">Ref: {w.payoutReference}</span>}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+          {/* TAB 3: Safety Reports Moderation */}
+          {activeTab === 'reports' && (
+            <div className="space-y-3">
+              {filteredReports.length === 0 ? (
+                <p className="text-center text-xs text-slate-500 py-8">
+                  No hay reportes en este filtro.
+                </p>
+              ) : (
+                filteredReports.map((rep) => (
+                  <div
+                    key={rep.id}
+                    className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-card space-y-2.5"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-bold text-slate-500">
+                          Reportó:{' '}
+                          <strong className="text-slate-900">
+                            {rep.reporterName || rep.reporterId?.slice(0, 8)}
+                          </strong>
+                        </p>
+                        <p className="text-sm font-extrabold text-rose-600 mt-0.5">
+                          Contra: {rep.reportedUserName || rep.reportedUserId}
+                        </p>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full bg-slate-100 text-[10px] font-extrabold uppercase text-slate-700">
+                        {rep.status || 'open'}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-rose-50/70 border border-rose-100 text-xs text-slate-800 space-y-1">
+                      <p className="font-bold">{rep.reason}</p>
+                      {rep.details && <p className="text-[11px] text-slate-600">“{rep.details}”</p>}
+                    </div>
+
+                    {(!rep.status || rep.status === 'open') && (
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <button
+                          type="button"
+                          disabled={busyId === rep.id}
+                          onClick={() => handleReportStatus(rep, 'dismissed')}
+                          className="py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-extrabold hover:bg-slate-200 disabled:opacity-50"
+                        >
+                          Cerrar caso
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busyId === rep.id}
+                          onClick={() => handleReportStatus(rep, 'resolved')}
+                          className="py-2 rounded-xl bg-emerald-500 text-white text-xs font-extrabold hover:brightness-105 disabled:opacity-50"
+                        >
+                          Marcar Revisado
+                        </button>
                       </div>
                     )}
                   </div>

@@ -16,20 +16,25 @@ import {
   Quote,
   Ruler,
   Sparkles,
+  Unlock,
   X,
   Zap,
 } from 'lucide-react';
-import { REPORT_REASONS, VIP_DM_COST } from '../../config/constants';
+import { REPORT_REASONS } from '../../config/constants';
 import { sendVirtualGift } from '../../services/chatService';
+import { checkConnectionStatus, sendLike } from '../../services/discoveryService';
 import {
-  checkConnectionStatus,
-  sendLike,
-  startVipDirectMessage,
-} from '../../services/discoveryService';
-import { blockUser, reportUser, subscribeUserById } from '../../services/userService';
+  blockUser,
+  reportUser,
+  subscribeUserById,
+  unblockUser,
+} from '../../services/userService';
 import {
   formatInterestWithIcon,
   formatRelativeLastSeen,
+  formatUserDistanceLabel,
+  getDisplayAge,
+  getOrderedPhotos,
   getPrimaryPhoto,
   getSharedInterests,
   isBoostActive,
@@ -37,15 +42,14 @@ import {
   isUserActuallyOnline,
   optimizeCloudinaryUrl,
 } from '../../utils/formatters';
-import GiftPickerModal from '../chat/GiftPickerModal';
 import GiftAnimationOverlay from '../chat/GiftAnimationOverlay';
+import GiftPickerModal from '../chat/GiftPickerModal';
 
 export default function PublicProfileModal({
   targetUser,
   currentUser,
   onClose,
   onStartChat,
-  onOpenChat,
   onOpenCoinStore,
   onSuccess,
   onError,
@@ -59,6 +63,7 @@ export default function PublicProfileModal({
   const [giftAnim, setGiftAnim] = useState(null);
   const [showSafetyMenu, setShowSafetyMenu] = useState(false);
   const [reportReason, setReportReason] = useState(REPORT_REASONS[0]);
+  const [reportDetails, setReportDetails] = useState('');
 
   const targetId = targetUser?.uid || targetUser?.id;
 
@@ -87,15 +92,19 @@ export default function PublicProfileModal({
   if (!targetUser || !liveTarget) return null;
 
   const isSelf = currentUser?.uid === targetId;
+  const isBlocked = (currentUser?.blockedUsers || []).includes(targetId);
 
+  const orderedPhotos = getOrderedPhotos(liveTarget, currentUser?.uid, {
+    respectSmart: true,
+  });
   const photos =
-    Array.isArray(liveTarget.photos) && liveTarget.photos.length > 0
-      ? liveTarget.photos
-      : [getPrimaryPhoto(liveTarget)];
+    orderedPhotos.length > 0 ? orderedPhotos : [getPrimaryPhoto(liveTarget, 800, { seed: currentUser?.uid })];
 
   const online = isUserActuallyOnline(liveTarget);
   const boosted = isBoostActive(liveTarget);
   const verified = isProfileVerified(liveTarget);
+  const visibleAge = getDisplayAge(liveTarget);
+  const distanceInfo = formatUserDistanceLabel(liveTarget, currentUser);
   const sharedInterests = getSharedInterests(currentUser, liveTarget);
   const sharedSet = new Set(sharedInterests);
   const userPrompts = Array.isArray(liveTarget.prompts)
@@ -112,7 +121,11 @@ export default function PublicProfileModal({
     if (status.iLiked || isSelf) return;
     setBusyAction('like');
     try {
-      const res = await sendLike({ currentUser, targetUser: liveTarget });
+      const res = await sendLike({
+        currentUser,
+        targetUser: liveTarget,
+        likedPhotoUrl: photos[photoIdx] || photos[0] || '',
+      });
       setStatus({ iLiked: true, isMatched: res.matched, matchId: res.matchId });
       if (res.matched) {
         onSuccess?.(`🎉 ¡Es un Match con ${liveTarget.name}! Ya pueden chatear.`);
@@ -131,26 +144,6 @@ export default function PublicProfileModal({
     setBusyAction('chat');
     try {
       await onStartChat?.(liveTarget);
-    } finally {
-      setBusyAction('');
-    }
-  };
-
-  const handleVipDm = async () => {
-    if (isSelf) return;
-    if (!status.isMatched && (currentUser?.coins || 0) < VIP_DM_COST) {
-      onError?.(`Necesitas ${VIP_DM_COST} monedas para un Mensaje Directo VIP.`);
-      onOpenCoinStore();
-      return;
-    }
-
-    setBusyAction('dm');
-    try {
-      const res = await startVipDirectMessage({ currentUser, targetUser: liveTarget });
-      onClose();
-      onOpenChat({ match: res.matchData, peerUser: liveTarget });
-    } catch (err) {
-      onError?.(err.message || 'No se pudo iniciar el Mensaje Directo VIP.');
     } finally {
       setBusyAction('');
     }
@@ -180,13 +173,18 @@ export default function PublicProfileModal({
     }
   };
 
-  const handleBlock = async () => {
+  const handleBlockToggle = async () => {
     try {
-      await blockUser(currentUser.uid, targetId);
-      onSuccess?.(`Bloqueaste a ${liveTarget.name}.`);
-      onClose();
+      if (isBlocked) {
+        await unblockUser(currentUser.uid, targetId);
+        onSuccess?.(`Desbloqueaste a ${liveTarget.name}.`);
+      } else {
+        await blockUser(currentUser.uid, targetId);
+        onSuccess?.(`Bloqueaste a ${liveTarget.name}.`);
+        onClose();
+      }
     } catch (err) {
-      onError?.(err.message || 'No se pudo bloquear.');
+      onError?.(err.message || 'No se pudo actualizar el bloqueo.');
     }
   };
 
@@ -194,11 +192,16 @@ export default function PublicProfileModal({
     try {
       await reportUser({
         reporterId: currentUser.uid,
+        reporterName: currentUser.name || '',
         reportedUserId: targetId,
+        reportedUserName: liveTarget.name || '',
+        reportedUserPhoto: photos[0] || getPrimaryPhoto(liveTarget, 240),
         reason: reportReason,
+        details: reportDetails,
       });
       await blockUser(currentUser.uid, targetId);
-      onSuccess?.('Reporte enviado y usuario bloqueado.');
+      setReportDetails('');
+      onSuccess?.('Reporte guardado en tu historial y usuario bloqueado.');
       onClose();
     } catch (err) {
       onError?.(err.message || 'No se pudo enviar el reporte.');
@@ -206,25 +209,28 @@ export default function PublicProfileModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="w-full max-w-md max-h-[94vh] bg-white border border-rose-100 rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-luxury">
+    <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="w-full max-w-md max-h-[94dvh] bg-white rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-2xl animate-sheet-up">
         {/* Photo Carousel */}
-        <div className="relative h-80 sm:h-96 bg-slate-100 shrink-0">
+        <div className="relative h-80 sm:h-96 bg-zinc-200 shrink-0">
           <img
+            key={`modal-photo-${photoIdx}`}
             src={optimizeCloudinaryUrl(photos[photoIdx] || getPrimaryPhoto(liveTarget), 1080)}
             alt={liveTarget.name}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover animate-photo-reveal"
           />
 
-          <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/50 to-transparent pointer-events-none" />
-          <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-slate-950/90 via-slate-950/40 to-transparent pointer-events-none" />
+          <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/55 to-transparent pointer-events-none" />
+          <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/90 via-black/40 to-transparent pointer-events-none" />
 
           {/* Story Indicators */}
           {photos.length > 1 && (
             <div className="absolute top-3 inset-x-4 flex gap-1.5">
               {photos.map((_, idx) => (
-                <div
+                <button
                   key={idx}
+                  type="button"
+                  onClick={() => setPhotoIdx(idx)}
                   className={`h-1 flex-1 rounded-full transition ${
                     idx === photoIdx ? 'bg-white shadow' : 'bg-white/35'
                   }`}
@@ -239,20 +245,20 @@ export default function PublicProfileModal({
               <button
                 type="button"
                 onClick={() => setShowSafetyMenu((s) => !s)}
-                className="p-2 rounded-full bg-white/85 backdrop-blur-md text-slate-700 hover:bg-white shadow-sm transition"
+                className="p-2 rounded-full bg-white/90 text-zinc-800 hover:bg-white shadow-sm transition"
                 title="Reportar o bloquear"
               >
                 <Flag className="w-4 h-4" />
               </button>
             ) : (
-              <span className="px-3 py-1 rounded-full bg-white/90 backdrop-blur-md text-xs font-extrabold text-brand-600 shadow-sm">
-                Vista previa de tu perfil
+              <span className="px-3 py-1 rounded-full bg-white/95 text-xs font-extrabold text-zinc-900 shadow-sm">
+                Vista previa (como te ven)
               </span>
             )}
             <button
               type="button"
               onClick={onClose}
-              className="p-2 rounded-full bg-white/85 backdrop-blur-md text-slate-800 hover:bg-white shadow-sm transition"
+              className="p-2 rounded-full bg-white/90 text-zinc-900 hover:bg-white shadow-sm transition"
             >
               <X className="w-4 h-4" />
             </button>
@@ -263,14 +269,14 @@ export default function PublicProfileModal({
               <button
                 type="button"
                 onClick={() => setPhotoIdx((i) => (i - 1 + photos.length) % photos.length)}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-white/80 backdrop-blur-md text-slate-800 shadow hover:bg-white"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-white/85 text-zinc-900 shadow hover:bg-white"
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
               <button
                 type="button"
                 onClick={() => setPhotoIdx((i) => (i + 1) % photos.length)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-white/80 backdrop-blur-md text-slate-800 shadow hover:bg-white"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-white/85 text-zinc-900 shadow hover:bg-white"
               >
                 <ChevronRight className="w-5 h-5" />
               </button>
@@ -283,51 +289,50 @@ export default function PublicProfileModal({
               <div className="flex items-center gap-2">
                 <h2 className="font-display text-2xl font-extrabold text-white">
                   {liveTarget.name}
-                  {liveTarget.age ? `, ${liveTarget.age}` : ''}
+                  {visibleAge !== null ? `, ${visibleAge}` : ''}
                 </h2>
                 {verified && (
                   <BadgeCheck className="w-5 h-5 text-sky-400 fill-sky-400 stroke-white shrink-0" />
                 )}
                 {boosted && (
-                  <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-extrabold flex items-center gap-0.5 shadow">
-                    <Zap className="w-3 h-3 fill-slate-950" /> VIP
+                  <span className="px-2 py-0.5 rounded-full bg-amber-400 text-zinc-950 text-[10px] font-black flex items-center gap-0.5 shadow">
+                    <Zap className="w-3 h-3 fill-zinc-950" /> VIP
                   </span>
                 )}
               </div>
               <p className="text-xs text-white/90 flex items-center gap-1.5 mt-0.5 font-medium">
-                <span>{liveTarget.country?.flag}</span>
-                <MapPin className="w-3.5 h-3.5 text-rose-300" />
-                <span>
-                  {liveTarget.city ? `${liveTarget.city}, ` : ''}
-                  {liveTarget.country?.name || 'Global'}
-                </span>
+                {!distanceInfo.isHidden && <span>{liveTarget.country?.flag || '🌎'}</span>}
+                <MapPin className="w-3.5 h-3.5 text-[#FF2E54]" />
+                <span>{distanceInfo.text}</span>
               </p>
             </div>
 
             <span
-              className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold flex items-center gap-1.5 backdrop-blur-md shadow-sm ${
-                online
-                  ? 'bg-emerald-500/90 text-white'
-                  : 'bg-white/90 text-slate-700'
+              className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold flex items-center gap-1.5 shadow-sm ${
+                online ? 'bg-emerald-500 text-white' : 'bg-white/95 text-zinc-700'
               }`}
             >
               <span
-                className={`w-2 h-2 rounded-full ${online ? 'bg-white animate-pulse' : 'bg-slate-400'}`}
+                className={`w-2 h-2 rounded-full ${online ? 'bg-white animate-pulse' : 'bg-zinc-400'}`}
               />
-              {online ? 'En línea' : formatRelativeLastSeen(liveTarget.lastSeen, false)}
+              {online
+                ? 'En línea'
+                : formatRelativeLastSeen(liveTarget.lastSeen, false, {
+                    hideOnlineStatus: liveTarget.hideOnlineStatus,
+                  })}
             </span>
           </div>
         </div>
 
         {/* Scrollable Profile Details */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#FAF7F5]">
+        <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-3.5 bg-[#F4F4F6]">
           {showSafetyMenu && !isSelf && (
             <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 space-y-2.5">
               <p className="text-xs font-extrabold text-rose-800">Seguridad y Moderación</p>
               <select
                 value={reportReason}
                 onChange={(e) => setReportReason(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-white border border-rose-200 text-xs text-slate-800 font-medium"
+                className="w-full px-3 py-2 rounded-xl bg-white border border-rose-200 text-xs text-zinc-800 font-medium"
               >
                 {REPORT_REASONS.map((r) => (
                   <option key={r} value={r}>
@@ -335,26 +340,41 @@ export default function PublicProfileModal({
                   </option>
                 ))}
               </select>
+              <input
+                type="text"
+                maxLength={160}
+                value={reportDetails}
+                onChange={(e) => setReportDetails(e.target.value)}
+                placeholder="Detalle opcional (solo visible en tus reportes y moderación)"
+                className="w-full px-3 py-2 rounded-xl bg-white border border-rose-200 text-xs text-zinc-800 placeholder:text-zinc-400 font-medium focus:outline-none"
+              />
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={handleBlock}
-                  className="py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center gap-1 hover:bg-slate-100"
+                  onClick={handleBlockToggle}
+                  className="py-2 rounded-xl bg-white border border-zinc-200 text-zinc-700 text-xs font-bold flex items-center justify-center gap-1 hover:bg-zinc-100"
                 >
-                  <Ban className="w-3.5 h-3.5" /> Solo Bloquear
+                  {isBlocked ? (
+                    <>
+                      <Unlock className="w-3.5 h-3.5 text-emerald-600" /> Desbloquear
+                    </>
+                  ) : (
+                    <>
+                      <Ban className="w-3.5 h-3.5" /> Bloquear
+                    </>
+                  )}
                 </button>
                 <button
                   type="button"
                   onClick={handleReport}
-                  className="py-2 rounded-xl bg-rose-600 text-white text-xs font-bold flex items-center justify-center gap-1 hover:bg-rose-700"
+                  className="py-2 rounded-xl bg-[#FF2E54] text-white text-xs font-bold flex items-center justify-center gap-1"
                 >
-                  <Flag className="w-3.5 h-3.5" /> Reportar y Bloquear
+                  <Flag className="w-3.5 h-3.5" /> Reportar
                 </button>
               </div>
             </div>
           )}
 
-          {/* Photo Thumbnail Strip if multiple photos */}
           {photos.length > 1 && (
             <div className="flex gap-2 overflow-x-auto no-scrollbar">
               {photos.map((url, idx) => (
@@ -363,7 +383,7 @@ export default function PublicProfileModal({
                   type="button"
                   onClick={() => setPhotoIdx(idx)}
                   className={`w-14 h-14 rounded-2xl overflow-hidden border-2 shrink-0 transition ${
-                    photoIdx === idx ? 'border-brand-500 scale-105 shadow-sm' : 'border-white opacity-70'
+                    photoIdx === idx ? 'border-zinc-900 scale-105 shadow-sm' : 'border-white opacity-70'
                   }`}
                 >
                   <img src={optimizeCloudinaryUrl(url, 200)} alt="" className="w-full h-full object-cover" />
@@ -374,41 +394,39 @@ export default function PublicProfileModal({
 
           {/* Popularity Counters + Intention */}
           <div className="grid grid-cols-3 gap-2.5">
-            <div className="p-3 rounded-2xl bg-white border border-rose-100/80 shadow-card text-center">
-              <p className="text-base font-extrabold text-rose-500 flex items-center justify-center gap-1">
-                <Flame className="w-4 h-4 fill-rose-500" /> {liveTarget.likesCount || 0}
+            <div className="p-3 rounded-2xl bg-white shadow-card text-center">
+              <p className="text-base font-extrabold text-[#FF2E54] flex items-center justify-center gap-1">
+                <Flame className="w-4 h-4 fill-[#FF2E54]" /> {liveTarget.likesCount || 0}
               </p>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-0.5">Me gusta</p>
+              <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wide mt-0.5">Me gusta</p>
             </div>
-            <div className="p-3 rounded-2xl bg-white border border-amber-100/80 shadow-card text-center">
+            <div className="p-3 rounded-2xl bg-white shadow-card text-center">
               <p className="text-base font-extrabold text-amber-600 flex items-center justify-center gap-1">
                 <Gift className="w-4 h-4" /> {liveTarget.giftsReceivedCount || 0}
               </p>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-0.5">Regalos</p>
+              <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wide mt-0.5">Regalos</p>
             </div>
-            <div className="p-3 rounded-2xl bg-white border border-slate-200/80 shadow-card text-center flex flex-col justify-center">
-              <p className="text-xs font-extrabold text-brand-600 truncate">
+            <div className="p-3 rounded-2xl bg-white shadow-card text-center flex flex-col justify-center">
+              <p className="text-xs font-extrabold text-zinc-900 truncate">
                 {liveTarget.lookingFor || 'Conectar'}
               </p>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide mt-0.5">Intención</p>
+              <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wide mt-0.5">Busca</p>
             </div>
           </div>
 
-          {/* Bio */}
           {liveTarget.bio && (
-            <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-card">
-              <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">
+            <div className="p-4 rounded-2xl bg-white shadow-card">
+              <p className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1">
                 Sobre {liveTarget.name}
               </p>
-              <p className="text-sm text-slate-700 leading-relaxed font-medium">{liveTarget.bio}</p>
+              <p className="text-sm text-zinc-800 leading-relaxed font-medium">{liveTarget.bio}</p>
             </div>
           )}
 
-          {/* Atributos reales (Empleo, Educación, Estatura, Estilo de vida) */}
           {profileDetails.length > 0 && (
-            <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-card">
-              <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mb-2">
-                Detalles
+            <div className="p-4 rounded-2xl bg-white shadow-card">
+              <p className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-400 mb-2">
+                Información
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {profileDetails.map((item, idx) => {
@@ -416,9 +434,9 @@ export default function PublicProfileModal({
                   return (
                     <span
                       key={idx}
-                      className="px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200/80 text-xs font-bold text-slate-700 inline-flex items-center gap-1.5"
+                      className="px-3 py-1.5 rounded-full bg-zinc-100 text-xs font-bold text-zinc-800 inline-flex items-center gap-1.5"
                     >
-                      <Icon className="w-3.5 h-3.5 text-brand-500" />
+                      <Icon className="w-3.5 h-3.5 text-[#FF2E54]" />
                       {item.label}
                     </span>
                   );
@@ -427,18 +445,17 @@ export default function PublicProfileModal({
             </div>
           )}
 
-          {/* Frases personales */}
           {userPrompts.length > 0 && (
             <div className="space-y-2">
               {userPrompts.map((promptText, idx) => (
                 <div
                   key={idx}
-                  className="p-4 rounded-2xl bg-white border border-rose-100/90 shadow-card space-y-1"
+                  className="p-4 rounded-2xl bg-white shadow-card space-y-1"
                 >
-                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-brand-500 flex items-center gap-1">
+                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-[#FF2E54] flex items-center gap-1">
                     <Quote className="w-3 h-3" /> Frase {idx + 1}
                   </p>
-                  <p className="text-sm font-bold text-slate-800 leading-relaxed">
+                  <p className="text-sm font-bold text-zinc-900 leading-relaxed">
                     “{promptText}”
                   </p>
                 </div>
@@ -446,12 +463,11 @@ export default function PublicProfileModal({
             </div>
           )}
 
-          {/* Shared & All Interests */}
           {Array.isArray(liveTarget.interests) && liveTarget.interests.length > 0 && (
-            <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-card">
+            <div className="p-4 rounded-2xl bg-white shadow-card">
               <div className="flex items-center justify-between mb-2.5">
-                <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
-                  Intereses y Hobbies
+                <p className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-400">
+                  Intereses
                 </p>
                 {!isSelf && sharedInterests.length > 0 && (
                   <span className="text-[11px] font-extrabold text-emerald-600 flex items-center gap-1">
@@ -465,10 +481,10 @@ export default function PublicProfileModal({
                   return (
                     <span
                       key={interest}
-                      className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                      className={`px-3 py-1 rounded-full text-xs font-bold ${
                         isCommon
-                          ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                          : 'bg-slate-50 border-slate-200/80 text-slate-700'
+                          ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                          : 'bg-zinc-100 text-zinc-800'
                       }`}
                     >
                       {isCommon ? `✨ ${interest}` : formatInterestWithIcon(interest)}
@@ -482,54 +498,42 @@ export default function PublicProfileModal({
 
         {/* Action Buttons Footer */}
         {!isSelf && (
-          <div className="p-3.5 pb-safe border-t border-rose-100 bg-white space-y-2">
-            {/* Primary Action: Free Private 1-to-1 Chat */}
+          <div className="p-3.5 pb-safe border-t border-zinc-200/80 bg-white space-y-2">
             <button
               type="button"
               disabled={busyAction === 'chat'}
               onClick={handleOpenPrivateChat}
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-brand-500 via-rose-500 to-pink-500 text-white text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 shadow-lg shadow-brand-500/25 hover:brightness-105 active:scale-[0.99] transition"
+              className="w-full py-3.5 rounded-full bg-zinc-900 text-white text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 shadow-md hover:bg-zinc-800 active:scale-[0.99] transition"
             >
-              <MessageCircle className="w-4 h-4 fill-white/20" />
+              <MessageCircle className="w-4 h-4" />
               {busyAction === 'chat'
                 ? 'Abriendo chat privado...'
-                : `Chatear en Privado con ${liveTarget.name}`}
-              <Lock className="w-3.5 h-3.5 opacity-80" />
+                : `Enviar Mensaje Privado a ${liveTarget.name}`}
+              <Lock className="w-3.5 h-3.5 opacity-70" />
             </button>
 
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 disabled={busyAction === 'like' || status.iLiked}
                 onClick={handleLike}
-                className={`py-2.5 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-1.5 border transition ${
+                className={`py-2.5 rounded-full text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
                   status.iLiked
-                    ? 'bg-rose-50 border-rose-200 text-rose-600'
-                    : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200'
+                    ? 'bg-rose-50 text-[#FF2E54]'
+                    : 'bg-gradient-to-r from-[#FF2E54] to-[#FF5E7E] text-white shadow-sm'
                 }`}
               >
-                <Heart className={`w-4 h-4 ${status.iLiked ? 'fill-rose-500 text-rose-500' : 'text-rose-500'}`} />
-                {status.iLiked ? 'Te gusta' : 'Like'}
+                <Heart className={`w-4 h-4 ${status.iLiked ? 'fill-[#FF2E54]' : 'fill-white'}`} />
+                {status.iLiked ? 'Ya te gusta' : 'Dar Like'}
               </button>
 
               <button
                 type="button"
                 onClick={() => setGiftPickerOpen(true)}
-                className="py-2.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-extrabold flex items-center justify-center gap-1.5 hover:bg-amber-100 transition"
+                className="py-2.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-extrabold flex items-center justify-center gap-1.5 hover:bg-amber-100 transition"
               >
                 <Gift className="w-4 h-4 text-amber-500" />
-                Regalo
-              </button>
-
-              <button
-                type="button"
-                disabled={busyAction === 'dm'}
-                onClick={handleVipDm}
-                className="py-2.5 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-extrabold flex items-center justify-center gap-1 hover:bg-indigo-100 transition"
-                title={`Toque VIP Destacado (${VIP_DM_COST} monedas)`}
-              >
-                <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                VIP ({VIP_DM_COST})
+                Enviar Regalo
               </button>
             </div>
           </div>

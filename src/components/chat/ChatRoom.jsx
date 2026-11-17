@@ -1,15 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
+  BadgeCheck,
+  Ban,
   CheckCheck,
+  Flag,
   Gift,
   ImagePlus,
   Loader2,
   Lock,
+  MoreVertical,
   Send,
   ShieldAlert,
   Sparkles,
+  X,
 } from 'lucide-react';
+import { REPORT_REASONS } from '../../config/constants';
 import {
   markChatAsRead,
   sendImageMessage,
@@ -18,17 +24,19 @@ import {
   subscribeChatMessages,
 } from '../../services/chatService';
 import { getUserCloudinaryFolder, uploadImageToCloudinary } from '../../services/cloudinaryService';
-import { subscribeUserById } from '../../services/userService';
+import { blockUser, reportUser, subscribeUserById } from '../../services/userService';
 import {
   formatMessageTime,
   formatRelativeLastSeen,
+  getDisplayAge,
   getPrimaryPhoto,
+  isProfileVerified,
   isUserActuallyOnline,
   optimizeCloudinaryUrl,
 } from '../../utils/formatters';
+import GiftAnimationOverlay from './GiftAnimationOverlay';
 import GiftMessageCard from './GiftMessageCard';
 import GiftPickerModal from './GiftPickerModal';
-import GiftAnimationOverlay from './GiftAnimationOverlay';
 
 export default function ChatRoom({
   match,
@@ -48,6 +56,9 @@ export default function ChatRoom({
   const [giftPickerOpen, setGiftPickerOpen] = useState(false);
   const [sendingGiftId, setSendingGiftId] = useState(null);
   const [activeGiftAnim, setActiveGiftAnim] = useState(null);
+  const [previewImage, setPreviewImage] = useState(null);
+  const [showSafetyBar, setShowSafetyBar] = useState(false);
+  const [reportReason, setReportReason] = useState(REPORT_REASONS[2]);
 
   const bottomRef = useRef(null);
   const imageInputRef = useRef(null);
@@ -59,7 +70,6 @@ export default function ChatRoom({
     peerUser?.id ||
     (match?.participants || []).find((p) => p !== currentUser?.uid);
 
-  // Verificación estricta de privacidad: solo los 2 participantes del match pueden estar aquí
   const isParticipant = Boolean(
     currentUser?.uid &&
       match?.id &&
@@ -67,9 +77,9 @@ export default function ChatRoom({
         match.id.split('_').includes(currentUser.uid))
   );
 
-  // Suscripción en tiempo real al perfil independiente de la otra persona
   useEffect(() => {
     setLivePeer(peerUser);
+    setShowSafetyBar(false);
     if (!peerId) return;
     const unsub = subscribeUserById(peerId, (fresh) => {
       setLivePeer((prev) => ({ ...prev, ...fresh }));
@@ -120,19 +130,19 @@ export default function ChatRoom({
 
   if (!isParticipant) {
     return (
-      <div className="fixed inset-0 z-40 bg-luxury-mesh flex items-center justify-center p-6">
-        <div className="bg-white border border-rose-200 rounded-3xl p-6 max-w-sm text-center shadow-luxury space-y-3">
-          <ShieldAlert className="w-10 h-10 text-rose-500 mx-auto" />
-          <h3 className="font-display text-base font-extrabold text-slate-900">
+      <div className="fixed inset-0 z-40 h-[100dvh] w-screen bg-[#F4F4F6] flex items-center justify-center p-6">
+        <div className="bg-white border border-zinc-200 rounded-3xl p-6 max-w-sm text-center shadow-luxury space-y-3">
+          <ShieldAlert className="w-10 h-10 text-[#FF2E54] mx-auto" />
+          <h3 className="font-display text-base font-extrabold text-zinc-900">
             Conversación Privada Protegida
           </h3>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-zinc-500">
             No tienes acceso a este chat porque pertenece a otros perfiles.
           </p>
           <button
             type="button"
             onClick={onBack}
-            className="px-4 py-2.5 rounded-2xl bg-brand-500 text-white text-xs font-extrabold"
+            className="px-5 py-2.5 rounded-full bg-zinc-900 text-white text-xs font-extrabold"
           >
             Volver a mis chats
           </button>
@@ -225,7 +235,39 @@ export default function ChatRoom({
     }
   };
 
+  const handleBlockAndClose = async () => {
+    if (!peerId) return;
+    try {
+      await blockUser(currentUser.uid, peerId);
+      onSuccess?.(`Bloqueaste a ${livePeer?.name}.`);
+      onBack();
+    } catch (err) {
+      onError?.(err.message || 'No se pudo bloquear.');
+    }
+  };
+
+  const handleReportAndClose = async () => {
+    if (!peerId) return;
+    try {
+      await reportUser({
+        reporterId: currentUser.uid,
+        reporterName: currentUser.name || '',
+        reportedUserId: peerId,
+        reportedUserName: livePeer?.name || '',
+        reportedUserPhoto: getPrimaryPhoto(livePeer, 240),
+        reason: reportReason,
+      });
+      await blockUser(currentUser.uid, peerId);
+      onSuccess?.('Reporte guardado en tu historial y usuario bloqueado.');
+      onBack();
+    } catch (err) {
+      onError?.(err.message || 'No se pudo enviar el reporte.');
+    }
+  };
+
   const online = isUserActuallyOnline(livePeer);
+  const verified = isProfileVerified(livePeer);
+  const visibleAge = getDisplayAge(livePeer);
 
   const icebreakers = [
     `👋 ¡Hola ${livePeer?.name?.split(' ')[0] || ''}! Qué gusto conectar contigo.`,
@@ -235,13 +277,13 @@ export default function ChatRoom({
 
   return (
     <div className="fixed inset-0 z-40 h-[100dvh] w-screen overflow-hidden bg-[#F4F4F6] flex justify-center">
-      <div className="w-full max-w-md h-full flex flex-col bg-[#F4F4F6] sm:border-x sm:border-zinc-200">
+      <div className="w-full max-w-md h-full flex flex-col bg-[#F4F4F6] sm:border-x sm:border-zinc-200/80">
         {/* Chat Header */}
-        <div className="px-4 py-3 pt-safe border-b border-rose-100/90 bg-white/90 backdrop-blur-xl flex items-center gap-3 shadow-sm">
+        <header className="px-3.5 py-3 pt-safe border-b border-zinc-200/80 bg-white flex items-center gap-2.5 shadow-sm z-10">
           <button
             type="button"
             onClick={onBack}
-            className="p-2 rounded-2xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
+            className="w-9 h-9 rounded-full bg-zinc-100 text-zinc-700 hover:bg-zinc-200 flex items-center justify-center transition shrink-0"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
@@ -249,32 +291,36 @@ export default function ChatRoom({
           <button
             type="button"
             onClick={() => onOpenProfile?.(livePeer)}
-            className="flex items-center gap-3 flex-1 min-w-0 text-left group"
+            className="flex items-center gap-2.5 flex-1 min-w-0 text-left group"
           >
             <div className="relative shrink-0">
               <img
-                src={getPrimaryPhoto(livePeer, 160)}
+                src={getPrimaryPhoto(livePeer, 160, { seed: currentUser?.uid })}
                 alt={livePeer?.name}
-                className="w-11 h-11 rounded-2xl object-cover bg-slate-100 border border-rose-100 group-hover:scale-105 transition"
+                className="w-10 h-10 rounded-full object-cover bg-zinc-100 border border-zinc-200 group-hover:scale-105 transition"
               />
               {online && (
-                <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white" />
+                <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-white" />
               )}
             </div>
             <div className="min-w-0">
-              <p className="font-display text-sm font-extrabold text-slate-900 truncate flex items-center gap-1">
-                <span>{livePeer?.country?.flag}</span>
+              <p className="font-display text-sm font-extrabold text-zinc-900 truncate flex items-center gap-1">
                 <span className="truncate">
                   {livePeer?.name}
-                  {livePeer?.age ? `, ${livePeer.age}` : ''}
+                  {visibleAge !== null ? `, ${visibleAge}` : ''}
                 </span>
+                {verified && (
+                  <BadgeCheck className="w-4 h-4 text-sky-500 fill-sky-500 stroke-white shrink-0" />
+                )}
               </p>
               <p
                 className={`text-[11px] truncate ${
-                  online ? 'text-emerald-600 font-bold' : 'text-slate-500 font-medium'
+                  online ? 'text-emerald-600 font-bold' : 'text-zinc-500 font-medium'
                 }`}
               >
-                {formatRelativeLastSeen(livePeer?.lastSeen, livePeer?.isOnline)}
+                {formatRelativeLastSeen(livePeer?.lastSeen, livePeer?.isOnline, {
+                  hideOnlineStatus: livePeer?.hideOnlineStatus,
+                })}
               </p>
             </div>
           </button>
@@ -282,40 +328,82 @@ export default function ChatRoom({
           <button
             type="button"
             onClick={() => setGiftPickerOpen(true)}
-            className="px-3.5 py-2 rounded-2xl bg-gradient-to-r from-brand-500 to-amber-500 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-md shadow-brand-500/20 hover:brightness-105 transition"
+            className="px-3 py-2 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-extrabold flex items-center gap-1 hover:bg-amber-100 transition shrink-0"
           >
-            <Gift className="w-4 h-4" />
+            <Gift className="w-3.5 h-3.5 text-amber-500" />
             Regalo
           </button>
-        </div>
+
+          <button
+            type="button"
+            onClick={() => setShowSafetyBar((v) => !v)}
+            className="w-9 h-9 rounded-full bg-zinc-100 text-zinc-600 hover:bg-zinc-200 flex items-center justify-center transition shrink-0"
+            title="Opciones de seguridad"
+          >
+            <MoreVertical className="w-4 h-4" />
+          </button>
+        </header>
+
+        {/* Menú rápido de seguridad / bloqueo en chat */}
+        {showSafetyBar && (
+          <div className="px-4 py-3 bg-white border-b border-zinc-200 space-y-2 animate-sheet-up">
+            <select
+              value={reportReason}
+              onChange={(e) => setReportReason(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-semibold text-zinc-800 focus:outline-none"
+            >
+              {REPORT_REASONS.map((r) => (
+                <option key={r} value={r}>
+                  Motivo de reporte: {r}
+                </option>
+              ))}
+            </select>
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={handleBlockAndClose}
+                className="flex-1 py-2 rounded-full bg-zinc-100 text-zinc-700 text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-zinc-200"
+              >
+                <Ban className="w-3.5 h-3.5" /> Bloquear
+              </button>
+              <button
+                type="button"
+                onClick={handleReportAndClose}
+                className="flex-1 py-2 rounded-full bg-rose-50 text-[#FF2E54] text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-rose-100"
+              >
+                <Flag className="w-3.5 h-3.5" /> Reportar y bloquear
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Messages Feed */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
+        <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-2">
           {/* End-to-End Privacy Notice */}
           <div className="flex justify-center mb-3">
-            <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/90 border border-slate-200/80 text-[11px] font-semibold text-slate-500 shadow-sm">
+            <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white border border-zinc-200/80 text-[11px] font-semibold text-zinc-500 shadow-sm">
               <Lock className="w-3 h-3 text-emerald-600 shrink-0" />
               <span>
                 Chat privado entre <strong>{currentUser.name?.split(' ')[0]}</strong> y{' '}
-                <strong>{livePeer?.name?.split(' ')[0]}</strong> • Nadie más puede leerlo
+                <strong>{livePeer?.name?.split(' ')[0]}</strong>
               </span>
             </div>
           </div>
 
           {/* Empty state / Icebreakers */}
           {messages.length === 0 && (
-            <div className="my-6 p-5 rounded-3xl bg-white border border-rose-100/90 shadow-card text-center space-y-3">
+            <div className="my-5 p-5 rounded-3xl bg-white border border-zinc-200/80 shadow-card text-center space-y-3">
               <img
                 src={getPrimaryPhoto(livePeer, 200)}
                 alt={livePeer?.name}
-                className="w-16 h-16 rounded-2xl object-cover mx-auto border-2 border-rose-100 shadow-sm"
+                className="w-16 h-16 rounded-full object-cover mx-auto border-2 border-rose-100 shadow-sm"
               />
               <div>
-                <p className="text-sm font-extrabold text-slate-900">
+                <p className="text-sm font-extrabold text-zinc-900">
                   Rompe el hielo con {livePeer?.name}
                 </p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Toca una frase rápida o escribe tu propio mensaje abajo:
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  Toca una frase rápida o escribe tu mensaje abajo:
                 </p>
               </div>
               <div className="space-y-1.5 pt-1">
@@ -324,10 +412,10 @@ export default function ChatRoom({
                     key={idx}
                     type="button"
                     onClick={() => sendQuickText(phrase)}
-                    className="w-full py-2.5 px-3.5 rounded-2xl bg-rose-50/70 hover:bg-rose-100/80 border border-rose-200/70 text-xs font-bold text-brand-700 text-left flex items-center justify-between gap-2 transition"
+                    className="w-full py-2.5 px-3.5 rounded-2xl bg-zinc-50 hover:bg-rose-50 border border-zinc-200/80 hover:border-rose-200 text-xs font-bold text-zinc-800 hover:text-[#FF2E54] text-left flex items-center justify-between gap-2 transition"
                   >
                     <span className="truncate">{phrase}</span>
-                    <Sparkles className="w-3.5 h-3.5 text-brand-500 shrink-0" />
+                    <Sparkles className="w-3.5 h-3.5 text-[#FF2E54] shrink-0" />
                   </button>
                 ))}
               </div>
@@ -362,14 +450,15 @@ export default function ChatRoom({
                     <img
                       src={getPrimaryPhoto(livePeer, 80)}
                       alt=""
-                      className="w-7 h-7 rounded-full object-cover shrink-0 mb-1"
+                      className="w-7 h-7 rounded-full object-cover shrink-0 mb-1 border border-zinc-200"
                     />
                   )}
                   <div
-                    className={`max-w-[75%] rounded-3xl overflow-hidden border p-1.5 shadow-sm ${
+                    onClick={() => setPreviewImage(msg.imageUrl)}
+                    className={`max-w-[75%] rounded-3xl overflow-hidden border p-1.5 shadow-sm cursor-pointer ${
                       isMine
-                        ? 'bg-gradient-to-br from-brand-500 to-rose-500 border-brand-400'
-                        : 'bg-white border-slate-200'
+                        ? 'bg-gradient-to-br from-[#FF2E54] to-[#FF5E7E] border-rose-300'
+                        : 'bg-white border-zinc-200'
                     }`}
                   >
                     <img
@@ -380,7 +469,7 @@ export default function ChatRoom({
                     />
                     <div
                       className={`flex items-center justify-end gap-1 px-2 pt-1 text-[10px] ${
-                        isMine ? 'text-white/85' : 'text-slate-400'
+                        isMine ? 'text-white/85' : 'text-zinc-400'
                       }`}
                     >
                       <span>{timeLabel}</span>
@@ -400,20 +489,20 @@ export default function ChatRoom({
                   <img
                     src={getPrimaryPhoto(livePeer, 80)}
                     alt=""
-                    className="w-7 h-7 rounded-full object-cover shrink-0 mb-1 border border-slate-200"
+                    className="w-7 h-7 rounded-full object-cover shrink-0 mb-1 border border-zinc-200"
                   />
                 )}
                 <div
                   className={`max-w-[78%] px-4 py-2.5 rounded-3xl text-sm leading-relaxed break-words shadow-sm ${
                     isMine
-                      ? 'bg-gradient-to-r from-brand-500 to-rose-500 text-white rounded-br-md shadow-brand-500/15'
-                      : 'bg-white border border-slate-200/90 text-slate-800 rounded-bl-md'
+                      ? 'bg-gradient-to-r from-[#FF2E54] to-[#FF5E7E] text-white rounded-br-md'
+                      : 'bg-white border border-zinc-200/80 text-zinc-900 rounded-bl-md'
                   }`}
                 >
                   <p className="font-medium">{msg.text}</p>
                   <div
                     className={`flex items-center justify-end gap-1 mt-0.5 text-[10px] ${
-                      isMine ? 'text-white/80' : 'text-slate-400'
+                      isMine ? 'text-white/80' : 'text-zinc-400'
                     }`}
                   >
                     <span>{timeLabel}</span>
@@ -429,17 +518,17 @@ export default function ChatRoom({
         {/* Input Toolbar */}
         <form
           onSubmit={handleSendText}
-          className="p-3 pb-safe border-t border-rose-100 bg-white/95 backdrop-blur-xl flex items-center gap-2"
+          className="p-3 pb-safe border-t border-zinc-200/80 bg-white flex items-center gap-2"
         >
           <button
             type="button"
             disabled={uploadingImage}
             onClick={() => imageInputRef.current?.click()}
-            className="p-2.5 rounded-2xl bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 disabled:opacity-50 transition"
+            className="w-10 h-10 rounded-full bg-zinc-100 text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900 disabled:opacity-50 flex items-center justify-center transition shrink-0"
             title="Enviar foto"
           >
             {uploadingImage ? (
-              <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
+              <Loader2 className="w-5 h-5 animate-spin text-[#FF2E54]" />
             ) : (
               <ImagePlus className="w-5 h-5" />
             )}
@@ -448,7 +537,7 @@ export default function ChatRoom({
           <button
             type="button"
             onClick={() => setGiftPickerOpen(true)}
-            className="p-2.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition"
+            className="w-10 h-10 rounded-full bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 flex items-center justify-center transition shrink-0"
             title="Enviar Regalo"
           >
             <Gift className="w-5 h-5" />
@@ -458,16 +547,16 @@ export default function ChatRoom({
             type="text"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder={`Mensaje privado para ${livePeer?.name?.split(' ')[0] || ''}...`}
-            className="flex-1 px-4 py-2.5 rounded-2xl bg-slate-100/90 border border-slate-200/80 text-sm text-slate-900 placeholder:text-slate-400 font-medium focus:outline-none focus:bg-white focus:border-brand-500 transition"
+            placeholder={`Mensaje para ${livePeer?.name?.split(' ')[0] || ''}...`}
+            className="flex-1 px-4 py-2.5 rounded-full bg-zinc-100 border border-zinc-200/70 text-sm text-zinc-900 placeholder:text-zinc-400 font-medium focus:outline-none focus:bg-white focus:border-zinc-900 transition"
           />
 
           <button
             type="submit"
             disabled={!text.trim() || sending}
-            className="p-2.5 rounded-2xl bg-gradient-to-r from-brand-500 to-rose-500 text-white shadow-md shadow-brand-500/20 hover:brightness-105 disabled:opacity-40 transition"
+            className="w-10 h-10 rounded-full bg-gradient-to-r from-[#FF2E54] to-[#FF5E7E] text-white shadow-md hover:brightness-105 disabled:opacity-40 flex items-center justify-center transition shrink-0"
           >
-            <Send className="w-5 h-5" />
+            <Send className="w-4 h-4" />
           </button>
 
           <input
@@ -479,6 +568,27 @@ export default function ChatRoom({
           />
         </form>
       </div>
+
+      {/* Lightbox para ver foto enviada en pantalla completa */}
+      {previewImage && (
+        <div
+          onClick={() => setPreviewImage(null)}
+          className="fixed inset-0 z-[70] bg-black/90 flex items-center justify-center p-4"
+        >
+          <button
+            type="button"
+            onClick={() => setPreviewImage(null)}
+            className="absolute top-4 right-4 p-2.5 rounded-full bg-white/15 text-white"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          <img
+            src={optimizeCloudinaryUrl(previewImage, 1400)}
+            alt="Vista ampliada"
+            className="max-w-full max-h-[85dvh] rounded-2xl object-contain"
+          />
+        </div>
+      )}
 
       <GiftPickerModal
         isOpen={giftPickerOpen}

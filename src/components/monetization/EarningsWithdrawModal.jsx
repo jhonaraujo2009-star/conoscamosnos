@@ -66,17 +66,17 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/45 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="w-full max-w-md max-h-[92vh] bg-white border border-rose-100 rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-luxury">
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="w-full max-w-md max-h-[92dvh] bg-white rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-2xl animate-sheet-up">
         {/* Header */}
-        <div className="px-5 py-4 border-b border-rose-100 flex items-center justify-between bg-white">
+        <div className="px-5 py-4 border-b border-zinc-200/80 flex items-center justify-between bg-white">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-sky-400 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-sky-500/20">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-sky-400 to-indigo-500 flex items-center justify-center text-white shadow-md">
               <Gem className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-display text-base font-extrabold text-slate-900">Mis Ganancias y Retiros</h3>
-              <p className="text-xs text-slate-500">
+              <h3 className="font-display text-base font-extrabold text-zinc-900">Mis Ganancias y Retiros</h3>
+              <p className="text-xs text-zinc-500">
                 Convierte tus regalos recibidos en dinero real
               </p>
             </div>
@@ -84,13 +84,13 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-full bg-slate-100 text-slate-500 hover:text-slate-800 hover:bg-slate-200 transition"
+            className="p-2 rounded-full bg-zinc-100 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200 transition"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-5 bg-[#FAF7F5]">
+        <div className="flex-1 overflow-y-auto no-scrollbar p-5 space-y-5 bg-[#F4F4F6]">
           {/* Stats Cards */}
           <div className="grid grid-cols-2 gap-3">
             <div className="p-4 rounded-2xl bg-gradient-to-br from-sky-50 via-white to-indigo-50 border border-sky-200 shadow-card">
@@ -117,15 +117,30 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
           </div>
 
           {/* How the company payout model works */}
-          <div className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-card text-xs text-slate-600 space-y-1.5">
+          <div className="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-card text-xs text-slate-600 space-y-2.5">
             <div className="flex items-center gap-1.5 font-extrabold text-slate-900">
               <Building2 className="w-4 h-4 text-sky-500" />
-              ¿Cómo funcionan los pagos?
+              Reglas de retiro en $ USD / Binance USDT
             </div>
             <p className="text-[11px] text-slate-500 leading-relaxed">
-              Cada regalo virtual que recibes suma <strong>1 Diamante por moneda</strong> (valor base {formatUSD(ECONOMY_CONFIG.baseDiamondValueUSD)}/💎).
-              Tú recibes el <strong>{Math.round(ECONOMY_CONFIG.creatorShareRatio * 100)}% neto</strong> ({formatUSD(ECONOMY_CONFIG.diamondToNetUSDRate)}/💎)
-              en tu cuenta o billetera preferida.
+              Todos los <strong>regalos virtuales</strong> que te envían (comprados con monedas) suman{' '}
+              <strong>1 Diamante (💎) por moneda</strong> (valor base {formatUSD(ECONOMY_CONFIG.baseDiamondValueUSD)}/💎).
+              Al retirar en dinero real recibes el <strong>{Math.round(ECONOMY_CONFIG.creatorShareRatio * 100)}% neto</strong>{' '}
+              (<strong>${ECONOMY_CONFIG.diamondToNetUSDRate.toFixed(3)} USD/💎</strong>) y la plataforma retiene{' '}
+              {Math.round(ECONOMY_CONFIG.platformFeeRatio * 100)}% para pasarelas y operación.
+            </p>
+            <div className="grid grid-cols-3 gap-1.5 pt-1 text-center">
+              {[500, 1000, 5000].map((sample) => (
+                <div key={sample} className="p-2 rounded-xl bg-slate-50 border border-slate-200/80">
+                  <p className="text-[11px] font-extrabold text-sky-700">{sample} 💎</p>
+                  <p className="text-[11px] font-black text-emerald-600">
+                    {formatUSD(sample * ECONOMY_CONFIG.diamondToNetUSDRate)}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] font-semibold text-emerald-700">
+              💡 Con <strong>Binance Pay</strong> cobras en USDT (1 USDT = $1.00 USD) directo a tu Binance Pay ID o correo.
             </p>
           </div>
 

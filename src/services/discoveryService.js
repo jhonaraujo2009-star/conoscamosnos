@@ -78,6 +78,13 @@ export async function openOrCreateDirectChat({ currentUser, targetUser }) {
     throw new Error('No puedes iniciar un chat contigo mismo.');
   }
 
+  if (Array.isArray(currentUser?.blockedUsers) && currentUser.blockedUsers.includes(toUid)) {
+    throw new Error('Desbloquea a este usuario primero para enviarle mensajes.');
+  }
+  if (Array.isArray(targetUser?.blockedUsers) && targetUser.blockedUsers.includes(fromUid)) {
+    throw new Error('Este perfil no está disponible para recibir mensajes.');
+  }
+
   const matchId = buildMatchId(fromUid, toUid);
   const matchRef = doc(db, 'matches', matchId);
 
@@ -124,7 +131,7 @@ export async function openOrCreateDirectChat({ currentUser, targetUser }) {
 /**
  * Envía un Like. Si existe Like mutuo, crea el Match automáticamente.
  */
-export async function sendLike({ currentUser, targetUser }) {
+export async function sendLike({ currentUser, targetUser, likedPhotoUrl = '' }) {
   const fromUid = currentUser.uid;
   const toUid = targetUser.uid || targetUser.id;
   if (fromUid === toUid) {
@@ -149,6 +156,14 @@ export async function sendLike({ currentUser, targetUser }) {
       throw new Error('El perfil ya no está disponible.');
     }
 
+    const targetData = targetSnap.data();
+    if (
+      (Array.isArray(currentUser?.blockedUsers) && currentUser.blockedUsers.includes(toUid)) ||
+      (Array.isArray(targetData.blockedUsers) && targetData.blockedUsers.includes(fromUid))
+    ) {
+      throw new Error('No puedes interactuar con este perfil porque existe un bloqueo activo.');
+    }
+
     if (likeSnap.exists()) {
       return { alreadyLiked: true, matched: matchSnap.exists(), matchId };
     }
@@ -159,6 +174,7 @@ export async function sendLike({ currentUser, targetUser }) {
     transaction.set(likeRef, {
       fromUserId: fromUid,
       toUserId: toUid,
+      likedPhotoUrl: typeof likedPhotoUrl === 'string' ? likedPhotoUrl : '',
       createdAt: serverTimestamp(),
     });
 

@@ -28,7 +28,10 @@ export function formatTimeRemaining(ts) {
   return `${Math.max(1, mins)}m`;
 }
 
-export function formatRelativeLastSeen(ts, isOnline) {
+export function formatRelativeLastSeen(ts, isOnline, options = {}) {
+  if (options.hideOnlineStatus && !options.bypassPrivacy) {
+    return 'Actividad discreta';
+  }
   if (isOnline) {
     const ms = toMillis(ts);
     // Consider offline if heartbeat hasn't updated in > 5 minutes
@@ -45,7 +48,8 @@ export function formatRelativeLastSeen(ts, isOnline) {
   return `Hace ${Math.floor(diffSec / 86400)} d`;
 }
 
-export function isUserActuallyOnline(user) {
+export function isUserActuallyOnline(user, options = {}) {
+  if (!options.bypassPrivacy && user?.hideOnlineStatus) return false;
   if (!user?.isOnline) return false;
   const lastMs = toMillis(user.lastSeen);
   if (!lastMs) return true;
@@ -53,6 +57,9 @@ export function isUserActuallyOnline(user) {
 }
 
 export function formatSwipeActivity(user) {
+  if (user?.hideOnlineStatus) {
+    return { label: 'Miembro activo', activeNow: false, hidden: true };
+  }
   if (isUserActuallyOnline(user)) {
     return { label: 'En línea ahora', activeNow: true };
   }
@@ -76,8 +83,24 @@ export function formatSwipeActivity(user) {
 export function isProfileVerified(user) {
   if (!user) return false;
   const photosCount = Array.isArray(user.photos) ? user.photos.filter(Boolean).length : 0;
-  const hasRealBio = typeof user.bio === 'string' && user.bio.trim().length >= 8;
-  return Boolean(user.onboardingCompleted && photosCount >= 1 && hasRealBio);
+  const hasRealBio = typeof user.bio === 'string' && user.bio.trim().length >= 12;
+  const hasCity = typeof user.city === 'string' && user.city.trim().length >= 2;
+  return Boolean(
+    user.onboardingCompleted &&
+      photosCount >= 1 &&
+      hasRealBio &&
+      (hasCity || Boolean(user.hideDistance))
+  );
+}
+
+export function triggerHaptic(pattern = 12) {
+  try {
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      navigator.vibrate(pattern);
+    }
+  } catch {
+    // Ignorar en navegadores sin soporte háptico
+  }
 }
 
 export function calculateProfileCompletion(user) {
@@ -119,6 +142,15 @@ export function calculateWithdrawalBreakdown(diamonds) {
     grossUSD,
     platformFeeUSD,
     netPayoutUSD,
+  };
+}
+
+export function calculateGiftEconomics(coinCost) {
+  const coins = Math.max(0, Math.floor(Number(coinCost || 0)));
+  const diamonds = coins * ECONOMY_CONFIG.diamondsPerCoin;
+  return {
+    coins,
+    ...calculateWithdrawalBreakdown(diamonds),
   };
 }
 
@@ -211,9 +243,118 @@ export function optimizeCloudinaryUrl(url, width = 800) {
   return `${prefix}/image/upload/f_auto,q_auto:good,c_limit,w_${width}/${rest}`;
 }
 
-export function getPrimaryPhoto(user, width = 600) {
-  if (Array.isArray(user?.photos) && user.photos.length > 0 && user.photos[0]) {
-    return optimizeCloudinaryUrl(user.photos[0], width);
+export function getDisplayAge(user, { bypassPrivacy = false } = {}) {
+  if (!user) return null;
+  if (!bypassPrivacy && user.hideAge) return null;
+  const ageNum = Number(user.age);
+  if (!ageNum || Number.isNaN(ageNum)) return null;
+  return ageNum;
+}
+
+export function calculateDistanceKm(geoA, geoB) {
+  const lat1 = Number(geoA?.lat);
+  const lon1 = Number(geoA?.lng);
+  const lat2 = Number(geoB?.lat);
+  const lon2 = Number(geoB?.lng);
+  if (
+    !Number.isFinite(lat1) ||
+    !Number.isFinite(lon1) ||
+    !Number.isFinite(lat2) ||
+    !Number.isFinite(lon2)
+  ) {
+    return null;
+  }
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.max(1, Math.round(R * c));
+}
+
+export function formatUserDistanceLabel(targetUser, viewerUser, { bypassPrivacy = false } = {}) {
+  if (!targetUser) return { text: 'Ubicación reservada', isHidden: true };
+  if (!bypassPrivacy && targetUser.hideDistance) {
+    return {
+      text: targetUser.country?.name ? `${targetUser.country.name} · Distancia oculta` : 'Distancia oculta',
+      shortText: 'Distancia oculta',
+      isHidden: true,
+    };
+  }
+
+  const km = calculateDistanceKm(viewerUser?.approxGeo, targetUser?.approxGeo);
+  const city = typeof targetUser.city === 'string' ? targetUser.city.trim() : '';
+  const countryName = targetUser.country?.name || '';
+
+  if (km !== null) {
+    const distPart = km <= 2 ? 'A menos de 2 km' : `A ${km} km`;
+    const placePart = city || countryName;
+    return {
+      text: placePart ? `${placePart} · ${distPart}` : distPart,
+      shortText: distPart,
+      km,
+      isHidden: false,
+    };
+  }
+
+  const viewerCity = (viewerUser?.city || '').trim().toLowerCase();
+  const targetCityLower = city.toLowerCase();
+  const sameCountry =
+    viewerUser?.country?.code && viewerUser.country.code === targetUser.country?.code;
+
+  if (sameCountry && viewerCity && targetCityLower && viewerCity === targetCityLower) {
+    return {
+      text: `${city} · En tu misma ciudad`,
+      shortText: 'En tu ciudad',
+      isHidden: false,
+    };
+  }
+
+  if (city && countryName) {
+    return { text: `${city}, ${countryName}`, shortText: city, isHidden: false };
+  }
+  if (city || countryName) {
+    return { text: city || countryName, shortText: city || countryName, isHidden: false };
+  }
+  return { text: 'Comunidad global', shortText: 'Global', isHidden: false };
+}
+
+function stableHashIndex(seed, length) {
+  if (!length || length <= 1) return 0;
+  let hash = 0;
+  const str = String(seed || '');
+  for (let i = 0; i < str.length; i += 1) {
+    hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  }
+  return hash % length;
+}
+
+export function getOrderedPhotos(user, viewerSeed = '', { respectSmart = true } = {}) {
+  const clean = Array.isArray(user?.photos) ? user.photos.filter(Boolean) : [];
+  if (clean.length === 0) return [];
+  if (!respectSmart || !user?.smartPhotos || clean.length === 1) {
+    return clean;
+  }
+
+  const bestUrl = typeof user.smartBestPhotoUrl === 'string' ? user.smartBestPhotoUrl : '';
+  if (bestUrl && clean.includes(bestUrl)) {
+    return [bestUrl, ...clean.filter((url) => url !== bestUrl)];
+  }
+
+  const leadIdx = stableHashIndex(`${user.uid || user.id || ''}:${viewerSeed}`, clean.length);
+  if (leadIdx === 0) return clean;
+  return [clean[leadIdx], ...clean.filter((_, i) => i !== leadIdx)];
+}
+
+export function getPrimaryPhoto(user, width = 600, options = {}) {
+  const ordered = getOrderedPhotos(user, options.seed || '', {
+    respectSmart: options.respectSmart !== false,
+  });
+  if (ordered.length > 0) {
+    return optimizeCloudinaryUrl(ordered[0], width);
   }
   if (typeof user?.photo === 'string' && user.photo) {
     return optimizeCloudinaryUrl(user.photo, width);

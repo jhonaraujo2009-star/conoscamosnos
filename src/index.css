@@ -14,11 +14,14 @@
   }
 
   body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background-color: #F4F4F6;
     color: #111111;
     -webkit-tap-highlight-color: transparent;
-    user-select: none;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: 'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif;
   }
 
   .font-serif-display {
@@ -40,6 +43,14 @@
   .pt-safe {
     padding-top: env(safe-area-inset-top, 0px);
   }
+  .bg-luxury-mesh {
+    background-color: #FFF7F8;
+    background-image:
+      radial-gradient(at 0% 0%, rgba(255, 198, 211, 0.72) 0px, transparent 55%),
+      radial-gradient(at 100% 10%, rgba(254, 226, 200, 0.68) 0px, transparent 52%),
+      radial-gradient(at 80% 95%, rgba(244, 187, 224, 0.55) 0px, transparent 55%),
+      radial-gradient(at 10% 100%, rgba(255, 228, 232, 0.65) 0px, transparent 50%);
+  }
   .gpu-card {
     will-change: transform;
     transform: translate3d(0, 0, 0);
@@ -48,8 +59,8 @@
   }
   @keyframes photoReveal {
     0% {
-      opacity: 0.72;
-      transform: scale(1.025) translate3d(0, 0, 0);
+      opacity: 0.75;
+      transform: scale(1.022) translate3d(0, 0, 0);
     }
     100% {
       opacity: 1;
@@ -59,6 +70,19 @@
   .animate-photo-reveal {
     animation: photoReveal 0.22s cubic-bezier(0.22, 1, 0.36, 1) forwards;
     will-change: transform, opacity;
+  }
+  @keyframes sheetUp {
+    0% {
+      opacity: 0;
+      transform: translateY(18px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .animate-sheet-up {
+    animation: sheetUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
   .gift-shimmer {
     background: linear-gradient(

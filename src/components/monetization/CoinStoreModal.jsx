@@ -8,6 +8,7 @@ import {
   CreditCard,
   ExternalLink,
   ImagePlus,
+  Info,
   Loader2,
   ShieldCheck,
   Sparkles,
@@ -15,7 +16,7 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
-import { COIN_PACKAGES, DIRECT_PAYMENT_METHODS } from '../../config/constants';
+import { COIN_PACKAGES, DIRECT_PAYMENT_METHODS, ECONOMY_CONFIG } from '../../config/constants';
 import { getUserCloudinaryFolder, uploadImageToCloudinary } from '../../services/cloudinaryService';
 import {
   buildCheckoutUrl,
@@ -24,7 +25,7 @@ import {
   subscribeMyPaymentRequests,
 } from '../../services/monetizationService';
 import { buildQrMatrix } from '../../utils/qrGenerator';
-import { formatUSD } from '../../utils/formatters';
+import { calculateGiftEconomics, formatUSD } from '../../utils/formatters';
 
 function DynamicQrCode({ payload }) {
   const matrix = useMemo(() => buildQrMatrix(payload, 21), [payload]);
@@ -46,7 +47,7 @@ function DynamicQrCode({ payload }) {
 
 export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess, onError }) {
   const [selectedPkg, setSelectedPkg] = useState(COIN_PACKAGES[1]);
-  const [activeTab, setActiveTab] = useState('auto'); // 'auto' | 'direct'
+  const [activeTab, setActiveTab] = useState('direct'); // 'direct' | 'auto'
   const [simulating, setSimulating] = useState(false);
 
   // Direct wallets state
@@ -139,17 +140,17 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/45 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="w-full max-w-md max-h-[92vh] bg-white border border-rose-100 rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-luxury">
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="w-full max-w-md max-h-[92dvh] bg-white rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-2xl animate-sheet-up">
         {/* Header */}
-        <div className="px-5 py-4 border-b border-rose-100 flex items-center justify-between bg-white">
+        <div className="px-5 py-4 border-b border-zinc-200/80 flex items-center justify-between bg-white">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 to-brand-500 flex items-center justify-center text-white shadow-md shadow-amber-500/20">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 to-[#FF2E54] flex items-center justify-center text-white shadow-md">
               <Coins className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-display text-base font-extrabold text-slate-900">Tienda de Monedas</h3>
-              <p className="text-xs text-slate-500">
+              <h3 className="font-display text-base font-extrabold text-zinc-900">Tienda de Monedas</h3>
+              <p className="text-xs text-zinc-500">
                 Saldo actual: <span className="text-amber-600 font-extrabold">{userProfile?.coins || 0}</span> monedas
               </p>
             </div>
@@ -157,14 +158,14 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-full bg-slate-100 text-slate-500 hover:text-slate-800 hover:bg-slate-200 transition"
+            className="p-2 rounded-full bg-zinc-100 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200 transition"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-5 bg-[#FAF7F5]">
+        <div className="flex-1 overflow-y-auto no-scrollbar p-5 space-y-5 bg-[#F4F4F6]">
           {/* Package Selection */}
           <div>
             <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-2.5">
@@ -173,6 +174,8 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
             <div className="grid grid-cols-2 gap-2.5">
               {COIN_PACKAGES.map((pkg) => {
                 const active = selectedPkg.id === pkg.id;
+                const perCoin = (pkg.priceUSD / pkg.coins).toFixed(3);
+                const giftReturn = calculateGiftEconomics(pkg.coins);
                 return (
                   <button
                     key={pkg.id}
@@ -189,16 +192,44 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
                         {pkg.badge}
                       </span>
                     )}
-                    <div className="flex items-center gap-1.5">
-                      <Coins className="w-4 h-4 text-amber-500" />
-                      <span className="font-display text-base font-extrabold text-slate-900">{pkg.coins}</span>
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="flex items-center gap-1.5">
+                        <Coins className="w-4 h-4 text-amber-500" />
+                        <span className="font-display text-base font-extrabold text-slate-900">{pkg.coins}</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-400">${perCoin}/🪙</span>
                     </div>
                     <p className="text-[11px] text-slate-500 mt-0.5">{pkg.bonusText}</p>
-                    <p className="text-sm font-extrabold text-emerald-600 mt-2">{formatUSD(pkg.priceUSD)}</p>
+                    <p className="text-[10px] font-bold text-sky-700 mt-0.5">
+                      Al regalar: {giftReturn.diamonds} 💎 ({formatUSD(giftReturn.netPayoutUSD)})
+                    </p>
+                    <p className="text-sm font-extrabold text-emerald-600 mt-1.5">{formatUSD(pkg.priceUSD)}</p>
                   </button>
                 );
               })}
             </div>
+          </div>
+
+          {/* Reglas claras de Monedas, Regalos y Diamantes */}
+          <div className="p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-card space-y-2 text-[11px] text-slate-600">
+            <div className="flex items-center gap-1.5 font-extrabold text-slate-900 text-xs">
+              <Info className="w-4 h-4 text-[#FF2E54] shrink-0" />
+              Reglas claras: Monedas, Regalos y Diamantes ($ USD)
+            </div>
+            <ul className="space-y-1 leading-relaxed list-disc pl-4">
+              <li>
+                <strong>Monedas (🪙):</strong> Se compran en USD/USDT para enviar regalos y Boost VIP (saldo interno no retirable por el comprador).
+              </li>
+              <li>
+                <strong>Regalos → Diamantes (💎):</strong> Cada <strong>1 🪙 regalada</strong> entrega{' '}
+                <strong>{ECONOMY_CONFIG.diamondsPerCoin} 💎</strong> a la persona que lo recibe (ej. Rosa 10 🪙 = 10 💎 · Diamante Real 500 🪙 = 500 💎).
+              </li>
+              <li>
+                <strong>Retiro en $ USD (Binance USDT):</strong> Quien recibe regalos puede retirar sus diamantes a{' '}
+                <strong>${ECONOMY_CONFIG.diamondToNetUSDRate.toFixed(3)} USD/💎</strong> (60% creador · 40% plataforma), desde{' '}
+                <strong>{ECONOMY_CONFIG.minWithdrawalDiamonds} 💎 = {formatUSD(ECONOMY_CONFIG.minWithdrawalDiamonds * ECONOMY_CONFIG.diamondToNetUSDRate)}</strong>.
+              </li>
+            </ul>
           </div>
 
           {/* Payment Tabs */}
@@ -209,18 +240,6 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
             <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-slate-200/70 border border-slate-200">
               <button
                 type="button"
-                onClick={() => setActiveTab('auto')}
-                className={`py-2 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
-                  activeTab === 'auto'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <CreditCard className="w-3.5 h-3.5 text-brand-500" />
-                Pago Automático
-              </button>
-              <button
-                type="button"
                 onClick={() => setActiveTab('direct')}
                 className={`py-2 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
                   activeTab === 'direct'
@@ -229,7 +248,19 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
                 }`}
               >
                 <Wallet className="w-3.5 h-3.5 text-emerald-600" />
-                Billeteras Directas
+                Binance / Billeteras
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('auto')}
+                className={`py-2 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
+                  activeTab === 'auto'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <CreditCard className="w-3.5 h-3.5 text-brand-500" />
+                Tarjeta / Demo
               </button>
             </div>
           </div>

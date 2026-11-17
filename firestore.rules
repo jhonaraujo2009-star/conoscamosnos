@@ -183,10 +183,15 @@ service cloud.firestore {
     }
 
     // ==================== REPORTES DE SEGURIDAD ====================
+    // Cada usuario solo puede ver sus propios reportes enviados; los administradores ven y moderan todos.
     match /reports/{reportId} {
-      allow read: if isAdmin();
+      allow read: if isSignedIn() && (
+        resource.data.reporterId == request.auth.uid ||
+        isAdmin()
+      );
       allow create: if isSignedIn()
-        && request.resource.data.reporterId == request.auth.uid;
+        && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.reportedUserId != request.auth.uid;
       allow update: if isAdmin();
       allow delete: if false;
     }

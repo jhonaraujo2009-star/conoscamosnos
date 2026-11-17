@@ -1,5 +1,6 @@
 import {
   addDoc,
+  arrayRemove,
   arrayUnion,
   collection,
   doc,
@@ -69,6 +70,13 @@ export async function updateUserProfile(uid, updates) {
   if (typeof updates.job === 'string') sanitized.job = updates.job.trim();
   if (typeof updates.education === 'string') sanitized.education = updates.education.trim();
   if (typeof updates.lifestyle === 'string') sanitized.lifestyle = updates.lifestyle.trim();
+  if (typeof updates.smartPhotos === 'boolean') sanitized.smartPhotos = updates.smartPhotos;
+  if (typeof updates.smartBestPhotoUrl === 'string') sanitized.smartBestPhotoUrl = updates.smartBestPhotoUrl;
+  if (typeof updates.hideAge === 'boolean') sanitized.hideAge = updates.hideAge;
+  if (typeof updates.hideDistance === 'boolean') sanitized.hideDistance = updates.hideDistance;
+  if (typeof updates.hideOnlineStatus === 'boolean') sanitized.hideOnlineStatus = updates.hideOnlineStatus;
+  if (typeof updates.discoverable === 'boolean') sanitized.discoverable = updates.discoverable;
+  if (updates.approxGeo !== undefined) sanitized.approxGeo = updates.approxGeo;
 
   await updateDoc(doc(db, 'users', uid), sanitized);
 }
@@ -120,7 +128,9 @@ export function subscribeVipUsers({ scope, countryCode, currentUserId, blockedUs
       .map((d) => ({ uid: d.id, id: d.id, ...d.data() }))
       .filter((u) => {
         if (u.id === currentUserId) return false;
+        if (u.discoverable === false) return false;
         if (blockedSet.has(u.id)) return false;
+        if (Array.isArray(u.blockedUsers) && u.blockedUsers.includes(currentUserId)) return false;
         if (!u.onboardingCompleted) return false;
         if (scope === 'local' && countryCode && u.country?.code !== countryCode) return false;
         return isBoostActive(u);
@@ -165,6 +175,8 @@ export function subscribePopularUsers({ scope, countryCode, currentUserId, block
       .map((d) => ({ uid: d.id, id: d.id, ...d.data() }))
       .filter((u) => {
         if (u.id === currentUserId || blockedSet.has(u.id)) return false;
+        if (u.discoverable === false) return false;
+        if (Array.isArray(u.blockedUsers) && u.blockedUsers.includes(currentUserId)) return false;
         const hasPhoto = Array.isArray(u.photos) && u.photos.length > 0 && Boolean(u.photos[0]);
         const isReady = u.onboardingCompleted || hasPhoto || (u.name && u.name !== 'Nuevo Usuario');
         if (!isReady) return false;
@@ -190,8 +202,11 @@ export function subscribePopularUsers({ scope, countryCode, currentUserId, block
   return () => activeUnsub();
 }
 
-function matchesGenderPreference(currentUser, candidate) {
-  const pref = currentUser?.interestedIn || 'Todos';
+function matchesGenderPreference(preferredOrUser, candidate) {
+  const pref =
+    typeof preferredOrUser === 'string'
+      ? preferredOrUser
+      : preferredOrUser?.interestedIn || 'Todos';
   if (pref === 'Todos') return true;
   if (pref === 'Mujeres') return candidate.gender === 'Mujer';
   if (pref === 'Hombres') return candidate.gender === 'Hombre';
@@ -202,6 +217,10 @@ export async function fetchDiscoverProfiles({
   currentUser,
   scope = 'global',
   lookingForFilter = 'Todos',
+  genderPreference = null,
+  minAge = MIN_AGE,
+  maxAge = 99,
+  passedIds = [],
   includeAlreadyLiked = false,
 }) {
   const usersRef = collection(db, 'users');
@@ -218,7 +237,11 @@ export async function fetchDiscoverProfiles({
   ]);
 
   const likedIds = new Set(myLikesSnap.docs.map((d) => d.data().toUserId));
+  const passedSet = new Set(Array.isArray(passedIds) ? passedIds : []);
   const blockedSet = new Set(currentUser.blockedUsers || []);
+  const resolvedGenderPref = genderPreference ?? (currentUser?.interestedIn || 'Todos');
+  const safeMinAge = Math.max(MIN_AGE, Number(minAge || MIN_AGE));
+  const safeMaxAge = Math.min(99, Number(maxAge || 99));
 
   const hasUploadedPhotos = (u) => Array.isArray(u?.photos) && u.photos.length > 0 && Boolean(u.photos[0]);
 
@@ -234,12 +257,19 @@ export async function fetchDiscoverProfiles({
     })
     .filter((u) => {
       if (u.id === currentUser.uid) return false;
+      if (u.discoverable === false) return false;
       if (blockedSet.has(u.id)) return false;
+      if (Array.isArray(u.blockedUsers) && u.blockedUsers.includes(currentUser.uid)) return false;
       const isProfileReady =
         u.onboardingCompleted || hasUploadedPhotos(u) || (u.name && u.name !== 'Nuevo Usuario');
       if (!isProfileReady) return false;
-      if (!includeAlreadyLiked && likedIds.has(u.id)) return false;
+      if (!includeAlreadyLiked && (likedIds.has(u.id) || passedSet.has(u.id))) return false;
       if (lookingForFilter !== 'Todos' && u.lookingFor !== lookingForFilter) return false;
+      if (resolvedGenderPref !== 'Todos' && !matchesGenderPreference(resolvedGenderPref, u)) {
+        return false;
+      }
+      const candidateAge = Number(u.age || 24);
+      if (candidateAge < safeMinAge || candidateAge > safeMaxAge) return false;
       return true;
     })
     // Priorizar perfiles con fotos reales subidas y con Boost VIP activo
@@ -248,26 +278,100 @@ export async function fetchDiscoverProfiles({
       if (photoDiff !== 0) return photoDiff;
       const boostDiff = Number(isBoostActive(b)) - Number(isBoostActive(a));
       if (boostDiff !== 0) return boostDiff;
-      return Number(matchesGenderPreference(currentUser, b)) - Number(matchesGenderPreference(currentUser, a));
+      return Number(matchesGenderPreference(resolvedGenderPref, b)) - Number(matchesGenderPreference(resolvedGenderPref, a));
     });
 
   return candidates;
 }
 
 export async function blockUser(currentUid, targetUid) {
+  if (!currentUid || !targetUid || currentUid === targetUid) return;
   await updateDoc(doc(db, 'users', currentUid), {
     blockedUsers: arrayUnion(targetUid),
     updatedAt: serverTimestamp(),
   });
 }
 
-export async function reportUser({ reporterId, reportedUserId, reason, details = '' }) {
+export async function unblockUser(currentUid, targetUid) {
+  if (!currentUid || !targetUid) return;
+  await updateDoc(doc(db, 'users', currentUid), {
+    blockedUsers: arrayRemove(targetUid),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function reportUser({
+  reporterId,
+  reporterName = '',
+  reportedUserId,
+  reportedUserName = '',
+  reportedUserPhoto = '',
+  reason,
+  details = '',
+}) {
+  if (!reporterId || !reportedUserId || reporterId === reportedUserId) {
+    throw new Error('No puedes reportar este perfil.');
+  }
   await addDoc(collection(db, 'reports'), {
     reporterId,
+    reporterName: reporterName.trim(),
     reportedUserId,
+    reportedUserName: reportedUserName.trim(),
+    reportedUserPhoto: reportedUserPhoto || '',
     reason,
     details: details.trim(),
     status: 'open',
     createdAt: serverTimestamp(),
+  });
+}
+
+/**
+ * Suscribe únicamente a los reportes creados por el usuario actual (estrictamente privado por perfil).
+ */
+export function subscribeUserReports(reporterUid, onData, onError) {
+  if (!reporterUid || !db) {
+    onData([]);
+    return () => {};
+  }
+  const q = query(collection(db, 'reports'), where('reporterId', '==', reporterUid));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
+      onData(list);
+    },
+    (err) => {
+      if (onError) onError(err);
+    }
+  );
+}
+
+export function subscribeAllReports(onData, onError) {
+  if (!db) {
+    onData([]);
+    return () => {};
+  }
+  const q = query(collection(db, 'reports'), limit(100));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
+      onData(list);
+    },
+    (err) => {
+      if (onError) onError(err);
+    }
+  );
+}
+
+export async function updateReportStatus({ reportId, adminId, status }) {
+  await updateDoc(doc(db, 'reports', reportId), {
+    status,
+    reviewedBy: adminId,
+    reviewedAt: serverTimestamp(),
   });
 }

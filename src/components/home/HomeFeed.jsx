@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, BadgeCheck, Heart, MessageCircle, Sparkles, User, Users } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, Flame, Heart, MessageCircle, Sparkles, User, Users } from 'lucide-react';
 import { sendLike } from '../../services/discoveryService';
 import { subscribePopularUsers } from '../../services/userService';
-import { getPrimaryPhoto, isProfileVerified, isUserActuallyOnline } from '../../utils/formatters';
+import {
+  formatUserDistanceLabel,
+  getDisplayAge,
+  getPrimaryPhoto,
+  isProfileVerified,
+  isUserActuallyOnline,
+} from '../../utils/formatters';
 
 /* Ilustraciones 3D brillantes en SVG de alta precisión */
 function LollipopHeart3D() {
@@ -116,39 +122,48 @@ const EXPLORE_CARDS = [
   {
     id: 'nada_serio',
     title: 'Nada serio',
+    swipeValue: 'Nada serio',
     matchValues: ['Nada serio'],
+    cardGlow: 'bg-gradient-to-b from-white via-white to-fuchsia-50/60 hover:border-fuchsia-200',
     Illustration: LollipopHeart3D,
   },
   {
     id: 'pareja_estable',
     title: 'Pareja estable',
+    swipeValue: 'Pareja estable',
     matchValues: ['Pareja estable', 'Citas'],
+    cardGlow: 'bg-gradient-to-b from-white via-white to-rose-50/70 hover:border-rose-200',
     Illustration: TulipFlower3D,
   },
   {
     id: 'compromiso_serio',
     title: 'Compromiso serio',
+    swipeValue: 'Compromiso serio',
     matchValues: ['Compromiso serio'],
+    cardGlow: 'bg-gradient-to-b from-white via-white to-pink-50/70 hover:border-pink-200',
     Illustration: DiamondRing3D,
   },
   {
     id: 'libre_hoy',
     title: 'Estoy libre hoy',
+    swipeValue: 'Estoy libre hoy',
     matchValues: ['Estoy libre hoy'],
+    cardGlow: 'bg-gradient-to-b from-white via-white to-indigo-50/70 hover:border-indigo-200',
     Illustration: BlueMoonStar3D,
   },
 ];
 
 const EXTRA_CATEGORIES = [
-  { id: 'hacer_amigos', title: 'Hacer Amigos', emoji: '🤝', matchValues: ['Hacer Amigos'] },
-  { id: 'idiomas', title: 'Chatear / Idiomas', emoji: '🗣️', matchValues: ['Chatear / Idiomas'] },
-  { id: 'todos', title: 'Ver todos', emoji: '✨', matchValues: null },
+  { id: 'hacer_amigos', title: 'Hacer Amigos', emoji: '🤝', swipeValue: 'Hacer Amigos', matchValues: ['Hacer Amigos'] },
+  { id: 'idiomas', title: 'Chatear / Idiomas', emoji: '🗣️', swipeValue: 'Chatear / Idiomas', matchValues: ['Chatear / Idiomas'] },
+  { id: 'todos', title: 'Ver todos', emoji: '✨', swipeValue: 'Todos', matchValues: null },
 ];
 
 export default function HomeFeed({
   currentUser,
   onSelectProfile,
   onStartChat,
+  onSwipeCategory,
   onSuccess,
   onError,
 }) {
@@ -232,6 +247,17 @@ export default function HomeFeed({
               </p>
             </div>
           </div>
+
+          {onSwipeCategory && (
+            <button
+              type="button"
+              onClick={() => onSwipeCategory(selectedCategory.swipeValue || 'Todos')}
+              className="shrink-0 px-3.5 py-2 rounded-full bg-gradient-to-r from-[#FF2E54] to-rose-500 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm active:scale-95 transition-transform"
+            >
+              <Flame className="w-3.5 h-3.5 fill-white" />
+              Modo Swipe
+            </button>
+          )}
         </div>
 
         {categoryUsers.length === 0 ? (
@@ -262,6 +288,8 @@ export default function HomeFeed({
               const online = isUserActuallyOnline(u);
               const verified = isProfileVerified(u);
               const liked = Boolean(likedIds[uid]);
+              const visibleAge = getDisplayAge(u);
+              const distInfo = formatUserDistanceLabel(u, currentUser);
               return (
                 <div
                   key={uid}
@@ -270,7 +298,7 @@ export default function HomeFeed({
                 >
                   <div className="aspect-[3/4] relative bg-zinc-200">
                     <img
-                      src={getPrimaryPhoto(u, 500)}
+                      src={getPrimaryPhoto(u, 500, { seed: currentUser?.uid })}
                       alt={u.name}
                       loading="lazy"
                       className="w-full h-full object-cover"
@@ -284,14 +312,16 @@ export default function HomeFeed({
                     <div className="absolute bottom-2.5 inset-x-3 text-white">
                       <p className="text-sm font-extrabold truncate flex items-center gap-1">
                         <span className="truncate">
-                          {u.name}, {u.age}
+                          {u.name}
+                          {visibleAge !== null ? `, ${visibleAge}` : ''}
                         </span>
                         {verified && (
                           <BadgeCheck className="w-4 h-4 text-sky-400 fill-sky-400 stroke-white shrink-0" />
                         )}
                       </p>
                       <p className="text-[11px] text-white/85 truncate">
-                        {u.country?.flag} {u.city || u.country?.name}
+                        {!distInfo.isHidden ? `${u.country?.flag || '🌎'} ` : '🔒 '}
+                        {distInfo.text}
                       </p>
                     </div>
                   </div>
@@ -352,7 +382,9 @@ export default function HomeFeed({
               key={card.id}
               type="button"
               onClick={() => setSelectedCategory(card)}
-              className="bg-white rounded-2xl p-4 shadow-sm hover:shadow-md flex flex-col justify-between aspect-[3/4] text-left active:scale-[0.98] transition-all"
+              className={`rounded-2xl p-4 border border-white/80 shadow-sm hover:shadow-md flex flex-col justify-between aspect-[3/4] text-left active:scale-[0.98] transition-all ${
+                card.cardGlow || 'bg-white'
+              }`}
             >
               <div className="w-full flex justify-end">
                 {currentUser?.lookingFor === card.title && (

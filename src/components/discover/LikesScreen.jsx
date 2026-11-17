@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { BadgeCheck, Heart, Lock, MessageCircle, Zap } from 'lucide-react';
+import { BadgeCheck, Flame, Heart, Lock, MessageCircle, Zap } from 'lucide-react';
 import { getUserById, subscribePopularUsers } from '../../services/userService';
 import {
+  formatUserDistanceLabel,
+  getDisplayAge,
   getPrimaryPhoto,
   isBoostActive,
   isProfileVerified,
@@ -72,12 +74,40 @@ export default function LikesScreen({
   receivedLikes = [],
   onSelectProfile,
   onStartChat,
-  onOpenCoinStore,
+  onGoToSwipe,
+  onOpenBoost,
 }) {
   const [subTab, setSubTab] = useState('likes'); // 'likes' | 'top_picks'
   const [topPicks, setTopPicks] = useState([]);
   const [likerProfiles, setLikerProfiles] = useState([]);
-  const [revealedLikes, setRevealedLikes] = useState(false);
+  const [revealedLikes, setRevealedLikes] = useState(() => {
+    try {
+      return Boolean(currentUser?.uid && localStorage.getItem(`conoscamosnos_likes_rev_${currentUser.uid}`));
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      setRevealedLikes(
+        Boolean(currentUser?.uid && localStorage.getItem(`conoscamosnos_likes_rev_${currentUser.uid}`))
+      );
+    } catch {
+      setRevealedLikes(false);
+    }
+  }, [currentUser?.uid]);
+
+  const handleRevealLikes = () => {
+    setRevealedLikes(true);
+    try {
+      if (currentUser?.uid) {
+        localStorage.setItem(`conoscamosnos_likes_rev_${currentUser.uid}`, '1');
+      }
+    } catch {
+      // Ignorar si localStorage no está disponible
+    }
+  };
 
   const blockedKey = (currentUser?.blockedUsers || []).join(',');
 
@@ -98,19 +128,28 @@ export default function LikesScreen({
 
   useEffect(() => {
     let cancelled = false;
-    const fromIds = Array.from(new Set(receivedLikes.map((l) => l.fromUserId).filter(Boolean)));
+    const blockedSet = new Set(currentUser?.blockedUsers || []);
+    const fromIds = Array.from(
+      new Set(receivedLikes.map((l) => l.fromUserId).filter((id) => Boolean(id) && !blockedSet.has(id)))
+    );
     if (fromIds.length === 0) {
       setLikerProfiles([]);
       return;
     }
     Promise.all(fromIds.map((uid) => getUserById(uid).catch(() => null))).then((res) => {
       if (cancelled) return;
-      setLikerProfiles(res.filter(Boolean));
+      setLikerProfiles(
+        res.filter(
+          (u) =>
+            Boolean(u) &&
+            !(Array.isArray(u.blockedUsers) && u.blockedUsers.includes(currentUser?.uid))
+        )
+      );
     });
     return () => {
       cancelled = true;
     };
-  }, [receivedLikes]);
+  }, [receivedLikes, blockedKey, currentUser?.uid]);
 
   const likesCount = likerProfiles.length;
 
@@ -164,6 +203,7 @@ export default function LikesScreen({
             <div className="grid grid-cols-2 gap-3">
               {likerProfiles.map((user) => {
                 const verified = isProfileVerified(user);
+                const visibleAge = getDisplayAge(user);
                 return (
                   <div
                     key={user.uid || user.id}
@@ -172,7 +212,7 @@ export default function LikesScreen({
                   >
                     <div className="aspect-[3/4] relative bg-zinc-200 overflow-hidden">
                       <img
-                        src={getPrimaryPhoto(user, 450)}
+                        src={getPrimaryPhoto(user, 450, { seed: currentUser?.uid })}
                         alt={revealedLikes ? user.name : 'Persona interesada'}
                         className={`w-full h-full object-cover transition duration-300 ${
                           revealedLikes ? '' : 'blur-lg scale-110'
@@ -187,10 +227,11 @@ export default function LikesScreen({
                           <span className="text-xs font-extrabold">Le gustas a alguien</span>
                         </div>
                       ) : (
-                        <div className="absolute bottom-2.5 inset-x-3 text-white">
+                      <div className="absolute bottom-2.5 inset-x-3 text-white">
                           <p className="text-sm font-extrabold truncate flex items-center gap-1">
                             <span className="truncate">
-                              {user.name}, {user.age}
+                              {user.name}
+                              {visibleAge !== null ? `, ${visibleAge}` : ''}
                             </span>
                             {verified && (
                               <BadgeCheck className="w-4 h-4 text-sky-400 fill-sky-400 stroke-white shrink-0" />
@@ -236,6 +277,8 @@ export default function LikesScreen({
                 const online = isUserActuallyOnline(user);
                 const boosted = isBoostActive(user);
                 const verified = isProfileVerified(user);
+                const visibleAge = getDisplayAge(user);
+                const distInfo = formatUserDistanceLabel(user, currentUser);
                 return (
                   <div
                     key={user.uid || user.id}
@@ -244,7 +287,7 @@ export default function LikesScreen({
                   >
                     <div className="aspect-[3/4] relative bg-zinc-200">
                       <img
-                        src={getPrimaryPhoto(user, 450)}
+                        src={getPrimaryPhoto(user, 450, { seed: currentUser?.uid })}
                         alt={user.name}
                         loading="lazy"
                         className="w-full h-full object-cover"
@@ -261,15 +304,27 @@ export default function LikesScreen({
                       <div className="absolute bottom-2.5 inset-x-3 text-white">
                         <p className="text-sm font-extrabold truncate flex items-center gap-1">
                           <span className="truncate">
-                            {user.name}, {user.age}
+                            {user.name}
+                            {visibleAge !== null ? `, ${visibleAge}` : ''}
                           </span>
                           {verified && (
                             <BadgeCheck className="w-4 h-4 text-sky-400 fill-sky-400 stroke-white shrink-0" />
                           )}
                         </p>
                         <p className="text-[11px] text-white/80 truncate">
-                          {user.country?.flag} {user.city || user.country?.name}
+                          {!distInfo.isHidden ? `${user.country?.flag || '🌎'} ` : '🔒 '}
+                          {distInfo.text}
                         </p>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onStartChat?.(user);
+                          }}
+                          className="mt-1.5 w-full py-1.5 rounded-full bg-white/95 text-zinc-900 text-[11px] font-extrabold flex items-center justify-center gap-1 shadow hover:bg-white transition"
+                        >
+                          <MessageCircle className="w-3 h-3" /> Chatear
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -280,23 +335,36 @@ export default function LikesScreen({
         </div>
       )}
 
-      {/* Botón negro de ancho completo tipo píldora en la parte inferior */}
-      <div className="p-4 pt-2 bg-[#F4F4F6]">
-        <button
-          type="button"
-          onClick={() => {
-            if (likerProfiles.length > 0 && !revealedLikes) {
-              setRevealedLikes(true);
-            } else {
-              onOpenCoinStore?.();
-            }
-          }}
-          className="w-full bg-zinc-900 text-white rounded-full py-4 text-sm font-bold shadow-md active:scale-[0.99] transition-transform"
-        >
-          {likerProfiles.length > 0 && !revealedLikes
-            ? `Ver ${likesCount} ${likesCount === 1 ? 'Like' : 'Likes'} ahora`
-            : 'Ver Likes ahora'}
-        </button>
+      {/* Barra de acción inferior clara y coherente */}
+      <div className="p-4 pt-2 bg-[#F4F4F6] space-y-2">
+        {subTab === 'likes' && likerProfiles.length > 0 && !revealedLikes ? (
+          <button
+            type="button"
+            onClick={handleRevealLikes}
+            className="w-full bg-gradient-to-r from-[#FF2E54] to-rose-500 text-white rounded-full py-4 text-sm font-extrabold shadow-md shadow-[#FF2E54]/20 active:scale-[0.99] transition-transform"
+          >
+            Ver {likesCount} {likesCount === 1 ? 'Like' : 'Likes'} ahora
+          </button>
+        ) : (
+          <div className="grid grid-cols-2 gap-2.5">
+            <button
+              type="button"
+              onClick={() => onGoToSwipe?.()}
+              className="bg-zinc-900 text-white rounded-full py-3.5 text-xs sm:text-sm font-extrabold shadow-md flex items-center justify-center gap-1.5 active:scale-[0.99] transition-transform"
+            >
+              <Flame className="w-4 h-4 text-[#FF2E54] fill-[#FF2E54]" />
+              Ir a Swipe
+            </button>
+            <button
+              type="button"
+              onClick={() => onOpenBoost?.()}
+              className="bg-white border border-purple-200 text-purple-700 rounded-full py-3.5 text-xs sm:text-sm font-extrabold shadow-sm flex items-center justify-center gap-1.5 active:scale-[0.99] transition-transform"
+            >
+              <Zap className="w-4 h-4 fill-purple-600 text-purple-600" />
+              Activar Boost
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

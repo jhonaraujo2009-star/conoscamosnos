@@ -182,6 +182,134 @@ export const LOOKING_FOR_OPTIONS = [
   'Chatear / Idiomas',
 ];
 
+export const INTENTION_MOODS = {
+  Todos: {
+    key: 'Todos',
+    label: 'Romance',
+    emoji: '💘',
+    themeColor: '#1A0710',
+    backdropStyle:
+      'radial-gradient(ellipse 85% 45% at 50% 0%, rgba(255, 46, 84, 0.24), transparent 70%), radial-gradient(ellipse 75% 40% at 50% 100%, rgba(244, 63, 94, 0.16), transparent 70%), linear-gradient(170deg, #1A0710 0%, #2D0B1C 48%, #10040A 100%)',
+    navBg: '#16060E',
+    navBorder: 'rgba(255, 46, 84, 0.22)',
+    pillActive:
+      'bg-gradient-to-r from-[#FF2E54] to-rose-500 text-white border-rose-300/40 shadow-[0_4px_14px_rgba(255,46,84,0.35)]',
+    heartButton:
+      'from-[#FF2E54] to-[#FF6584] shadow-[0_10px_28px_rgba(255,46,84,0.48)]',
+    cardRing: 'ring-rose-300/20',
+    accentText: 'text-rose-300',
+    progressGrad: 'from-[#FF2E54] to-amber-400',
+  },
+  'Nada serio': {
+    key: 'Nada serio',
+    label: 'Nada serio',
+    emoji: '🍭',
+    themeColor: '#1F0718',
+    backdropStyle:
+      'radial-gradient(ellipse 85% 45% at 50% 0%, rgba(236, 72, 153, 0.28), transparent 70%), radial-gradient(ellipse 75% 40% at 50% 100%, rgba(255, 46, 84, 0.18), transparent 70%), linear-gradient(170deg, #1F0718 0%, #3E0B2D 48%, #13040E 100%)',
+    navBg: '#190613',
+    navBorder: 'rgba(236, 72, 153, 0.25)',
+    pillActive:
+      'bg-gradient-to-r from-fuchsia-500 to-[#FF2E54] text-white border-fuchsia-300/40 shadow-[0_4px_14px_rgba(236,72,153,0.35)]',
+    heartButton:
+      'from-fuchsia-500 to-[#FF2E54] shadow-[0_10px_28px_rgba(236,72,153,0.45)]',
+    cardRing: 'ring-fuchsia-300/25',
+    accentText: 'text-fuchsia-300',
+    progressGrad: 'from-fuchsia-500 to-[#FF2E54]',
+  },
+  'Pareja estable': {
+    key: 'Pareja estable',
+    label: 'Pareja estable',
+    emoji: '🌷',
+    themeColor: '#1D0812',
+    backdropStyle:
+      'radial-gradient(ellipse 85% 45% at 50% 0%, rgba(251, 113, 133, 0.26), transparent 70%), radial-gradient(ellipse 75% 40% at 50% 100%, rgba(251, 191, 36, 0.14), transparent 70%), linear-gradient(170deg, #1D0812 0%, #3B0E22 48%, #13050C 100%)',
+    navBg: '#180610',
+    navBorder: 'rgba(251, 113, 133, 0.24)',
+    pillActive:
+      'bg-gradient-to-r from-rose-500 to-pink-500 text-white border-rose-300/45 shadow-[0_4px_14px_rgba(244,63,94,0.35)]',
+    heartButton:
+      'from-[#FF2E54] to-amber-500 shadow-[0_10px_28px_rgba(244,63,94,0.45)]',
+    cardRing: 'ring-rose-200/25',
+    accentText: 'text-rose-300',
+    progressGrad: 'from-rose-500 to-amber-300',
+  },
+  'Compromiso serio': {
+    key: 'Compromiso serio',
+    label: 'Compromiso serio',
+    emoji: '💍',
+    themeColor: '#180915',
+    backdropStyle:
+      'radial-gradient(ellipse 85% 45% at 50% 0%, rgba(245, 158, 11, 0.18), transparent 68%), radial-gradient(ellipse 75% 40% at 50% 100%, rgba(236, 72, 153, 0.18), transparent 70%), linear-gradient(170deg, #180915 0%, #2F1129 48%, #10050E 100%)',
+    navBg: '#150712',
+    navBorder: 'rgba(245, 158, 11, 0.24)',
+    pillActive:
+      'bg-gradient-to-r from-rose-500 via-pink-500 to-amber-500 text-white border-amber-300/45 shadow-[0_4px_14px_rgba(245,158,11,0.3)]',
+    heartButton:
+      'from-pink-500 via-[#FF2E54] to-amber-400 shadow-[0_10px_28px_rgba(245,158,11,0.38)]',
+    cardRing: 'ring-amber-300/25',
+    accentText: 'text-amber-300',
+    progressGrad: 'from-pink-500 to-amber-400',
+  },
+  'Estoy libre hoy': {
+    key: 'Estoy libre hoy',
+    label: 'Libre hoy',
+    emoji: '🌙',
+    themeColor: '#0A0D20',
+    backdropStyle:
+      'radial-gradient(ellipse 85% 45% at 50% 0%, rgba(139, 92, 246, 0.28), transparent 70%), radial-gradient(ellipse 75% 40% at 50% 100%, rgba(56, 189, 248, 0.16), transparent 70%), linear-gradient(170deg, #0A0D20 0%, #1C1948 48%, #070815 100%)',
+    navBg: '#090B1A',
+    navBorder: 'rgba(139, 92, 246, 0.25)',
+    pillActive:
+      'bg-gradient-to-r from-violet-500 to-indigo-500 text-white border-violet-300/45 shadow-[0_4px_14px_rgba(139,92,246,0.38)]',
+    heartButton:
+      'from-violet-500 to-[#FF2E54] shadow-[0_10px_28px_rgba(139,92,246,0.45)]',
+    cardRing: 'ring-violet-300/25',
+    accentText: 'text-violet-300',
+    progressGrad: 'from-violet-500 to-sky-400',
+  },
+  'Hacer Amigos': {
+    key: 'Hacer Amigos',
+    label: 'Hacer Amigos',
+    emoji: '🤝',
+    themeColor: '#071616',
+    backdropStyle:
+      'radial-gradient(ellipse 85% 45% at 50% 0%, rgba(16, 185, 129, 0.22), transparent 70%), radial-gradient(ellipse 75% 40% at 50% 100%, rgba(20, 184, 166, 0.14), transparent 70%), linear-gradient(170deg, #071616 0%, #0E2B2A 48%, #040D0E 100%)',
+    navBg: '#061212',
+    navBorder: 'rgba(16, 185, 129, 0.22)',
+    pillActive:
+      'bg-gradient-to-r from-emerald-500 to-teal-500 text-white border-emerald-300/45 shadow-[0_4px_14px_rgba(16,185,129,0.35)]',
+    heartButton:
+      'from-emerald-500 to-teal-400 shadow-[0_10px_28px_rgba(16,185,129,0.4)]',
+    cardRing: 'ring-emerald-300/20',
+    accentText: 'text-emerald-300',
+    progressGrad: 'from-emerald-400 to-teal-400',
+  },
+  'Chatear / Idiomas': {
+    key: 'Chatear / Idiomas',
+    label: 'Idiomas',
+    emoji: '🗣️',
+    themeColor: '#07131E',
+    backdropStyle:
+      'radial-gradient(ellipse 85% 45% at 50% 0%, rgba(56, 189, 248, 0.24), transparent 70%), radial-gradient(ellipse 75% 40% at 50% 100%, rgba(99, 102, 241, 0.16), transparent 70%), linear-gradient(170deg, #07131E 0%, #0F263E 48%, #040B13 100%)',
+    navBg: '#061019',
+    navBorder: 'rgba(56, 189, 248, 0.22)',
+    pillActive:
+      'bg-gradient-to-r from-sky-500 to-indigo-500 text-white border-sky-300/45 shadow-[0_4px_14px_rgba(56,189,248,0.35)]',
+    heartButton:
+      'from-sky-500 to-indigo-500 shadow-[0_10px_28px_rgba(56,189,248,0.4)]',
+    cardRing: 'ring-sky-300/20',
+    accentText: 'text-sky-300',
+    progressGrad: 'from-sky-400 to-indigo-400',
+  },
+};
+
+export function getIntentionMood(intention) {
+  if (!intention) return INTENTION_MOODS.Todos;
+  if (intention === 'Citas') return INTENTION_MOODS['Pareja estable'];
+  return INTENTION_MOODS[intention] || INTENTION_MOODS.Todos;
+}
+
 export const LIFESTYLE_OPTIONS = [
   'Estilo de vida activo',
   'Viajero frecuente',

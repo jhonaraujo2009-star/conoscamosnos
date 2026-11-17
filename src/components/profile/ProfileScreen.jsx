@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   BadgeCheck,
@@ -6,6 +6,8 @@ import {
   CheckCircle2,
   ChevronRight,
   Coins,
+  Eye,
+  EyeOff,
   Flame,
   Gem,
   GraduationCap,
@@ -13,12 +15,14 @@ import {
   Home,
   Loader2,
   LogOut,
+  MapPin,
   Plus,
   Ruler,
   Save,
   Settings,
   ShieldCheck,
   Sparkles,
+  Wand2,
   X,
   Zap,
 } from 'lucide-react';
@@ -34,7 +38,7 @@ import {
 } from '../../config/constants';
 import { logoutUser } from '../../services/authService';
 import { getUserCloudinaryFolder, uploadImageToCloudinary } from '../../services/cloudinaryService';
-import { updateUserProfile } from '../../services/userService';
+import { subscribeUserReports, updateUserProfile } from '../../services/userService';
 import {
   calculateProfileCompletion,
   getPrimaryPhoto,
@@ -44,17 +48,157 @@ import {
 } from '../../utils/formatters';
 import PhotoUploader from './PhotoUploader';
 
+const PROMPT_SUGGESTIONS = [
+  'Mi domingo perfecto incluye un buen café y...',
+  'Algo que pocos saben de mí es que...',
+  'Lo que más valoro en una conexión real es...',
+  'Mi destino soñado para viajar juntos es...',
+];
+
+function PrivacyToggleRow({ icon: Icon, title, description, checked, busy, onToggle, accent }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-2.5 border-b border-zinc-100 last:border-b-0">
+      <div className="flex items-start gap-2.5 min-w-0">
+        <div
+          className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+            checked ? accent || 'bg-rose-50 text-[#FF2E54]' : 'bg-zinc-100 text-zinc-500'
+          }`}
+        >
+          <Icon className="w-4 h-4" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs font-extrabold text-zinc-900">{title}</p>
+          <p className="text-[11px] text-zinc-500 leading-snug mt-0.5">{description}</p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        role="switch"
+        aria-checked={Boolean(checked)}
+        disabled={busy}
+        onClick={onToggle}
+        className={`relative w-11 h-6 rounded-full shrink-0 transition-colors duration-200 ${
+          checked ? 'bg-[#FF2E54]' : 'bg-zinc-300'
+        } disabled:opacity-50`}
+      >
+        <span
+          className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
+            checked ? 'translate-x-5' : 'translate-x-0'
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
+function VisibilitySettingsBlock({
+  userProfile,
+  busySetting,
+  onToggleSetting,
+  locatingGps,
+  onUpdateApproxGps,
+  onClearApproxGps,
+}) {
+  const isDiscoverable = userProfile?.discoverable !== false;
+  return (
+    <div className="space-y-1">
+      <PrivacyToggleRow
+        icon={Wand2}
+        title="Smart Photos"
+        description="Prueba y destaca automáticamente la foto que recibe más Likes para conseguir más matches."
+        checked={Boolean(userProfile?.smartPhotos)}
+        busy={busySetting === 'smartPhotos'}
+        accent="bg-amber-50 text-amber-600"
+        onToggle={() => onToggleSetting('smartPhotos', !userProfile?.smartPhotos)}
+      />
+      <PrivacyToggleRow
+        icon={EyeOff}
+        title="Ocultar mi edad"
+        description="Tu edad numérica no aparecerá en tarjetas, Explorar, Likes ni chats."
+        checked={Boolean(userProfile?.hideAge)}
+        busy={busySetting === 'hideAge'}
+        onToggle={() => onToggleSetting('hideAge', !userProfile?.hideAge)}
+      />
+      <PrivacyToggleRow
+        icon={MapPin}
+        title="Ocultar mi distancia"
+        description="Oculta los kilómetros y tu ciudad exacta en tu perfil público."
+        checked={Boolean(userProfile?.hideDistance)}
+        busy={busySetting === 'hideDistance'}
+        onToggle={() => onToggleSetting('hideDistance', !userProfile?.hideDistance)}
+      />
+      <PrivacyToggleRow
+        icon={ShieldCheck}
+        title="Ocultar estado en línea"
+        description="No muestra el punto verde ni la hora de tu última conexión."
+        checked={Boolean(userProfile?.hideOnlineStatus)}
+        busy={busySetting === 'hideOnlineStatus'}
+        onToggle={() => onToggleSetting('hideOnlineStatus', !userProfile?.hideOnlineStatus)}
+      />
+      <PrivacyToggleRow
+        icon={Eye}
+        title="Mostrarme en Descubrir (Swipe y Explorar)"
+        description="Desactívalo si deseas pausar tu perfil temporalmente sin perder tus chats."
+        checked={isDiscoverable}
+        busy={busySetting === 'discoverable'}
+        accent="bg-emerald-50 text-emerald-600"
+        onToggle={() => onToggleSetting('discoverable', !isDiscoverable)}
+      />
+
+      <div className="pt-2.5 flex items-center justify-between gap-2 border-t border-zinc-100">
+        <div className="min-w-0">
+          <p className="text-[11px] font-extrabold text-zinc-800">Distancia aproximada (GPS)</p>
+          <p className="text-[10px] text-zinc-500">
+            {userProfile?.approxGeo
+              ? 'Coordenadas aproximadas (~1 km) activas para distancia real'
+              : 'Usa tu ciudad/país como referencia o activa GPS aproximado'}
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {userProfile?.approxGeo && (
+            <button
+              type="button"
+              disabled={locatingGps}
+              onClick={onClearApproxGps}
+              className="px-2.5 py-1.5 rounded-full bg-zinc-100 text-zinc-700 text-[11px] font-bold hover:bg-zinc-200"
+            >
+              Quitar
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={locatingGps}
+            onClick={onUpdateApproxGps}
+            className="px-3 py-1.5 rounded-full bg-zinc-900 text-white text-[11px] font-extrabold hover:bg-zinc-800 disabled:opacity-50"
+          >
+            {locatingGps ? 'Ubicando...' : userProfile?.approxGeo ? 'Actualizar' : 'Activar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProfileScreen({
   userProfile,
+  receivedLikes = [],
   onPreviewOwnProfile,
   onOpenCoinStore,
   onOpenWithdrawals,
   onOpenBoost,
+  onOpenSafetyCenter,
   onOpenAdmin,
   onSuccess,
   onError,
 }) {
   const [editorOpen, setEditorOpen] = useState(false);
+  const [myReportsCount, setMyReportsCount] = useState(0);
+  const [busySetting, setBusySetting] = useState('');
+  const [locatingGps, setLocatingGps] = useState(false);
+  const [promptSheetIdx, setPromptSheetIdx] = useState(null);
+  const [promptDraft, setPromptDraft] = useState('');
+  const [savingPrompt, setSavingPrompt] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploadingQuickPhoto, setUploadingQuickPhoto] = useState(false);
   const quickFileInputRef = useRef(null);
@@ -96,6 +240,118 @@ export default function ProfileScreen({
         ? userProfile.prompts.slice(0, 2)
         : [userProfile.prompts?.[0] || '', userProfile.prompts?.[1] || '']
     );
+  }, [userProfile?.uid, editorOpen]);
+
+  // Calcular rendimiento real de cada foto según Likes recibidos
+  const { photoLikeCounts, bestPhotoUrl } = useMemo(() => {
+    const counts = {};
+    const uploaded = Array.isArray(userProfile?.photos) ? userProfile.photos.filter(Boolean) : [];
+    receivedLikes.forEach((like) => {
+      if (like.likedPhotoUrl && uploaded.includes(like.likedPhotoUrl)) {
+        counts[like.likedPhotoUrl] = (counts[like.likedPhotoUrl] || 0) + 1;
+      }
+    });
+    let topUrl = uploaded[0] || '';
+    let maxLikes = -1;
+    uploaded.forEach((url) => {
+      const c = counts[url] || 0;
+      if (c > maxLikes) {
+        maxLikes = c;
+        topUrl = url;
+      }
+    });
+    return {
+      photoLikeCounts: counts,
+      bestPhotoUrl: maxLikes > 0 ? topUrl : '',
+    };
+  }, [receivedLikes, userProfile?.photos]);
+
+  // Sincronizar automáticamente la mejor foto si Smart Photos está activado
+  useEffect(() => {
+    if (!userProfile?.uid || !userProfile?.smartPhotos) return;
+    if (bestPhotoUrl && bestPhotoUrl !== userProfile?.smartBestPhotoUrl) {
+      updateUserProfile(userProfile.uid, { smartBestPhotoUrl: bestPhotoUrl }).catch(() => {});
+    }
+  }, [userProfile?.uid, userProfile?.smartPhotos, bestPhotoUrl, userProfile?.smartBestPhotoUrl]);
+
+  const handleToggleSetting = async (field, nextValue) => {
+    if (!userProfile?.uid || busySetting) return;
+    setBusySetting(field);
+    try {
+      const payload = { [field]: nextValue };
+      if (field === 'smartPhotos' && nextValue && bestPhotoUrl) {
+        payload.smartBestPhotoUrl = bestPhotoUrl;
+      }
+      await updateUserProfile(userProfile.uid, payload);
+      const messages = {
+        smartPhotos: nextValue ? 'Smart Photos activado.' : 'Smart Photos desactivado.',
+        hideAge: nextValue ? 'Tu edad ahora está oculta.' : 'Tu edad ahora es visible.',
+        hideDistance: nextValue ? 'Tu distancia y ciudad ahora están ocultas.' : 'Tu ubicación ahora es visible.',
+        hideOnlineStatus: nextValue ? 'Estado en línea ocultado.' : 'Estado en línea visible.',
+        discoverable: nextValue ? 'Tu perfil vuelve a mostrarse en Descubrir.' : 'Perfil pausado de Descubrir.',
+      };
+      onSuccess?.(messages[field] || 'Ajuste actualizado.');
+    } catch (err) {
+      onError?.(err.message || 'No se pudo actualizar el ajuste.');
+    } finally {
+      setBusySetting('');
+    }
+  };
+
+  const handleUpdateApproxGps = () => {
+    if (!navigator?.geolocation) {
+      onError?.('Tu navegador no admite geolocalización.');
+      return;
+    }
+    setLocatingGps(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          // Redondear a 2 decimales (~1.1 km) para calcular distancia sin revelar ubicación exacta
+          const approxGeo = {
+            lat: Math.round(pos.coords.latitude * 100) / 100,
+            lng: Math.round(pos.coords.longitude * 100) / 100,
+          };
+          await updateUserProfile(userProfile.uid, { approxGeo });
+          onSuccess?.('Distancia aproximada actualizada con privacidad (~1 km).');
+        } catch (err) {
+          onError?.(err.message || 'No se pudo guardar tu ubicación aproximada.');
+        } finally {
+          setLocatingGps(false);
+        }
+      },
+      () => {
+        setLocatingGps(false);
+        onError?.('No otorgaste permiso de ubicación.');
+      },
+      { enableHighAccuracy: false, timeout: 8000 }
+    );
+  };
+
+  const handleClearApproxGps = async () => {
+    if (!userProfile?.uid) return;
+    setLocatingGps(true);
+    try {
+      await updateUserProfile(userProfile.uid, { approxGeo: null });
+      onSuccess?.('Coordenadas eliminadas. Ahora se usa solo tu ciudad/país.');
+    } catch (err) {
+      onError?.(err.message || 'No se pudo quitar la ubicación.');
+    } finally {
+      setLocatingGps(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!userProfile?.uid) {
+      setMyReportsCount(0);
+      return;
+    }
+    const unsub = subscribeUserReports(
+      userProfile.uid,
+      (list) => setMyReportsCount(list.length),
+      () => setMyReportsCount(0)
+    );
+    return () => unsub();
   }, [userProfile?.uid]);
 
   const handleQuickPhotoUpload = async (e) => {
@@ -129,6 +385,33 @@ export default function ProfileScreen({
     setInterests((prev) =>
       prev.includes(item) ? prev.filter((x) => x !== item) : [...prev, item].slice(0, 10)
     );
+  };
+
+  const openQuickPrompt = (slotIdx) => {
+    const existing = userProfile?.prompts?.[slotIdx] || prompts[slotIdx] || '';
+    setPromptDraft(existing);
+    setPromptSheetIdx(slotIdx);
+  };
+
+  const handleSaveQuickPrompt = async (e) => {
+    e.preventDefault();
+    if (promptSheetIdx === null) return;
+    setSavingPrompt(true);
+    try {
+      const nextPrompts = [
+        userProfile?.prompts?.[0] ?? prompts[0] ?? '',
+        userProfile?.prompts?.[1] ?? prompts[1] ?? '',
+      ];
+      nextPrompts[promptSheetIdx] = promptDraft.trim();
+      setPrompts(nextPrompts);
+      await updateUserProfile(userProfile.uid, { prompts: nextPrompts });
+      setPromptSheetIdx(null);
+      onSuccess?.('Frase guardada en tu perfil.');
+    } catch (err) {
+      onError?.(err.message || 'No se pudo guardar la frase.');
+    } finally {
+      setSavingPrompt(false);
+    }
   };
 
   const handleSave = async (e) => {
@@ -215,7 +498,7 @@ export default function ProfileScreen({
         <header className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3.5 min-w-0">
             <img
-              src={getPrimaryPhoto(userProfile, 200)}
+              src={getPrimaryPhoto(userProfile, 200, { seed: userProfile?.uid })}
               alt={userProfile?.name}
               onClick={onPreviewOwnProfile}
               className="w-16 h-16 rounded-2xl object-cover bg-zinc-200 shrink-0 cursor-pointer shadow-sm"
@@ -240,9 +523,36 @@ export default function ProfileScreen({
                 onClick={onPreviewOwnProfile}
                 className="text-xs font-bold text-zinc-500 hover:text-zinc-900 flex items-center gap-0.5 mt-0.5"
               >
-                <span>Vista previa</span>
+                <span>Vista previa (como te ven)</span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
+              {(userProfile?.discoverable === false ||
+                userProfile?.hideAge ||
+                userProfile?.hideDistance ||
+                userProfile?.hideOnlineStatus) && (
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {userProfile?.discoverable === false && (
+                    <span className="px-2 py-0.5 rounded-full bg-zinc-200 text-zinc-700 text-[10px] font-bold">
+                      Pausado
+                    </span>
+                  )}
+                  {userProfile?.hideAge && (
+                    <span className="px-2 py-0.5 rounded-full bg-rose-100 text-[#FF2E54] text-[10px] font-bold">
+                      Edad oculta
+                    </span>
+                  )}
+                  {userProfile?.hideDistance && (
+                    <span className="px-2 py-0.5 rounded-full bg-rose-100 text-[#FF2E54] text-[10px] font-bold">
+                      Distancia oculta
+                    </span>
+                  )}
+                  {userProfile?.hideOnlineStatus && (
+                    <span className="px-2 py-0.5 rounded-full bg-zinc-200 text-zinc-700 text-[10px] font-bold">
+                      En línea oculto
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -271,23 +581,35 @@ export default function ProfileScreen({
         <button
           type="button"
           onClick={() => setEditorOpen(true)}
-          className="w-full bg-white rounded-full px-4 py-3.5 shadow-sm flex items-center justify-between hover:bg-zinc-50 transition"
+          className="w-full bg-white rounded-3xl px-4 py-3.5 shadow-sm hover:bg-zinc-50 transition text-left space-y-2"
         >
-          <div className="flex items-center gap-2.5">
-            {completion.percent < 100 ? (
-              <span className="w-5 h-5 rounded-full bg-[#FF2E54] text-white text-xs font-black flex items-center justify-center">
-                !
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              {completion.percent < 100 ? (
+                <span className="w-5 h-5 rounded-full bg-[#FF2E54] text-white text-xs font-black flex items-center justify-center">
+                  !
+                </span>
+              ) : (
+                <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+              )}
+              <span className="text-sm font-extrabold text-zinc-900">
+                {completion.percent < 100
+                  ? `Completa tu perfil (${completion.percent}%)`
+                  : 'Perfil completo al 100%'}
               </span>
-            ) : (
-              <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
-            )}
-            <span className="text-sm font-extrabold text-zinc-900">
-              {completion.percent < 100
-                ? `Completa tu perfil (${completion.percent}%)`
-                : 'Perfil completo al 100%'}
-            </span>
+            </div>
+            <ChevronRight className="w-4 h-4 text-zinc-400" />
           </div>
-          <ChevronRight className="w-4 h-4 text-zinc-400" />
+          <div className="w-full h-1.5 rounded-full bg-zinc-100 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-300 ${
+                completion.percent === 100
+                  ? 'bg-emerald-500'
+                  : 'bg-gradient-to-r from-[#FF2E54] to-amber-400'
+              }`}
+              style={{ width: `${completion.percent}%` }}
+            />
+          </div>
         </button>
 
         {/* 3. CHIPS / PÍLDORAS DE ATRIBUTOS RÁPIDOS (100% REALES) */}
@@ -342,6 +664,8 @@ export default function ProfileScreen({
               {Array.from({ length: 6 }).map((_, idx) => {
                 const url = userPhotos[idx];
                 if (url) {
+                  const likeCount = Number(photoLikeCounts[url] || 0);
+                  const isTop = Boolean(userProfile?.smartPhotos && bestPhotoUrl === url);
                   return (
                     <div
                       key={idx}
@@ -353,6 +677,16 @@ export default function ProfileScreen({
                         alt={`Foto ${idx + 1}`}
                         className="w-full h-full object-cover"
                       />
+                      {isTop && (
+                        <span className="absolute top-1 left-1 px-1 py-0.5 rounded bg-gradient-to-r from-[#FF2E54] to-amber-500 text-[8px] font-black text-white leading-none shadow">
+                          TOP
+                        </span>
+                      )}
+                      {likeCount > 0 && (
+                        <span className="absolute bottom-1 right-1 px-1 py-0.5 rounded bg-black/70 text-[8px] font-extrabold text-white leading-none">
+                          ♥{likeCount}
+                        </span>
+                      )}
                     </div>
                   );
                 }
@@ -424,7 +758,7 @@ export default function ProfileScreen({
                 <button
                   key={slotIdx}
                   type="button"
-                  onClick={() => setEditorOpen(true)}
+                  onClick={() => openQuickPrompt(slotIdx)}
                   className="relative aspect-square bg-white rounded-3xl p-4 shadow-sm flex flex-col justify-between text-left hover:bg-zinc-50/80 transition"
                 >
                   <span className="absolute -top-1.5 -right-1.5 w-8 h-8 rounded-full bg-zinc-900 text-white flex items-center justify-center shadow-md">
@@ -449,6 +783,30 @@ export default function ProfileScreen({
                 </button>
               );
             })}
+          </div>
+        </section>
+
+        {/* 5.5 SMART PHOTOS Y CONTROL DE VISIBILIDAD (INDEPENDIENTE POR USUARIO) */}
+        <section className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-extrabold text-zinc-900">
+              Smart Photos y Visibilidad
+            </h2>
+            {userProfile?.smartPhotos && (
+              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-extrabold">
+                Smart activo
+              </span>
+            )}
+          </div>
+          <div className="bg-white rounded-3xl px-4 py-2 shadow-sm">
+            <VisibilitySettingsBlock
+              userProfile={userProfile}
+              busySetting={busySetting}
+              onToggleSetting={handleToggleSetting}
+              locatingGps={locatingGps}
+              onUpdateApproxGps={handleUpdateApproxGps}
+              onClearApproxGps={handleClearApproxGps}
+            />
           </div>
         </section>
       </div>
@@ -511,7 +869,99 @@ export default function ProfileScreen({
             </span>
           </button>
         </div>
+
+        {/* Acceso directo privado a Bloqueados y Reportes del usuario actual */}
+        {onOpenSafetyCenter && (
+          <button
+            type="button"
+            onClick={() => onOpenSafetyCenter('blocked')}
+            className="w-full bg-white rounded-3xl px-4 py-3.5 shadow-sm hover:bg-zinc-50 transition flex items-center justify-between gap-3 text-left"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-2xl bg-rose-50 border border-rose-100 text-[#FF2E54] flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-extrabold text-zinc-900">Bloqueados y Mis Reportes</p>
+                <p className="text-[11px] font-semibold text-zinc-500 truncate">
+                  {(userProfile?.blockedUsers || []).length} bloqueados · {myReportsCount}{' '}
+                  {myReportsCount === 1 ? 'reporte enviado' : 'reportes enviados'}
+                </p>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
+          </button>
+        )}
+
+        {/* Botón directo para cambiar de perfil / cerrar sesión */}
+        <button
+          type="button"
+          onClick={() => logoutUser(userProfile?.uid)}
+          className="w-full py-3 rounded-full bg-white text-zinc-600 hover:text-[#FF2E54] text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-sm transition"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          Cerrar sesión ({userProfile?.email})
+        </button>
       </div>
+
+      {/* Sheet rápido e intuitivo para editar "Mis frases" con ideas */}
+      {promptSheetIdx !== null && (
+        <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <form
+            onSubmit={handleSaveQuickPrompt}
+            className="w-full max-w-md bg-white rounded-t-[32px] sm:rounded-[32px] p-6 space-y-4 shadow-2xl animate-sheet-up"
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="font-display text-base font-extrabold text-zinc-900">
+                Frase personal #{promptSheetIdx + 1}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setPromptSheetIdx(null)}
+                className="p-2 rounded-full bg-zinc-100 text-zinc-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <textarea
+              rows={3}
+              maxLength={140}
+              value={promptDraft}
+              onChange={(e) => setPromptDraft(e.target.value)}
+              placeholder="Escribe algo auténtico que llame la atención..."
+              className="w-full px-4 py-3 rounded-2xl bg-zinc-100 text-sm font-semibold text-zinc-900 focus:outline-none focus:bg-white focus:ring-2 focus:ring-zinc-900 resize-none"
+            />
+
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-400">
+                Ideas rápidas (toca para usar)
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {PROMPT_SUGGESTIONS.map((sugg, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setPromptDraft(sugg)}
+                    className="px-3 py-1.5 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-[11px] font-bold text-left transition"
+                  >
+                    {sugg}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={savingPrompt}
+              className="w-full py-3.5 rounded-full bg-zinc-900 text-white text-xs font-extrabold flex items-center justify-center gap-1.5"
+            >
+              <Save className="w-4 h-4" />
+              {savingPrompt ? 'Guardando...' : 'Guardar frase'}
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* Modal Completo de Edición de Perfil, Atributos y Cuenta */}
       {editorOpen && (
@@ -567,6 +1017,22 @@ export default function ProfileScreen({
                 </button>
               </div>
 
+              {onOpenSafetyCenter && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditorOpen(false);
+                    onOpenSafetyCenter('blocked');
+                  }}
+                  className="w-full py-3 px-4 rounded-2xl bg-rose-50 border border-rose-200 text-[#FF2E54] text-xs font-extrabold flex items-center justify-between"
+                >
+                  <span className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4" /> Bloqueados y Mis Reportes
+                  </span>
+                  <span>Ver historial →</span>
+                </button>
+              )}
+
               {userProfile?.role === 'admin' && (
                 <button
                   type="button"
@@ -584,7 +1050,28 @@ export default function ProfileScreen({
               )}
 
               <form onSubmit={handleSave} className="space-y-4">
-                <PhotoUploader photos={photos} onChange={setPhotos} onError={onError} />
+                <PhotoUploader
+                  photos={photos}
+                  onChange={setPhotos}
+                  onError={onError}
+                  smartPhotos={Boolean(userProfile?.smartPhotos)}
+                  photoLikeCounts={photoLikeCounts}
+                  bestPhotoUrl={bestPhotoUrl}
+                />
+
+                <div className="p-4 rounded-2xl bg-[#F4F4F6] border border-zinc-200/80 space-y-2">
+                  <p className="text-xs font-extrabold text-zinc-900">
+                    Smart Photos y Visibilidad
+                  </p>
+                  <VisibilitySettingsBlock
+                    userProfile={userProfile}
+                    busySetting={busySetting}
+                    onToggleSetting={handleToggleSetting}
+                    locatingGps={locatingGps}
+                    onUpdateApproxGps={handleUpdateApproxGps}
+                    onClearApproxGps={handleClearApproxGps}
+                  />
+                </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>

@@ -5,6 +5,7 @@ export default function MobileShell({
   onChangeTab,
   unreadBadgeCount = 0,
   likesBadgeCount = 0,
+  themeMood = null,
   children,
 }) {
   const isSwipeDark = activeTab === 'swipe';
@@ -17,16 +18,29 @@ export default function MobileShell({
     { id: 'profile', label: 'Perfil', icon: User },
   ];
 
+  const outerSwipeStyle =
+    isSwipeDark && themeMood?.backdropStyle
+      ? { background: themeMood.backdropStyle }
+      : undefined;
+
+  const navSwipeStyle = isSwipeDark
+    ? {
+        backgroundColor: themeMood?.navBg || '#14060D',
+        borderColor: themeMood?.navBorder || 'rgba(255, 46, 84, 0.2)',
+      }
+    : undefined;
+
   return (
     <div
-      className={`h-[100dvh] w-screen overflow-hidden overscroll-none flex justify-center transition-colors duration-200 ${
-        isSwipeDark ? 'bg-black text-white' : 'bg-[#F4F4F6] text-zinc-900'
+      style={outerSwipeStyle}
+      className={`h-[100dvh] w-screen overflow-hidden overscroll-none flex justify-center transition-colors duration-500 ${
+        isSwipeDark ? 'bg-[#16060E] text-white' : 'bg-[#F4F4F6] text-zinc-900'
       }`}
     >
       <div
         className={`w-full max-w-md h-[100dvh] flex flex-col overflow-hidden relative sm:border-x ${
           isSwipeDark
-            ? 'bg-black sm:border-zinc-900'
+            ? 'bg-transparent sm:border-white/10'
             : 'bg-[#F4F4F6] sm:border-zinc-200/80'
         }`}
       >
@@ -41,9 +55,10 @@ export default function MobileShell({
 
         {/* BottomNav Fixed (5 Tabs with Dynamic Theme) */}
         <nav
-          className={`shrink-0 z-30 border-t px-2 pt-1.5 pb-2 pb-safe transition-colors duration-200 ${
+          style={navSwipeStyle}
+          className={`shrink-0 z-30 border-t px-2 pt-1.5 pb-2 pb-safe transition-colors duration-500 ${
             isSwipeDark
-              ? 'bg-[#111111] border-zinc-800/80'
+              ? 'bg-[#14060D] border-rose-500/20'
               : 'bg-[#FFFFFF] border-zinc-200/70'
           }`}
         >
