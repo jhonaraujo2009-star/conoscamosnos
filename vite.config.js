@@ -7,6 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      filename: 'pwa-sw.js',
       includeAssets: ['favicon.svg', 'icons/icon-192.png', 'icons/icon-512.png'],
       manifest: {
         id: '/',
@@ -45,6 +46,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globIgnores: ['sw.js'],
+        importScripts: ['/sw.js'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/res\.cloudinary\.com\/.*/i,

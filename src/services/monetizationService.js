@@ -10,9 +10,39 @@ import {
   serverTimestamp,
   where,
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { auth, db } from '../config/firebase';
 import { CHECKOUT_CONFIG } from '../config/constants';
 import { toMillis } from '../utils/formatters';
+
+/**
+ * Solicita al backend seguro (/api/payments/create-invoice) una factura oficial de NowPayments
+ * asociada al uid autenticado y al paquete elegido, para acreditación automática vía Webhook.
+ */
+export async function createNowPaymentsCheckout({ pkg, creditTarget = 'coins' }) {
+  const currentUser = auth?.currentUser;
+  if (!currentUser) {
+    throw new Error('Debes iniciar sesión para realizar una recarga.');
+  }
+  const idToken = await currentUser.getIdToken();
+  const res = await fetch('/api/payments/create-invoice', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({
+      packageId: pkg.id,
+      creditTarget,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data?.invoiceUrl) {
+    throw new Error(
+      data?.error || 'No se pudo conectar con NowPayments. Verifica las variables de entorno en Vercel.'
+    );
+  }
+  return data;
+}
 
 export function buildCheckoutUrl(provider, userId, pkg) {
   const customData = { userId, packageId: pkg.id };

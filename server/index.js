@@ -1,4 +1,5 @@
 import express from 'express';
+import { createInvoiceExpressHandler } from './controllers/createInvoiceController.js';
 import paymentsRouter from './routes/payments.js';
 
 const app = express();
@@ -16,6 +17,7 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+app.post('/api/payments/create-invoice', createInvoiceExpressHandler);
 app.use('/api/webhooks', paymentsRouter);
 
 const port = Number(process.env.API_PORT || process.env.PORT || 4000);

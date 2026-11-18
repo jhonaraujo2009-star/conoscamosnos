@@ -26,6 +26,7 @@ import { isSuperAdminRole, useAuth } from '../../contexts/AuthContext';
 import { getUserCloudinaryFolder, uploadImageToCloudinary } from '../../services/cloudinaryService';
 import {
   buildCheckoutUrl,
+  createNowPaymentsCheckout,
   simulateAutoPaymentConfirmation,
   submitManualPaymentRequest,
   subscribeMyPaymentRequests,
@@ -63,6 +64,7 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
   const selectedPkg = livePackages.find((p) => p.id === selectedPkgId) || livePackages[0];
   const [activeTab, setActiveTab] = useState('direct'); // 'direct' | 'auto'
   const [simulating, setSimulating] = useState(false);
+  const [creatingInvoice, setCreatingInvoice] = useState(false);
 
   // Direct wallets state
   const [selectedMethod, setSelectedMethod] = useState(DIRECT_PAYMENT_METHODS[0]);
@@ -84,6 +86,22 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
 
   const lemonCheckout = buildCheckoutUrl('lemonsqueezy', userProfile.uid, selectedPkg);
   const paypalCheckout = buildCheckoutUrl('paypal', userProfile.uid, selectedPkg);
+
+  const handleNowPaymentsCheckout = async () => {
+    if (creatingInvoice) return;
+    setCreatingInvoice(true);
+    try {
+      const res = await createNowPaymentsCheckout({ pkg: selectedPkg });
+      window.open(res.invoiceUrl, '_blank', 'noopener,noreferrer');
+      onSuccess?.(
+        `⚡ Factura NowPayments abierta por ${formatUSD(selectedPkg.priceUSD)}. Tus +${selectedPkg.coins} monedas se acreditarán automáticamente al confirmarse.`
+      );
+    } catch (err) {
+      onError?.(err.message || 'No se pudo abrir la pasarela NowPayments.');
+    } finally {
+      setCreatingInvoice(false);
+    }
+  };
 
   const handleSimulateWebhook = async (provider) => {
     setSimulating(true);
@@ -274,7 +292,7 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
                 }`}
               >
                 <CreditCard className="w-3.5 h-3.5 text-brand-500" />
-                Tarjeta / Demo
+                NowPayments / Tarjeta
               </button>
             </div>
           </div>
@@ -289,6 +307,26 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
                     {selectedPkg.coins} Monedas ({formatUSD(selectedPkg.priceUSD)})
                   </span>
                 </div>
+
+                <button
+                  type="button"
+                  disabled={creatingInvoice}
+                  onClick={handleNowPaymentsCheckout}
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#0F172A] via-[#1E293B] to-[#0F172A] border border-emerald-400/40 text-white text-xs font-extrabold flex items-center justify-center gap-2 hover:brightness-110 shadow-md disabled:opacity-50 transition"
+                >
+                  {creatingInvoice ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                      Generando factura NowPayments...
+                    </>
+                  ) : (
+                    <>
+                      <Wallet className="w-4 h-4 text-emerald-400" />
+                      Pagar Automático con Cripto / USDT (NowPayments)
+                      <ExternalLink className="w-3.5 h-3.5 text-emerald-300" />
+                    </>
+                  )}
+                </button>
 
                 <a
                   href={lemonCheckout.url}
