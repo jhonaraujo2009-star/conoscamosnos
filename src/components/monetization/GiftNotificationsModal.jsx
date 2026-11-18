@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell, Gem, Gift, Lock, MessageCircle, ShieldCheck, X } from 'lucide-react';
+import { Bell, Gem, Gift, Lock, MessageCircle, ShieldCheck } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 import { getUserById } from '../../services/userService';
 import {
   calculateWithdrawalBreakdown,
@@ -7,6 +8,7 @@ import {
   formatUSD,
   getPrimaryPhoto,
 } from '../../utils/formatters';
+import LuxuryModalHeader from '../layout/LuxuryModalHeader';
 
 export default function GiftNotificationsModal({
   isOpen,
@@ -17,6 +19,7 @@ export default function GiftNotificationsModal({
   onStartChat,
   onOpenWithdrawals,
 }) {
+  const { economyConfig } = useAuth();
   const [senderMap, setSenderMap] = useState({});
   const fetchedSenderIdsRef = useRef(new Set());
 
@@ -71,37 +74,19 @@ export default function GiftNotificationsModal({
   const ownReceived = receivedGifts.filter((g) => g.receiverId === userProfile.uid);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="w-full max-w-md max-h-[92dvh] bg-white rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-2xl animate-sheet-up">
-        {/* Header */}
-        <div className="px-5 py-4 border-b border-zinc-200/80 flex items-center justify-between bg-white">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 to-[#FF2E54] text-white flex items-center justify-center shrink-0 shadow-sm">
-              <Bell className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <h3 className="font-display text-base font-extrabold text-zinc-900 truncate">
-                Quién te envió regalos
-              </h3>
-              <p className="text-[11px] font-semibold text-zinc-500 truncate flex items-center gap-1">
-                <Lock className="w-3 h-3 text-emerald-600 shrink-0" />
-                Notificaciones privadas de {userProfile.name}
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-full bg-zinc-100 text-zinc-600 hover:bg-zinc-200 transition shrink-0"
-            aria-label="Cerrar"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+    <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="w-full max-w-md max-h-[92dvh] bg-[#FAF7F9] rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-2xl animate-sheet-up">
+        <LuxuryModalHeader
+          icon={Bell}
+          eyebrow="Historial VIP"
+          title="Quién te envió regalos"
+          subtitle={`Notificaciones privadas de ${userProfile.name}`}
+          onClose={onClose}
+          closeLabel="Cerrar"
+        />
 
         {/* Feed */}
-        <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-3 bg-[#F4F4F6]">
+        <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-3 bg-[#FAF7F9]">
           <div className="p-3 rounded-2xl bg-white border border-zinc-200/80 text-[11px] text-zinc-600 flex items-start gap-2 leading-relaxed">
             <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
             <span>
@@ -125,7 +110,7 @@ export default function GiftNotificationsModal({
                 const sender = senderMap[tx.senderId];
                 const senderName = sender?.name || tx.senderName || 'Usuario';
                 const diamonds = Number(tx.diamondsCredited || tx.coinsCost || 0);
-                const { netPayoutUSD } = calculateWithdrawalBreakdown(diamonds);
+                const { netPayoutUSD } = calculateWithdrawalBreakdown(diamonds, economyConfig);
 
                 return (
                   <div

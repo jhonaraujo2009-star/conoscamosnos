@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Clock, Coins, Crown, Sparkles, X, Zap } from 'lucide-react';
+import { Clock, Coins, Crown, Sparkles, Zap } from 'lucide-react';
 import { BOOST_PLANS } from '../../config/constants';
 import { activateCountryBoost } from '../../services/monetizationService';
 import { formatTimeRemaining, isBoostActive } from '../../utils/formatters';
+import LuxuryModalHeader from '../layout/LuxuryModalHeader';
 
 export default function BoostModal({
   isOpen,
@@ -42,32 +43,20 @@ export default function BoostModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="w-full max-w-md bg-white rounded-t-[32px] sm:rounded-[32px] p-6 shadow-2xl animate-sheet-up">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-purple-500 to-fuchsia-600 flex items-center justify-center text-white shadow-md">
-              <Zap className="w-5 h-5 fill-white" />
-            </div>
-            <div>
-              <h3 className="font-display text-base font-extrabold text-zinc-900">
-                Boost VIP en {userProfile?.country?.flag} {userProfile?.country?.name}
-              </h3>
-              <p className="text-xs text-zinc-500">
-                Aparece primero en Swipe y Explorar
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-full bg-zinc-100 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200 transition"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+    <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="w-full max-w-md max-h-[92dvh] bg-[#FAF7F9] rounded-t-[32px] sm:rounded-[32px] overflow-hidden shadow-2xl animate-sheet-up flex flex-col">
+        <LuxuryModalHeader
+          icon={Zap}
+          iconClassName="bg-gradient-to-br from-fuchsia-500 via-purple-500 to-[#FF2E54] text-white shadow-lg shadow-purple-500/30"
+          eyebrow="Visibilidad Destacada"
+          title={`Boost VIP en ${userProfile?.country?.flag || ''} ${userProfile?.country?.name || 'Tu país'}`}
+          subtitle="Aparece primero en Swipe y Explorar"
+          onClose={onClose}
+        />
 
-        <div className="flex items-center justify-between px-4 py-3 rounded-2xl bg-zinc-100 mb-4">
+        <div className="p-5 overflow-y-auto no-scrollbar">
+
+        <div className="flex items-center justify-between px-4 py-3 rounded-2xl bg-white border border-amber-200/80 shadow-card mb-4">
           <span className="text-xs font-bold text-zinc-600">Tu saldo disponible</span>
           <span className="text-sm font-extrabold text-amber-700 flex items-center gap-1.5">
             <Coins className="w-4 h-4 text-amber-500" />
@@ -95,7 +84,7 @@ export default function BoostModal({
             return (
               <div
                 key={plan.id}
-                className="p-4 rounded-2xl bg-[#F4F4F6] border border-zinc-200/80 hover:border-purple-400 transition"
+                className="p-4 rounded-3xl bg-white border border-zinc-200/85 hover:border-purple-300 shadow-card transition"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -129,6 +118,7 @@ export default function BoostModal({
               </div>
             );
           })}
+        </div>
         </div>
       </div>
     </div>

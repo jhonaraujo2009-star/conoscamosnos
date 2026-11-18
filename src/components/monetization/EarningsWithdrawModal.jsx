@@ -11,7 +11,6 @@ import {
   Gem,
   Info,
   RefreshCw,
-  X,
   XCircle,
 } from 'lucide-react';
 import { ECONOMY_CONFIG, WITHDRAWAL_PAYOUT_METHODS } from '../../config/constants';
@@ -23,6 +22,7 @@ import {
   subscribeMyWithdrawals,
 } from '../../services/withdrawalService';
 import { calculateWithdrawalBreakdown, formatUSD } from '../../utils/formatters';
+import LuxuryModalHeader from '../layout/LuxuryModalHeader';
 import GiftShowcaseCard from './GiftShowcaseCard';
 
 const MIN_SWAP_DIAMONDS = 10;
@@ -104,6 +104,7 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
         amountDiamonds,
         payoutMethod: selectedMethod,
         payoutDetails,
+        economyConfig: liveEconomy,
       });
       setPayoutDetails('');
       onSuccess?.(
@@ -134,30 +135,19 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="w-full max-w-md max-h-[92dvh] bg-white rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-2xl animate-sheet-up">
-        {/* Header */}
-        <div className="px-5 py-4 border-b border-zinc-200/80 flex items-center justify-between bg-white">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-sky-400 to-emerald-500 flex items-center justify-center text-white shadow-md shadow-sky-500/20">
-              <Gem className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="font-display text-base font-black text-zinc-900">Bóveda de Ganancias</h3>
-              <p className="text-xs text-zinc-500">Convierte regalos recibidos en USD reales</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-full bg-zinc-100 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200 transition"
-            aria-label="Cerrar ganancias"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+    <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="w-full max-w-md max-h-[92dvh] bg-[#FAF7F9] rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-2xl animate-sheet-up">
+        <LuxuryModalHeader
+          icon={Gem}
+          iconClassName="bg-gradient-to-br from-sky-400 via-cyan-400 to-emerald-400 text-zinc-950 shadow-lg shadow-sky-500/20"
+          eyebrow="Bóveda Privada de Creador"
+          title="Ganancias y Retiros"
+          subtitle="Convierte regalos recibidos en USD reales"
+          onClose={onClose}
+          closeLabel="Cerrar ganancias"
+        />
 
-        <div className="flex-1 overflow-y-auto no-scrollbar p-4 sm:p-5 space-y-4 bg-[#FAF8FA]">
+        <div className="flex-1 overflow-y-auto no-scrollbar p-4 sm:p-5 space-y-4 bg-[#FAF7F9]">
           {/* Tarjeta Hero de Balance */}
           <div className="rounded-[26px] p-4 sm:p-5 bg-gradient-to-br from-sky-50 via-white to-emerald-50/70 border border-sky-200/80 shadow-sm space-y-3">
             <div className="flex items-start justify-between gap-3">

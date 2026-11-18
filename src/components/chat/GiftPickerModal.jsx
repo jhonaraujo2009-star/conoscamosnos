@@ -1,6 +1,8 @@
-import { Coins, Gem, Gift, Sparkles, X } from 'lucide-react';
+import { Coins, Gem, Gift, Sparkles } from 'lucide-react';
 import { ECONOMY_CONFIG, VIRTUAL_GIFTS } from '../../config/constants';
+import { useAuth } from '../../contexts/AuthContext';
 import { calculateGiftEconomics, formatUSD } from '../../utils/formatters';
+import LuxuryModalHeader from '../layout/LuxuryModalHeader';
 
 export default function GiftPickerModal({
   isOpen,
@@ -11,33 +13,22 @@ export default function GiftPickerModal({
   onSelectGift,
   onOpenCoinStore,
 }) {
+  const { economyConfig } = useAuth();
   if (!isOpen) return null;
+  const liveEconomy = economyConfig || ECONOMY_CONFIG;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="w-full max-w-md bg-white rounded-t-[32px] sm:rounded-[32px] p-6 shadow-2xl animate-sheet-up">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#FF2E54] to-amber-400 flex items-center justify-center text-white shadow-md shadow-[#FF2E54]/20">
-              <Gift className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="font-display text-base font-extrabold text-zinc-900">
-                Enviar Regalo a {recipientName}
-              </h3>
-              <p className="text-xs text-zinc-500">
-                Tu regalo acredita Diamantes reales a su perfil
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-full bg-zinc-100 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200 transition"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+    <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="w-full max-w-md max-h-[92dvh] bg-[#FAF7F9] rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-2xl animate-sheet-up">
+        <LuxuryModalHeader
+          icon={Gift}
+          eyebrow="Regalos VIP"
+          title={`Enviar regalo a ${recipientName || 'este perfil'}`}
+          subtitle="Tu regalo acredita Diamantes reales retirables en USD"
+          onClose={onClose}
+        />
+
+        <div className="p-5 overflow-y-auto no-scrollbar">
 
         <div className="flex items-center justify-between px-4 py-3 rounded-2xl bg-amber-50 border border-amber-200/80 mb-2.5">
           <span className="text-xs font-bold text-amber-900">Tu saldo disponible</span>
@@ -63,7 +54,7 @@ export default function GiftPickerModal({
           <Gem className="w-4 h-4 text-sky-500 shrink-0" />
           <span>
             <strong>Regla clara:</strong> cada <strong>1 moneda</strong> regalada entrega{' '}
-            <strong>1 💎</strong> (${ECONOMY_CONFIG.diamondToNetUSDRate.toFixed(3)} USD netos retirables en Binance/USD para quien recibe).
+            <strong>{liveEconomy.diamondsPerCoin} 💎</strong> (${liveEconomy.diamondToNetUSDRate.toFixed(3)} USD netos retirables en USD para quien recibe).
           </span>
         </div>
 
@@ -71,7 +62,7 @@ export default function GiftPickerModal({
           {VIRTUAL_GIFTS.map((gift) => {
             const canAfford = userCoins >= gift.price;
             const busy = sendingGiftId === gift.id;
-            const eco = calculateGiftEconomics(gift.price);
+            const eco = calculateGiftEconomics(gift.price, liveEconomy);
             return (
               <button
                 key={gift.id}
@@ -116,6 +107,7 @@ export default function GiftPickerModal({
               </button>
             );
           })}
+        </div>
         </div>
       </div>
     </div>

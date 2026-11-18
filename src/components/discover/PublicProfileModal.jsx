@@ -22,6 +22,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { REPORT_REASONS } from '../../config/constants';
+import { useAuth } from '../../contexts/AuthContext';
 import { sendVirtualGift } from '../../services/chatService';
 import { checkConnectionStatus, sendLike } from '../../services/discoveryService';
 import {
@@ -57,6 +58,7 @@ export default function PublicProfileModal({
   onSuccess,
   onError,
 }) {
+  const { economyConfig } = useAuth();
   const [liveTarget, setLiveTarget] = useState(targetUser);
   const [photoIdx, setPhotoIdx] = useState(0);
   const [status, setStatus] = useState({ iLiked: false, isMatched: false, matchId: null, matchData: null });
@@ -160,17 +162,18 @@ export default function PublicProfileModal({
   const handleSendGift = async (gift) => {
     setSendingGiftId(gift.id);
     try {
-      await sendVirtualGift({
+      const res = await sendVirtualGift({
         sender: currentUser,
         receiver: liveTarget,
         gift,
+        economyConfig,
       });
       setGiftPickerOpen(false);
       setGiftAnim({
         giftIcon: gift.icon,
         giftName: gift.name,
         giftValue: gift.price,
-        diamondsCredited: gift.price,
+        diamondsCredited: res.diamondsCredited ?? gift.price,
         isReceiver: false,
       });
       onSuccess?.(`${gift.icon} ¡Regalo ${gift.name} enviado a ${liveTarget.name}!`);
@@ -338,7 +341,7 @@ export default function PublicProfileModal({
         </div>
 
         {/* Scrollable Profile Details */}
-        <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-3.5 bg-[#F4F4F6]">
+        <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-3.5 bg-[#FAF7F9]">
           {showSafetyMenu && !isSelf && (
             <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 space-y-2.5">
               <p className="text-xs font-extrabold text-rose-800">Seguridad y Moderación</p>

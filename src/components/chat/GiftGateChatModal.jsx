@@ -1,5 +1,6 @@
 import { BadgeCheck, Coins, Crown, Gem, Gift, Lock, Sparkles, X } from 'lucide-react';
 import { ECONOMY_CONFIG, VIRTUAL_GIFTS } from '../../config/constants';
+import { useAuth } from '../../contexts/AuthContext';
 import { calculateGiftEconomics, formatUSD, getPrimaryPhoto, isProfileVerified } from '../../utils/formatters';
 
 export default function GiftGateChatModal({
@@ -11,7 +12,9 @@ export default function GiftGateChatModal({
   onSelectGift,
   onOpenCoinStore,
 }) {
+  const { economyConfig } = useAuth();
   if (!isOpen || !targetUser) return null;
+  const liveEconomy = economyConfig || ECONOMY_CONFIG;
 
   const verified = isProfileVerified(targetUser);
   const firstName = (targetUser.name || 'este perfil').split(' ')[0];
@@ -60,7 +63,7 @@ export default function GiftGateChatModal({
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto no-scrollbar p-5 space-y-4 bg-[#F4F4F6]">
+        <div className="flex-1 overflow-y-auto no-scrollbar p-5 space-y-4 bg-[#FAF7F9]">
           <div className="flex items-center justify-between px-4 py-3 rounded-2xl bg-white border border-amber-200/80 shadow-card">
             <div className="min-w-0">
               <p className="text-[11px] font-bold text-zinc-500">Tu saldo disponible</p>
@@ -84,7 +87,7 @@ export default function GiftGateChatModal({
           <div className="px-3.5 py-2.5 rounded-2xl bg-sky-50 border border-sky-200/80 text-[11px] text-sky-900 font-medium flex items-start gap-2">
             <Gem className="w-4 h-4 text-sky-500 shrink-0 mt-0.5" />
             <span>
-              Al enviar <strong>cualquier regalo</strong> (desde 🌹 10 monedas), desbloqueas su chat privado al instante y {firstName} recibe <strong>1 💎 por moneda</strong> (${ECONOMY_CONFIG.diamondToNetUSDRate.toFixed(3)} USD/💎 retirables).
+              Al enviar <strong>cualquier regalo</strong> (desde 🌹 10 monedas), desbloqueas su chat privado al instante y {firstName} recibe <strong>{liveEconomy.diamondsPerCoin} 💎 por moneda</strong> (${liveEconomy.diamondToNetUSDRate.toFixed(3)} USD/💎 retirables).
             </span>
           </div>
 
@@ -92,7 +95,7 @@ export default function GiftGateChatModal({
             {VIRTUAL_GIFTS.map((gift) => {
               const canAfford = userCoins >= gift.price;
               const busy = sendingGiftId === gift.id;
-              const eco = calculateGiftEconomics(gift.price);
+              const eco = calculateGiftEconomics(gift.price, liveEconomy);
               return (
                 <button
                   key={gift.id}

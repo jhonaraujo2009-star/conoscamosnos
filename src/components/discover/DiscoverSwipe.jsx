@@ -24,6 +24,7 @@ import {
   LOOKING_FOR_OPTIONS,
   MIN_AGE,
 } from '../../config/constants';
+import { useAuth } from '../../contexts/AuthContext';
 import { sendTextMessage, sendVirtualGift } from '../../services/chatService';
 import { sendLike, subscribeGivenLikesCount } from '../../services/discoveryService';
 import { fetchDiscoverProfiles } from '../../services/userService';
@@ -137,6 +138,7 @@ export default function DiscoverSwipe({
   onSuccess,
   onError,
 }) {
+  const { economyConfig } = useAuth();
   const [localScope, setLocalScope] = useState('global');
   const [localIntention, setLocalIntention] = useState('Todos');
   const [localGenderPref, setLocalGenderPref] = useState(currentUser?.interestedIn || 'Todos');
@@ -438,17 +440,18 @@ export default function DiscoverSwipe({
     if (!topCard) return;
     setSendingGiftId(gift.id);
     try {
-      await sendVirtualGift({
+      const res = await sendVirtualGift({
         sender: currentUser,
         receiver: topCard,
         gift,
+        economyConfig,
       });
       setGiftPickerOpen(false);
       setGiftAnim({
         giftIcon: gift.icon,
         giftName: gift.name,
         giftValue: gift.price,
-        diamondsCredited: gift.price,
+        diamondsCredited: res.diamondsCredited ?? gift.price,
         isReceiver: false,
       });
       onSuccess?.(`${gift.icon} ¡Regalo ${gift.name} enviado a ${topCard.name}!`);

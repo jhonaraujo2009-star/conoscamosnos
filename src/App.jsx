@@ -47,7 +47,6 @@ import GiftNotificationsModal from './components/monetization/GiftNotificationsM
 import RewardedAdModal from './components/monetization/RewardedAdModal';
 import BoostModal from './components/home/BoostModal';
 import AdminDashboardPage from './components/admin/AdminDashboardPage';
-import AdminPanelModal from './components/admin/AdminPanelModal';
 
 function FullScreenLoader() {
   return (
@@ -92,7 +91,7 @@ function SuspendedAccountScreen({ userProfile }) {
 
 function UserAppView({ onSuccess, onError }) {
   const navigate = useNavigate();
-  const { firebaseUser, userProfile, isBanned } = useAuth();
+  const { firebaseUser, userProfile, economyConfig, isBanned } = useAuth();
 
   // 5 Pestañas: 'swipe' | 'explore' | 'likes' | 'chat' | 'profile'
   const [activeTab, setActiveTab] = useState('swipe');
@@ -127,7 +126,6 @@ function UserAppView({ onSuccess, onError }) {
   const [boostOpen, setBoostOpen] = useState(false);
   const [safetyCenterOpen, setSafetyCenterOpen] = useState(false);
   const [safetyInitialTab, setSafetyInitialTab] = useState('blocked');
-  const [adminOpen, setAdminOpen] = useState(false);
 
   const seenGiftIdsRef = useRef(new Set());
   const giftsLoadedRef = useRef(false);
@@ -143,7 +141,7 @@ function UserAppView({ onSuccess, onError }) {
     if (!metaTheme) return;
     metaTheme.setAttribute(
       'content',
-      activeTab === 'swipe' && firebaseUser ? activeMood.themeColor : '#F4F4F6'
+      activeTab === 'swipe' && firebaseUser ? activeMood.themeColor : '#FAF7F9'
     );
   }, [activeTab, firebaseUser, activeMood.themeColor]);
 
@@ -157,7 +155,6 @@ function UserAppView({ onSuccess, onError }) {
     setBoostOpen(false);
     setSafetyCenterOpen(false);
     setSafetyInitialTab('blocked');
-    setAdminOpen(false);
     setGiftGateTarget(null);
     setSendingGateGiftId(null);
     setGateGiftAnim(null);
@@ -450,13 +447,14 @@ function UserAppView({ onSuccess, onError }) {
           sender: userProfile,
           receiver: target,
           gift,
+          economyConfig,
         });
         setGiftGateTarget(null);
         setGateGiftAnim({
           giftIcon: gift.icon,
           giftName: gift.name,
           giftValue: gift.price,
-          diamondsCredited: gift.price,
+          diamondsCredited: res.diamondsCredited ?? gift.price,
           isReceiver: false,
         });
         handleSuccess(`${gift.icon} ¡Enviaste ${gift.name}! Chat privado desbloqueado con ${target.name}.`);
@@ -476,7 +474,15 @@ function UserAppView({ onSuccess, onError }) {
         setSendingGateGiftId(null);
       }
     },
-    [userProfile, giftGateTarget, sendingGateGiftId, handleSuccess, handleOpenChatSession, handleError]
+    [
+      userProfile,
+      economyConfig,
+      giftGateTarget,
+      sendingGateGiftId,
+      handleSuccess,
+      handleOpenChatSession,
+      handleError,
+    ]
   );
 
   if (isBanned) {
@@ -485,7 +491,7 @@ function UserAppView({ onSuccess, onError }) {
 
   if (!userProfile?.onboardingCompleted) {
     return (
-      <div className="h-[100dvh] w-screen overflow-y-auto bg-[#F4F4F6]">
+      <div className="h-[100dvh] w-screen overflow-y-auto bg-[#FAF7F9]">
         <OnboardingWizard
           userProfile={userProfile}
           onSuccess={handleSuccess}
@@ -609,11 +615,6 @@ function UserAppView({ onSuccess, onError }) {
         currentUser={userProfile}
         onClose={() => setSelectedProfile(null)}
         onStartChat={handleStartDirectChat}
-        onOpenChat={(chatSession) => {
-          setSelectedProfile(null);
-          handleOpenChatSession(chatSession);
-          setActiveTab('chat');
-        }}
         onOpenCoinStore={() => setCoinStoreOpen(true)}
         onSuccess={handleSuccess}
         onError={handleError}
@@ -786,15 +787,6 @@ function UserAppView({ onSuccess, onError }) {
         onClose={() => setBoostOpen(false)}
         userProfile={userProfile}
         onOpenCoinStore={() => setCoinStoreOpen(true)}
-        onSuccess={handleSuccess}
-        onError={handleError}
-      />
-
-      <AdminPanelModal
-        key={`admin-${userProfile.uid}`}
-        isOpen={adminOpen}
-        onClose={() => setAdminOpen(false)}
-        userProfile={userProfile}
         onSuccess={handleSuccess}
         onError={handleError}
       />

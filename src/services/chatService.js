@@ -144,7 +144,13 @@ export async function sendImageMessage({ matchId, senderId, imageUrl }) {
  * - Registra giftTransactions
  * - Crea o actualiza la sala de chat privada 1-a-1 e inserta el mensaje especial type: 'gift'
  */
-export async function sendVirtualGift({ matchId = null, sender, receiver, gift }) {
+export async function sendVirtualGift({
+  matchId = null,
+  sender,
+  receiver,
+  gift,
+  economyConfig = ECONOMY_CONFIG,
+}) {
   const senderId = sender.uid || sender.id;
   const receiverId = receiver.uid || receiver.id;
   if (!receiverId || !senderId || senderId === receiverId) {
@@ -158,7 +164,8 @@ export async function sendVirtualGift({ matchId = null, sender, receiver, gift }
   const giftTxRef = doc(collection(db, 'giftTransactions'));
   const messageRef = doc(collection(db, 'matches', resolvedMatchId, 'messages'));
 
-  const diamondsToCredit = gift.price * ECONOMY_CONFIG.diamondsPerCoin;
+  const perCoin = Number(economyConfig?.diamondsPerCoin ?? ECONOMY_CONFIG.diamondsPerCoin);
+  const diamondsToCredit = Math.max(1, Math.floor(gift.price * perCoin));
   const nowMs = Date.now();
 
   await runTransaction(db, async (transaction) => {

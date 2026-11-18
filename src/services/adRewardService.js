@@ -6,6 +6,7 @@ import {
   increment,
   limit,
   onSnapshot,
+  orderBy,
   query,
   runTransaction,
   serverTimestamp,
@@ -246,15 +247,31 @@ export function subscribeAllAdImpressions(callback) {
     callback([]);
     return () => {};
   }
-  const q = query(collection(db, 'adImpressions'), limit(250));
-  return onSnapshot(
-    q,
-    (snap) => {
-      const list = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
-      callback(list);
-    },
-    () => callback([])
+  let activeUnsub = () => {};
+  let disposed = false;
+
+  const mapDocs = (snap) =>
+    snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
+
+  const orderedQ = query(collection(db, 'adImpressions'), orderBy('createdAt', 'desc'), limit(250));
+  activeUnsub = onSnapshot(
+    orderedQ,
+    (snap) => callback(mapDocs(snap)),
+    () => {
+      if (disposed) return;
+      const fallbackQ = query(collection(db, 'adImpressions'), limit(250));
+      activeUnsub = onSnapshot(
+        fallbackQ,
+        (snap) => callback(mapDocs(snap)),
+        () => callback([])
+      );
+    }
   );
+
+  return () => {
+    disposed = true;
+    activeUnsub();
+  };
 }

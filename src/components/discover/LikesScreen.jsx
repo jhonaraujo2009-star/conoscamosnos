@@ -298,11 +298,11 @@ export default function LikesScreen({
   };
 
   return (
-    <div className="min-h-full bg-[#F4F4F6] text-zinc-900 flex flex-col justify-between">
+    <div className="min-h-full bg-gradient-to-b from-[#FBF7F9] via-[#FAF7F9] to-[#F4F1F5] text-zinc-900 flex flex-col justify-between">
       {/* Cabecera y Barra de sub-pestañas de 2 columnas */}
-      <div className="bg-[#F4F4F6] pt-safe">
+      <div className="bg-transparent pt-safe">
         <div className="px-4 pt-4 pb-2 flex items-center justify-between gap-2">
-          <h1 className="text-3xl font-extrabold tracking-tight text-zinc-900">Likes</h1>
+          <h1 className="font-display text-3xl font-black tracking-tight text-zinc-900">Likes</h1>
           <button
             type="button"
             onClick={onOpenCoinStore}
@@ -383,7 +383,7 @@ export default function LikesScreen({
                         src={getPrimaryPhoto(user, 450, { seed: currentUser?.uid })}
                         alt={isRevealed ? user.name : 'Persona interesada'}
                         className={`w-full h-full object-cover transition duration-500 ${
-                          isRevealed ? 'group-hover:scale-105' : 'blur-xl scale-115 brightness-90'
+                          isRevealed ? 'group-hover:scale-105' : 'blur-xl scale-110 brightness-90'
                         }`}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/15 to-transparent" />
@@ -541,7 +541,7 @@ export default function LikesScreen({
       )}
 
       {/* Barra de acción inferior */}
-      <div className="p-4 pt-2 bg-[#F4F4F6] space-y-2">
+      <div className="p-4 pt-2 bg-transparent space-y-2">
         {subTab === 'likes' && lockedLikers.length >= 2 ? (
           <div className="grid grid-cols-2 gap-2.5">
             <button
@@ -604,7 +604,7 @@ export default function LikesScreen({
                     src={getPrimaryPhoto(choiceModal.user, 200)}
                     alt=""
                     className={`w-full h-full object-cover ${
-                      choiceModal.mode === 'reveal_like' ? 'blur-md scale-115' : ''
+                      choiceModal.mode === 'reveal_like' ? 'blur-md scale-110' : ''
                     }`}
                   />
                 </div>
@@ -625,7 +625,7 @@ export default function LikesScreen({
               </div>
             </div>
 
-            <div className="p-5 space-y-3 bg-[#F4F4F6]">
+            <div className="p-5 space-y-3 bg-[#FAF7F9]">
               {/* Opción 1: Anuncio Publicitario Gratis (Monetag zona 311878 solo para quien no paga 10 monedas) */}
               <button
                 type="button"

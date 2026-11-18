@@ -15,7 +15,6 @@ import {
   QrCode,
   Sparkles,
   Wallet,
-  X,
   XCircle,
 } from 'lucide-react';
 import {
@@ -24,7 +23,7 @@ import {
   ECONOMY_CONFIG,
   ENABLE_DEMO_PAYMENTS,
 } from '../../config/constants';
-import { isSuperAdminRole, useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { getUserCloudinaryFolder, uploadImageToCloudinary } from '../../services/cloudinaryService';
 import {
   buildCheckoutUrl,
@@ -35,6 +34,7 @@ import {
 } from '../../services/monetizationService';
 import { buildQrMatrix } from '../../utils/qrGenerator';
 import { calculateGiftEconomics, formatUSD } from '../../utils/formatters';
+import LuxuryModalHeader from '../layout/LuxuryModalHeader';
 
 function DynamicQrCode({ payload }) {
   const matrix = useMemo(() => buildQrMatrix(payload, 21), [payload]);
@@ -55,12 +55,13 @@ function DynamicQrCode({ payload }) {
 }
 
 export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess, onError }) {
-  const { economyConfig } = useAuth();
+  const { economyConfig, isSuperAdmin } = useAuth();
   const livePackages =
     Array.isArray(economyConfig?.coinPackages) && economyConfig.coinPackages.length > 0
       ? economyConfig.coinPackages
       : COIN_PACKAGES;
   const liveEconomy = economyConfig || ECONOMY_CONFIG;
+  const activeDirectNames = DIRECT_PAYMENT_METHODS.map((m) => m.name.replace(/\s*\(.*\)$/, '')).join(' / ');
 
   const [selectedPkgId, setSelectedPkgId] = useState(livePackages[1]?.id || livePackages[0].id);
   const selectedPkg = livePackages.find((p) => p.id === selectedPkgId) || livePackages[0];
@@ -174,36 +175,24 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="w-full max-w-md max-h-[92dvh] bg-white rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-2xl animate-sheet-up">
-        {/* Header Premium */}
-        <div className="px-5 py-4 border-b border-zinc-200/80 flex items-center justify-between bg-white">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-300 via-amber-400 to-[#FF2E54] flex items-center justify-center text-white shadow-md shadow-amber-500/20">
-              <Coins className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="font-display text-base font-black text-zinc-900">Billetera de Monedas</h3>
-              <p className="text-xs text-zinc-500">
-                Saldo disponible:{' '}
-                <span className="text-amber-600 font-black tabular-nums">
-                  {userProfile?.coins || 0} 🪙
-                </span>
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-full bg-zinc-100 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200 transition"
-            aria-label="Cerrar tienda"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+    <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="w-full max-w-md max-h-[92dvh] bg-[#FAF7F9] rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-2xl animate-sheet-up">
+        <LuxuryModalHeader
+          icon={Coins}
+          eyebrow="Billetera VIP"
+          title="Recargar Monedas"
+          subtitle={
+            <span>
+              Saldo actual:{' '}
+              <strong className="text-amber-300 tabular-nums">{userProfile?.coins || 0} 🪙</strong>
+            </span>
+          }
+          onClose={onClose}
+          closeLabel="Cerrar tienda"
+        />
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto no-scrollbar p-4 sm:p-5 space-y-4 bg-[#FAF8FA]">
+        <div className="flex-1 overflow-y-auto no-scrollbar p-4 sm:p-5 space-y-4 bg-[#FAF7F9]">
           {/* Selector de Paquete */}
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
@@ -334,7 +323,7 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
                       Si pagas en <strong>USDT TRC20</strong> (TRON), NowPayments exige aprox.{' '}
                       <strong>$11.50 USD</strong> mínimo por comisiones de red. Para paquetes menores a $12, usa{' '}
                       <strong>USDT BEP20 (BSC) / Polygon</strong> en NowPayments o paga sin mínimo por{' '}
-                      <strong>Binance Pay / Zinli</strong>.
+                      <strong>{activeDirectNames || 'Transferencia Directa'}</strong>.
                     </p>
                   </div>
                 )}
@@ -376,7 +365,7 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
                 </p>
               </div>
 
-              {(isSuperAdminRole(userProfile?.role) || ENABLE_DEMO_PAYMENTS) && (
+              {(isSuperAdmin || ENABLE_DEMO_PAYMENTS) && (
                 <div className="p-4 rounded-3xl bg-amber-50/90 border border-amber-200 space-y-2.5">
                   <div className="flex items-center gap-2 text-amber-800 text-xs font-extrabold">
                     <Sparkles className="w-4 h-4 text-amber-600" />

@@ -227,7 +227,7 @@ export default function HomeFeed({
 
   if (selectedCategory) {
     return (
-      <div className="min-h-full bg-[#F4F4F6] text-zinc-900 p-4 space-y-4">
+      <div className="min-h-full bg-gradient-to-b from-[#FBF7F9] via-[#FAF7F9] to-[#F4F1F5] text-zinc-900 p-4 space-y-4">
         <div className="flex items-center justify-between gap-3 pt-safe">
           <div className="flex items-center gap-3 min-w-0">
             <button
@@ -358,11 +358,11 @@ export default function HomeFeed({
   }
 
   return (
-    <div className="min-h-full bg-[#F4F4F6] text-zinc-900 flex flex-col">
-      {/* Cabecera limpia sobre fondo #F4F4F6 */}
+    <div className="min-h-full bg-gradient-to-b from-[#FBF7F9] via-[#FAF7F9] to-[#F4F1F5] text-zinc-900 flex flex-col">
+      {/* Cabecera limpia editorial */}
       <header className="px-4 pt-4 pb-1 pt-safe flex items-start justify-between gap-2">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-zinc-900">Explorar</h1>
+          <h1 className="font-display text-3xl font-black tracking-tight text-zinc-900">Explorar</h1>
           <p className="text-sm font-medium text-zinc-500 mt-1 leading-snug">
             Encuentra personas que buscan lo mismo en una relación
           </p>

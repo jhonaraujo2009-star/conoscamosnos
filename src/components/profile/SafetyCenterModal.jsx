@@ -5,11 +5,9 @@ import {
   CheckCircle2,
   Clock,
   Flag,
-  Lock,
   ShieldCheck,
   Unlock,
   UserX,
-  X,
 } from 'lucide-react';
 import {
   blockUser,
@@ -18,6 +16,7 @@ import {
   unblockUser,
 } from '../../services/userService';
 import { getPrimaryPhoto, toMillis } from '../../utils/formatters';
+import LuxuryModalHeader from '../layout/LuxuryModalHeader';
 
 function formatReportDate(ts) {
   const ms = toMillis(ts);
@@ -224,37 +223,20 @@ export default function SafetyCenterModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="w-full max-w-md max-h-[92dvh] bg-white rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-2xl animate-sheet-up">
-        {/* Cabecera */}
-        <div className="px-5 py-4 border-b border-zinc-200/80 flex items-center justify-between bg-white">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-11 h-11 rounded-2xl bg-rose-50 border border-rose-200 text-[#FF2E54] flex items-center justify-center shrink-0">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <h3 className="font-display text-base font-extrabold text-zinc-900 truncate">
-                Bloqueados y Reportes
-              </h3>
-              <p className="text-[11px] font-semibold text-zinc-500 truncate flex items-center gap-1">
-                <Lock className="w-3 h-3 text-emerald-600 shrink-0" />
-                Historial privado de {userProfile.name}
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-full bg-zinc-100 text-zinc-600 hover:bg-zinc-200 transition shrink-0"
-            aria-label="Cerrar"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+    <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="w-full max-w-md max-h-[92dvh] bg-[#FAF7F9] rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-2xl animate-sheet-up">
+        <LuxuryModalHeader
+          icon={ShieldCheck}
+          iconClassName="bg-gradient-to-br from-[#FF2E54] to-rose-500 text-white shadow-lg shadow-[#FF2E54]/25"
+          eyebrow="Centro de Seguridad"
+          title="Bloqueados y Reportes"
+          subtitle={`Historial privado de ${userProfile.name}`}
+          onClose={onClose}
+          closeLabel="Cerrar"
+        />
 
         {/* Pestañas */}
-        <div className="px-4 pt-3 bg-[#F4F4F6]">
+        <div className="px-4 pt-3 bg-[#FAF7F9]">
           <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-zinc-200/75 border border-zinc-200">
             <button
               type="button"
@@ -284,7 +266,7 @@ export default function SafetyCenterModal({
         </div>
 
         {/* Contenido */}
-        <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-3 bg-[#F4F4F6]">
+        <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-3 bg-[#FAF7F9]">
           <div className="p-3 rounded-2xl bg-white border border-zinc-200/80 text-[11px] font-medium text-zinc-600 leading-relaxed flex items-start gap-2">
             <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
             <span>

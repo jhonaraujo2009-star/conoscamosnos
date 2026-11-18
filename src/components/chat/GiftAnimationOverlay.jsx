@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
 import { Gem, Sparkles } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 import { calculateWithdrawalBreakdown, formatUSD } from '../../utils/formatters';
 
 export default function GiftAnimationOverlay({ giftEvent, onComplete }) {
+  const { economyConfig } = useAuth();
   useEffect(() => {
     if (!giftEvent) return;
     const timer = setTimeout(() => {
@@ -53,7 +55,7 @@ export default function GiftAnimationOverlay({ giftEvent, onComplete }) {
 
         {giftEvent.isReceiver && (() => {
           const diamonds = giftEvent.diamondsCredited || giftEvent.giftValue || 0;
-          const { netPayoutUSD } = calculateWithdrawalBreakdown(diamonds);
+          const { netPayoutUSD } = calculateWithdrawalBreakdown(diamonds, economyConfig);
           return (
             <div className="mt-4 space-y-1">
               <div className="py-2 px-4 rounded-2xl bg-sky-50 border border-sky-200 inline-flex items-center gap-1.5 text-sm font-extrabold text-sky-800">
@@ -61,7 +63,7 @@ export default function GiftAnimationOverlay({ giftEvent, onComplete }) {
                 +{diamonds} Diamantes acreditados
               </div>
               <p className="text-[11px] font-bold text-emerald-700">
-                Equivale a {formatUSD(netPayoutUSD)} USD retirables en Binance/billetera
+                Equivale a {formatUSD(netPayoutUSD)} USD retirables en billetera
               </p>
             </div>
           );

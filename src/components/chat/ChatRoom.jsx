@@ -18,6 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { REPORT_REASONS } from '../../config/constants';
+import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../config/firebase';
 import {
   markChatAsRead,
@@ -53,6 +54,7 @@ export default function ChatRoom({
   onSuccess,
   onError,
 }) {
+  const { economyConfig } = useAuth();
   const [livePeer, setLivePeer] = useState(peerUser);
   const [liveMatch, setLiveMatch] = useState(match);
   const [messages, setMessages] = useState([]);
@@ -157,7 +159,7 @@ export default function ChatRoom({
 
   if (!isParticipant) {
     return (
-      <div className="fixed inset-0 z-40 h-[100dvh] w-screen bg-[#F4F4F6] flex items-center justify-center p-6">
+      <div className="fixed inset-0 z-40 h-[100dvh] w-screen bg-[#FAF7F9] flex items-center justify-center p-6">
         <div className="bg-white border border-zinc-200 rounded-3xl p-6 max-w-sm text-center shadow-luxury space-y-3">
           <ShieldAlert className="w-10 h-10 text-[#FF2E54] mx-auto" />
           <h3 className="font-display text-base font-extrabold text-zinc-900">
@@ -240,18 +242,19 @@ export default function ChatRoom({
   const handleSendGift = async (gift) => {
     setSendingGiftId(gift.id);
     try {
-      await sendVirtualGift({
+      const res = await sendVirtualGift({
         matchId: match.id,
         sender: currentUser,
         receiver: livePeer,
         gift,
+        economyConfig,
       });
       setGiftPickerOpen(false);
       setActiveGiftAnim({
         giftIcon: gift.icon,
         giftName: gift.name,
         giftValue: gift.price,
-        diamondsCredited: gift.price,
+        diamondsCredited: res.diamondsCredited ?? gift.price,
         isReceiver: false,
       });
       onSuccess?.(`${gift.icon} Enviaste ${gift.name} a ${livePeer?.name}`);
@@ -319,8 +322,8 @@ export default function ChatRoom({
   ];
 
   return (
-    <div className="fixed inset-0 z-40 h-[100dvh] w-screen overflow-hidden bg-[#F4F4F6] flex justify-center">
-      <div className="w-full max-w-md h-full flex flex-col bg-[#F4F4F6] sm:border-x sm:border-zinc-200/80">
+    <div className="fixed inset-0 z-40 h-[100dvh] w-screen overflow-hidden bg-[#FAF7F9] flex justify-center">
+      <div className="w-full max-w-md h-full flex flex-col bg-[#FAF7F9] sm:border-x sm:border-zinc-200/80">
         {/* Chat Header */}
         <header className="px-3.5 py-3 pt-safe border-b border-zinc-200/80 bg-white flex items-center gap-2.5 shadow-sm z-10">
           <button

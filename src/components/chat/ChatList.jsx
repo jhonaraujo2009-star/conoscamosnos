@@ -166,11 +166,11 @@ export default function ChatList({
   }, [matches, currentUser.uid, blockedKey, searchQuery, peerMap]);
 
   return (
-    <div className="min-h-full bg-[#F4F4F6] text-zinc-900 flex flex-col p-4 space-y-3.5">
+    <div className="min-h-full bg-gradient-to-b from-[#FBF7F9] via-[#FAF7F9] to-[#F4F1F5] text-zinc-900 flex flex-col p-4 space-y-3.5">
       {/* Cabecera superior con funciones claras */}
       <header className="flex items-center justify-between pt-safe">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-zinc-900">Chat</h1>
+          <h1 className="font-display text-3xl font-black tracking-tight text-zinc-900">Chat</h1>
           <p className="text-[11px] font-semibold text-zinc-500 flex items-center gap-1 mt-0.5">
             <Lock className="w-3 h-3 text-emerald-600" />
             Conversaciones privadas 1-a-1

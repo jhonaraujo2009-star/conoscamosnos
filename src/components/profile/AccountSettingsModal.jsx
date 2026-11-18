@@ -18,11 +18,10 @@ import {
   ShieldCheck,
   Smartphone,
   Wand2,
-  X,
   Zap,
 } from 'lucide-react';
 import { WITHDRAWAL_PAYOUT_METHODS } from '../../config/constants';
-import { isSuperAdminRole } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { usePwaInstall } from '../../hooks/usePwaInstall';
 import { logoutUser } from '../../services/authService';
 import {
@@ -31,6 +30,7 @@ import {
   updateUserProfile,
 } from '../../services/userService';
 import { calculateWithdrawalBreakdown, formatUSD, isBoostActive } from '../../utils/formatters';
+import LuxuryModalHeader from '../layout/LuxuryModalHeader';
 
 function SettingsSwitchRow({ icon: Icon, title, description, checked, busy, onToggle, accent }) {
   return (
@@ -86,6 +86,7 @@ export default function AccountSettingsModal({
   onSuccess,
   onError,
 }) {
+  const { economyConfig, isSuperAdmin } = useAuth();
   const [busySetting, setBusySetting] = useState('');
   const [locatingGps, setLocatingGps] = useState(false);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
@@ -140,7 +141,7 @@ export default function AccountSettingsModal({
 
   const boosted = isBoostActive(userProfile);
   const diamonds = Number(userProfile.earningsDiamonds || 0);
-  const { netPayoutUSD } = calculateWithdrawalBreakdown(diamonds);
+  const { netPayoutUSD } = calculateWithdrawalBreakdown(diamonds, economyConfig);
   const isDiscoverable = userProfile.discoverable !== false;
 
   const handleToggleSetting = async (field, nextValue) => {
@@ -220,30 +221,19 @@ export default function AccountSettingsModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="w-full max-w-md max-h-[92dvh] bg-white rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-2xl animate-sheet-up">
-        {/* Cabecera Privada */}
-        <div className="px-5 py-4 border-b border-zinc-200/80 flex items-center justify-between bg-white">
-          <div className="min-w-0">
-            <h3 className="font-display text-base font-extrabold text-zinc-900 flex items-center gap-1.5">
-              <Lock className="w-4 h-4 text-emerald-600 shrink-0" />
-              Ajustes Privados de Cuenta
-            </h3>
-            <p className="text-[11px] font-semibold text-zinc-500 truncate mt-0.5">
-              Solo tú ({userProfile.name}) puedes ver y administrar esta sección
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-full bg-zinc-100 text-zinc-600 hover:bg-zinc-200 transition shrink-0"
-            aria-label="Cerrar"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+    <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="w-full max-w-md max-h-[92dvh] bg-[#FAF7F9] rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-2xl animate-sheet-up">
+        <LuxuryModalHeader
+          icon={Lock}
+          iconClassName="bg-gradient-to-br from-emerald-400 to-teal-500 text-zinc-950 shadow-lg shadow-emerald-500/20"
+          eyebrow="Bóveda y Seguridad Privada"
+          title="Ajustes de Cuenta"
+          subtitle={`Solo visible para ti (${userProfile.name})`}
+          onClose={onClose}
+          closeLabel="Cerrar"
+        />
 
-        <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-4 bg-[#F4F4F6]">
+        <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-4 bg-[#FAF7F9]">
           {/* 1. Correo y Credenciales Privadas */}
           <section className="bg-white rounded-3xl p-4 shadow-card space-y-2">
             <p className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400">
@@ -642,8 +632,8 @@ export default function AccountSettingsModal({
             )}
           </section>
 
-          {/* 6. Panel Super Admin (únicamente si role === 'SUPER_ADMIN' o 'admin') */}
-          {isSuperAdminRole(userProfile.role) && (
+          {/* 6. Panel Super Admin (visible si role === 'SUPER_ADMIN'/'admin' o cuenta verificada Super Admin) */}
+          {isSuperAdmin && (
             <button
               type="button"
               onClick={() => {

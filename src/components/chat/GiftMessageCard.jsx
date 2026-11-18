@@ -1,9 +1,11 @@
 import { Gem, Sparkles } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 import { calculateWithdrawalBreakdown, formatUSD } from '../../utils/formatters';
 
 export default function GiftMessageCard({ message, isMine }) {
+  const { economyConfig } = useAuth();
   const diamonds = Number(message.diamondsCredited || message.giftValue || 0);
-  const { netPayoutUSD } = calculateWithdrawalBreakdown(diamonds);
+  const { netPayoutUSD } = calculateWithdrawalBreakdown(diamonds, economyConfig);
   return (
     <div className={`flex ${isMine ? 'justify-end' : 'justify-start'} my-2`}>
       <div className="relative max-w-[260px] w-full rounded-3xl p-[2px] bg-gradient-to-r from-[#FF2E54] via-amber-400 to-sky-400 animate-pulse-glow shadow-md">

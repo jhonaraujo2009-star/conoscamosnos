@@ -17,18 +17,26 @@ import { calculateWithdrawalBreakdown, toMillis } from '../utils/formatters';
  * Congela atómicamente los diamantes en pendingWithdrawalDiamonds para evitar doble gasto
  * mientras la empresa realiza el pago real al usuario.
  */
-export async function requestDiamondsWithdrawal({ user, amountDiamonds, payoutMethod, payoutDetails }) {
+export async function requestDiamondsWithdrawal({
+  user,
+  amountDiamonds,
+  payoutMethod,
+  payoutDetails,
+  economyConfig = ECONOMY_CONFIG,
+}) {
+  const minDiamonds = Math.max(
+    100,
+    Math.floor(Number(economyConfig?.minWithdrawalDiamonds ?? ECONOMY_CONFIG.minWithdrawalDiamonds))
+  );
   const cleanAmount = Math.floor(Number(amountDiamonds || 0));
-  if (cleanAmount < ECONOMY_CONFIG.minWithdrawalDiamonds) {
-    throw new Error(
-      `El retiro mínimo es de ${ECONOMY_CONFIG.minWithdrawalDiamonds} diamantes.`
-    );
+  if (cleanAmount < minDiamonds) {
+    throw new Error(`El retiro mínimo es de ${minDiamonds} diamantes.`);
   }
   if (!payoutDetails || payoutDetails.trim().length < 4) {
     throw new Error('Ingresa los datos de tu cuenta o billetera para recibir el pago.');
   }
 
-  const breakdown = calculateWithdrawalBreakdown(cleanAmount);
+  const breakdown = calculateWithdrawalBreakdown(cleanAmount, economyConfig);
   const userRef = doc(db, 'users', user.uid);
   const withdrawalRef = doc(collection(db, 'withdrawalRequests'));
 

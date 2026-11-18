@@ -34,14 +34,14 @@ export default function MobileShell({
     <div
       style={outerSwipeStyle}
       className={`h-[100dvh] w-screen overflow-hidden overscroll-none flex justify-center transition-colors duration-500 ${
-        isSwipeDark ? 'bg-[#16060E] text-white' : 'bg-[#F4F4F6] text-zinc-900'
+        isSwipeDark ? 'bg-[#16060E] text-white' : 'bg-[#FAF7F9] text-zinc-900'
       }`}
     >
       <div
         className={`w-full max-w-md h-[100dvh] flex flex-col overflow-hidden relative sm:border-x ${
           isSwipeDark
             ? 'bg-transparent sm:border-white/10'
-            : 'bg-[#F4F4F6] sm:border-zinc-200/80'
+            : 'bg-[#FAF7F9] sm:border-zinc-200/80'
         }`}
       >
         {/* Main Viewport Content */}
