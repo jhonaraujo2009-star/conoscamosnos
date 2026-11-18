@@ -19,8 +19,25 @@ service cloud.firestore {
       return amount in [100, 550, 1200, 3000];
     }
 
+    function isValidPackagePrice(coins, amountUSD) {
+      return (coins == 100 && amountUSD == 1.99)
+        || (coins == 550 && amountUSD == 7.99)
+        || (coins == 1200 && amountUSD == 14.99)
+        || (coins == 3000 && amountUSD == 29.99);
+    }
+
     function isValidGiftValue(amount) {
       return amount in [10, 25, 50, 150, 500];
+    }
+
+    function isValidBoostCost(spentCoins) {
+      return spentCoins in [100, 500];
+    }
+
+    function boostFieldsUnchanged() {
+      return request.resource.data.get('isBoosted', false) == resource.data.get('isBoosted', false)
+        && request.resource.data.get('boostExpiresAt', null) == resource.data.get('boostExpiresAt', null)
+        && request.resource.data.get('boostCountry', null) == resource.data.get('boostCountry', null);
     }
 
     // ==================== USERS ====================
@@ -39,7 +56,7 @@ service cloud.firestore {
 
       allow update: if isAdmin()
         || (
-          // Actualización del propio dueño (perfil, presencia, gasto de monedas, reserva de retiro, canje de diamantes a monedas o simulador)
+          // Actualización del propio dueño (perfil, presencia, privacidad, gasto de monedas, boost pagado, retiro o canje 1:1)
           isOwner(userId)
           && request.resource.data.role == resource.data.role
           && request.resource.data.get('totalWithdrawnUSD', 0) == resource.data.get('totalWithdrawnUSD', 0)
@@ -48,7 +65,7 @@ service cloud.firestore {
           && request.resource.data.get('giftCounts', {}) == resource.data.get('giftCounts', {})
           && (
             (
-              // Operación estándar: retiro de diamantes o gasto/compra de monedas
+              // Operación estándar: perfil, reserva de retiro o gasto válido de monedas (nunca auto-recarga gratis)
               (
                 (
                   request.resource.data.earningsDiamonds == resource.data.earningsDiamonds
@@ -61,19 +78,17 @@ service cloud.firestore {
                      == (resource.data.earningsDiamonds + resource.data.get('pendingWithdrawalDiamonds', 0))
                 )
               )
+              && request.resource.data.coins <= resource.data.coins
+              && request.resource.data.coins >= 0
               && (
-                (request.resource.data.coins <= resource.data.coins && request.resource.data.coins >= 0)
-                // [SOLO MODO SIMULADOR/MVP SIN CLOUD FUNCTIONS]:
-                // En producción con webhooks en backend, elimina esta rama OR para impedir recargas desde el cliente.
-                || (
-                  isValidPackageCoins(request.resource.data.coins - resource.data.coins)
-                  && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coins', 'updatedAt'])
-                )
+                boostFieldsUnchanged()
+                || isValidBoostCost(resource.data.coins - request.resource.data.coins)
               )
             )
             || (
-              // Canje 1:1 de diamantes recibidos -> monedas internas (solo el receptor reduce diamantes y suma exacto a monedas)
-              request.resource.data.earningsDiamonds < resource.data.earningsDiamonds
+              // Canje atómico 1:1 de diamantes ganados por regalos -> monedas internas
+              boostFieldsUnchanged()
+              && request.resource.data.earningsDiamonds < resource.data.earningsDiamonds
               && request.resource.data.earningsDiamonds >= 0
               && request.resource.data.get('pendingWithdrawalDiamonds', 0) == resource.data.get('pendingWithdrawalDiamonds', 0)
               && request.resource.data.coins > resource.data.coins
@@ -84,23 +99,35 @@ service cloud.firestore {
           )
         )
         || (
-          // Otro usuario enviando un Like (+1 likesCount)
+          // Otro usuario enviando un Like real nuevo (+1 likesCount vinculado a creación de likes/{from}_{to})
           isSignedIn()
           && request.auth.uid != userId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'updatedAt'])
           && request.resource.data.likesCount == resource.data.get('likesCount', 0) + 1
+          && !exists(/databases/$(database)/documents/likes/$(request.auth.uid + '_' + userId))
+          && existsAfter(/databases/$(database)/documents/likes/$(request.auth.uid + '_' + userId))
         )
         || (
-          // Otro usuario enviando un Regalo (+1 giftsReceivedCount, diamantes válidos y conteo anónimo por regalo)
+          // Otro usuario enviando un Regalo: exige descuento atómico exacto de monedas en la cuenta del emisor
           isSignedIn()
           && request.auth.uid != userId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['giftsReceivedCount', 'earningsDiamonds', 'giftCounts', 'updatedAt'])
           && request.resource.data.giftsReceivedCount == resource.data.get('giftsReceivedCount', 0) + 1
           && request.resource.data.giftCounts is map
           && isValidGiftValue(request.resource.data.earningsDiamonds - resource.data.get('earningsDiamonds', 0))
+          && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('coins', 0)
+             == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('coins', 0)
+                - (request.resource.data.earningsDiamonds - resource.data.get('earningsDiamonds', 0))
         );
 
       allow delete: if false;
+
+      // ==================== DATOS PRIVADOS DEL USUARIO (COBRO Y DESBLOQUEOS) ====================
+      // Estrictamente privados por uid: cuentas de PayPal/Binance/banco y desbloqueos de anuncios/monedas.
+      // Ningún otro usuario puede leer ni escribir estos documentos.
+      match /private/{docId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
     }
 
     // ==================== LIKES ====================
@@ -112,13 +139,13 @@ service cloud.firestore {
       );
       allow create: if isSignedIn()
         && request.resource.data.fromUserId == request.auth.uid
-        && request.resource.data.toUserId != request.auth.uid;
+        && request.resource.data.toUserId != request.auth.uid
+        && likeId == request.auth.uid + '_' + request.resource.data.toUserId;
       allow delete: if isSignedIn() && resource.data.fromUserId == request.auth.uid;
     }
 
     // ==================== MATCHES & CHAT PRIVADO 1-A-1 ====================
     // Privacidad estricta: únicamente los 2 participantes del chat pueden leer o enviar mensajes.
-    // Ningún otro usuario puede leer chats ajenos.
     match /matches/{matchId} {
       allow read: if isSignedIn() && (
         resource == null ||
@@ -128,7 +155,8 @@ service cloud.firestore {
         && request.resource.data.participants is list
         && request.resource.data.participants.size() == 2
         && request.resource.data.participants[0] != request.resource.data.participants[1]
-        && request.auth.uid in request.resource.data.participants;
+        && request.auth.uid in request.resource.data.participants
+        && matchId == request.resource.data.participants[0] + '_' + request.resource.data.participants[1];
       allow update: if isSignedIn()
         && request.auth.uid in resource.data.participants
         && request.resource.data.participants == resource.data.participants;
@@ -154,18 +182,18 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.status == 'pending'
-        && isValidPackageCoins(request.resource.data.coinsToCredit);
+        && isValidPackageCoins(request.resource.data.coinsToCredit)
+        && isValidPackagePrice(request.resource.data.coinsToCredit, request.resource.data.amountUSD);
       allow update: if isAdmin();
       allow delete: if false;
     }
 
-    // ==================== TRANSACCIONES AUTOMÁTICAS / SIMULADAS ====================
+    // ==================== TRANSACCIONES AUTOMÁTICAS / ADMIN ====================
     match /paymentTransactions/{txId} {
       allow read: if isSignedIn() && (
         resource.data.userId == request.auth.uid || isAdmin()
       );
-      allow create: if isSignedIn()
-        && request.resource.data.userId == request.auth.uid
+      allow create: if isAdmin()
         && isValidPackageCoins(request.resource.data.coinsCredited);
       allow update, delete: if false;
     }
@@ -178,7 +206,11 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.status == 'pending'
-        && request.resource.data.amountDiamonds >= 500;
+        && request.resource.data.amountDiamonds is int
+        && request.resource.data.amountDiamonds >= 500
+        && request.resource.data.netPayoutUSD is number
+        && request.resource.data.netPayoutUSD > 0
+        && request.resource.data.netPayoutUSD <= (request.resource.data.amountDiamonds * 0.006 + 0.01);
       allow update: if isAdmin();
       allow delete: if false;
     }
@@ -197,8 +229,18 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ==================== PUBLICIDAD RECOMPENSADA (IMPRESIONES) ====================
+    match /adImpressions/{impId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.purpose in ['reveal_like', 'unlock_chat'];
+      allow update, delete: if false;
+    }
+
     // ==================== REPORTES DE SEGURIDAD ====================
-    // Cada usuario solo puede ver sus propios reportes enviados; los administradores ven y moderan todos.
     match /reports/{reportId} {
       allow read: if isSignedIn() && (
         resource.data.reporterId == request.auth.uid ||

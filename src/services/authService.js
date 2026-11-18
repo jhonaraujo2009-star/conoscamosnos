@@ -51,6 +51,7 @@ export async function ensureUserDocument(firebaseUser, extra = {}) {
       hideDistance: false,
       hideOnlineStatus: false,
       discoverable: true,
+      requireGiftToChat: false,
       approxGeo: null,
       onboardingCompleted: false,
       createdAt: serverTimestamp(),

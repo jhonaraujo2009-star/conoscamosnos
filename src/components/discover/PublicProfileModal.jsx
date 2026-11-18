@@ -5,6 +5,7 @@ import {
   Briefcase,
   ChevronLeft,
   ChevronRight,
+  Crown,
   Flag,
   Flame,
   Gift,
@@ -38,6 +39,7 @@ import {
   getPrimaryPhoto,
   getSharedInterests,
   isBoostActive,
+  isGiftChatUnlocked,
   isProfileVerified,
   isUserActuallyOnline,
   optimizeCloudinaryUrl,
@@ -57,7 +59,7 @@ export default function PublicProfileModal({
 }) {
   const [liveTarget, setLiveTarget] = useState(targetUser);
   const [photoIdx, setPhotoIdx] = useState(0);
-  const [status, setStatus] = useState({ iLiked: false, isMatched: false, matchId: null });
+  const [status, setStatus] = useState({ iLiked: false, isMatched: false, matchId: null, matchData: null });
   const [busyAction, setBusyAction] = useState('');
   const [giftPickerOpen, setGiftPickerOpen] = useState(false);
   const [sendingGiftId, setSendingGiftId] = useState(null);
@@ -94,6 +96,11 @@ export default function PublicProfileModal({
 
   const isSelf = currentUser?.uid === targetId;
   const isBlocked = (currentUser?.blockedUsers || []).includes(targetId);
+  const needsGiftForChat = Boolean(
+    !isSelf &&
+      liveTarget.requireGiftToChat &&
+      !isGiftChatUnlocked(status.matchData, currentUser?.uid, liveTarget)
+  );
 
   const orderedPhotos = getOrderedPhotos(liveTarget, currentUser?.uid, {
     respectSmart: true,
@@ -298,6 +305,11 @@ export default function PublicProfileModal({
                 {boosted && (
                   <span className="px-2 py-0.5 rounded-full bg-amber-400 text-zinc-950 text-[10px] font-black flex items-center gap-0.5 shadow">
                     <Zap className="w-3 h-3 fill-zinc-950" /> VIP
+                  </span>
+                )}
+                {!isSelf && liveTarget.requireGiftToChat && (
+                  <span className="px-2 py-0.5 rounded-full bg-zinc-950/85 border border-amber-300/50 text-amber-200 text-[10px] font-extrabold flex items-center gap-0.5 shadow">
+                    <Crown className="w-3 h-3 text-amber-300" /> Chat con regalo
                   </span>
                 )}
               </div>
@@ -510,11 +522,21 @@ export default function PublicProfileModal({
               type="button"
               disabled={busyAction === 'chat'}
               onClick={handleOpenPrivateChat}
-              className="w-full py-3.5 rounded-full bg-zinc-900 text-white text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 shadow-md hover:bg-zinc-800 active:scale-[0.99] transition"
+              className={`w-full py-3.5 rounded-full text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 shadow-md active:scale-[0.99] transition ${
+                needsGiftForChat
+                  ? 'bg-gradient-to-r from-[#190913] via-[#2B0C1F] to-[#190913] border border-amber-300/40 text-amber-200 hover:brightness-110'
+                  : 'bg-zinc-900 text-white hover:bg-zinc-800'
+              }`}
             >
-              <MessageCircle className="w-4 h-4" />
+              {needsGiftForChat ? (
+                <Gift className="w-4 h-4 text-amber-300" />
+              ) : (
+                <MessageCircle className="w-4 h-4" />
+              )}
               {busyAction === 'chat'
                 ? 'Abriendo chat privado...'
+                : needsGiftForChat
+                ? `Enviar Regalo y Chatear con ${liveTarget.name}`
                 : `Enviar Mensaje Privado a ${liveTarget.name}`}
               <Lock className="w-3.5 h-3.5 opacity-70" />
             </button>

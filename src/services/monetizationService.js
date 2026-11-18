@@ -8,7 +8,6 @@ import {
   query,
   runTransaction,
   serverTimestamp,
-  updateDoc,
   where,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -129,16 +128,24 @@ export function subscribeMyPaymentRequests(userId, callback) {
 
 export function subscribeAllPaymentRequests(callback) {
   const q = query(collection(db, 'paymentRequests'), orderBy('createdAt', 'desc'));
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    },
+    (err) => console.error('Error escuchando solicitudes de pago admin:', err)
+  );
 }
 
 export function subscribeAllPaymentTransactions(callback) {
   const q = query(collection(db, 'paymentTransactions'), orderBy('createdAt', 'desc'));
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    },
+    (err) => console.error('Error escuchando transacciones admin:', err)
+  );
 }
 
 /**
@@ -181,11 +188,21 @@ export async function approvePaymentRequest({ requestId, adminId }) {
 }
 
 export async function rejectPaymentRequest({ requestId, adminId, reason = 'Comprobante inválido o no localizado' }) {
-  await updateDoc(doc(db, 'paymentRequests', requestId), {
-    status: 'rejected',
-    rejectionReason: reason,
-    reviewedBy: adminId,
-    reviewedAt: serverTimestamp(),
+  const reqRef = doc(db, 'paymentRequests', requestId);
+  await runTransaction(db, async (transaction) => {
+    const reqSnap = await transaction.get(reqRef);
+    if (!reqSnap.exists()) {
+      throw new Error('La solicitud de pago no existe.');
+    }
+    if (reqSnap.data().status !== 'pending') {
+      throw new Error('Esta solicitud ya fue procesada anteriormente.');
+    }
+    transaction.update(reqRef, {
+      status: 'rejected',
+      rejectionReason: reason,
+      reviewedBy: adminId,
+      reviewedAt: serverTimestamp(),
+    });
   });
 }
 

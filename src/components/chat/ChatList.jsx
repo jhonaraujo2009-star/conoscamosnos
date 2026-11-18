@@ -80,6 +80,7 @@ function BlueHeartDice3D() {
 export default function ChatList({
   matches = [],
   currentUser,
+  optimisticReadMap = {},
   onSelectMatch,
   onStartChat,
   onSelectProfile,
@@ -108,13 +109,20 @@ export default function ChatList({
     return () => unsub();
   }, [currentUser?.uid, currentUser?.country?.code, blockedKey]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const peerIds = matches
+  const peerIdsKey = useMemo(() => {
+    const ids = matches
       .map((m) => (m.participants || []).find((p) => p !== currentUser.uid))
       .filter(Boolean);
+    return Array.from(new Set(ids)).sort().join(',');
+  }, [matches, currentUser.uid]);
 
-    const uniqueIds = Array.from(new Set(peerIds));
+  useEffect(() => {
+    let cancelled = false;
+    const uniqueIds = peerIdsKey ? peerIdsKey.split(',').filter(Boolean) : [];
+    if (uniqueIds.length === 0) {
+      setPeerMap({});
+      return;
+    }
     Promise.all(
       uniqueIds.map(async (uid) => {
         try {
@@ -136,7 +144,7 @@ export default function ChatList({
     return () => {
       cancelled = true;
     };
-  }, [matches, currentUser.uid]);
+  }, [peerIdsKey]);
 
   const blockedSet = new Set(currentUser?.blockedUsers || []);
   const visibleMatches = useMemo(() => {
@@ -417,7 +425,7 @@ export default function ChatList({
               };
 
               const online = isUserActuallyOnline(livePeer);
-              const unread = isMatchUnread(match, currentUser.uid);
+              const unread = isMatchUnread(match, currentUser.uid, optimisticReadMap[match.id]);
               const sentByMe = match.lastSenderId === currentUser.uid;
               const verified = isProfileVerified(livePeer);
 

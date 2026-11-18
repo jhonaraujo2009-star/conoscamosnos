@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
+import { doc, onSnapshot } from 'firebase/firestore';
 import {
   ArrowLeft,
   BadgeCheck,
   Ban,
   CheckCheck,
+  Crown,
   Flag,
   Gift,
   ImagePlus,
@@ -16,6 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { REPORT_REASONS } from '../../config/constants';
+import { db } from '../../config/firebase';
 import {
   markChatAsRead,
   sendImageMessage,
@@ -30,6 +33,7 @@ import {
   formatRelativeLastSeen,
   getDisplayAge,
   getPrimaryPhoto,
+  isGiftChatUnlocked,
   isProfileVerified,
   isUserActuallyOnline,
   optimizeCloudinaryUrl,
@@ -43,12 +47,14 @@ export default function ChatRoom({
   peerUser,
   currentUser,
   onBack,
+  onMarkRead,
   onOpenProfile,
   onOpenCoinStore,
   onSuccess,
   onError,
 }) {
   const [livePeer, setLivePeer] = useState(peerUser);
+  const [liveMatch, setLiveMatch] = useState(match);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -64,6 +70,10 @@ export default function ChatRoom({
   const imageInputRef = useRef(null);
   const initializedRef = useRef(false);
   const seenIdsRef = useRef(new Set());
+  const livePeerRef = useRef(livePeer);
+  livePeerRef.current = livePeer;
+  const onMarkReadRef = useRef(onMarkRead);
+  onMarkReadRef.current = onMarkRead;
 
   const peerId =
     peerUser?.uid ||
@@ -88,10 +98,26 @@ export default function ChatRoom({
   }, [peerId]);
 
   useEffect(() => {
+    setLiveMatch(match);
+    if (!match?.id || !isParticipant || !db) return;
+    const unsub = onSnapshot(
+      doc(db, 'matches', match.id),
+      (snap) => {
+        if (snap.exists()) {
+          setLiveMatch({ id: snap.id, ...snap.data() });
+        }
+      },
+      () => {}
+    );
+    return () => unsub();
+  }, [match?.id, isParticipant]);
+
+  useEffect(() => {
     if (!match?.id || !isParticipant) return;
     initializedRef.current = false;
     seenIdsRef.current = new Set();
 
+    onMarkReadRef.current?.(match.id);
     markChatAsRead(match.id, currentUser.uid);
 
     const unsub = subscribeChatMessages(match.id, (list) => {
@@ -103,6 +129,7 @@ export default function ChatRoom({
           if (!seenIdsRef.current.has(msg.id)) {
             seenIdsRef.current.add(msg.id);
             if (msg.senderId !== currentUser.uid) {
+              onMarkReadRef.current?.(match.id);
               markChatAsRead(match.id, currentUser.uid);
             }
             if (msg.type === 'gift' && msg.senderId !== currentUser.uid) {
@@ -111,7 +138,7 @@ export default function ChatRoom({
                 giftName: msg.giftName,
                 giftValue: msg.giftValue,
                 diamondsCredited: msg.diamondsCredited,
-                senderName: msg.senderName || livePeer?.name,
+                senderName: msg.senderName || livePeerRef.current?.name,
                 isReceiver: true,
               });
             }
@@ -269,6 +296,22 @@ export default function ChatRoom({
   const verified = isProfileVerified(livePeer);
   const visibleAge = getDisplayAge(livePeer);
 
+  const isBlockedEitherWay = Boolean(
+    (Array.isArray(currentUser?.blockedUsers) && currentUser.blockedUsers.includes(peerId)) ||
+      (Array.isArray(livePeer?.blockedUsers) && livePeer.blockedUsers.includes(currentUser?.uid))
+  );
+
+  const hasAlreadySentGiftOrPeerReplied = messages.some(
+    (m) =>
+      m.senderId === peerId ||
+      (m.senderId === currentUser.uid && m.type === 'gift')
+  );
+  const isGiftRequiredLock = Boolean(
+    livePeer?.requireGiftToChat &&
+      !isGiftChatUnlocked(liveMatch, currentUser.uid, livePeer) &&
+      !hasAlreadySentGiftOrPeerReplied
+  );
+
   const icebreakers = [
     `👋 ¡Hola ${livePeer?.name?.split(' ')[0] || ''}! Qué gusto conectar contigo.`,
     `🌎 ¡Hola! ¿Qué tal todo por ${livePeer?.city || livePeer?.country?.name || 'tu ciudad'}?`,
@@ -391,7 +434,7 @@ export default function ChatRoom({
           </div>
 
           {/* Empty state / Icebreakers */}
-          {messages.length === 0 && (
+          {messages.length === 0 && !isBlockedEitherWay && !isGiftRequiredLock && (
             <div className="my-5 p-5 rounded-3xl bg-white border border-zinc-200/80 shadow-card text-center space-y-3">
               <img
                 src={getPrimaryPhoto(livePeer, 200)}
@@ -515,7 +558,36 @@ export default function ChatRoom({
           <div ref={bottomRef} />
         </div>
 
-        {/* Input Toolbar */}
+        {/* Input Toolbar (o bloqueo por seguridad / modo regalo obligatorio) */}
+        {isBlockedEitherWay ? (
+          <div className="p-4 pb-safe border-t border-zinc-200/80 bg-white text-center text-xs font-bold text-zinc-500">
+            🔒 Esta conversación no admite nuevos mensajes porque existe un bloqueo activo.
+          </div>
+        ) : isGiftRequiredLock ? (
+          <div className="p-3.5 pb-safe border-t border-amber-200/80 bg-gradient-to-r from-[#190913] to-[#280C1E] text-white flex items-center justify-between gap-3">
+            <div className="min-w-0 flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-2xl bg-amber-400/20 border border-amber-300/40 text-amber-300 flex items-center justify-center shrink-0">
+                <Crown className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-extrabold text-white truncate">
+                  Chat exclusivo con regalo
+                </p>
+                <p className="text-[11px] text-rose-100/80 truncate">
+                  Envía cualquier regalo (desde 10 🪙) para escribirle.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setGiftPickerOpen(true)}
+              className="px-4 py-2.5 rounded-full bg-gradient-to-r from-amber-300 to-amber-500 text-zinc-950 text-xs font-black shrink-0 shadow hover:brightness-105 transition flex items-center gap-1.5"
+            >
+              <Gift className="w-3.5 h-3.5" />
+              Regalar
+            </button>
+          </div>
+        ) : (
         <form
           onSubmit={handleSendText}
           className="p-3 pb-safe border-t border-zinc-200/80 bg-white flex items-center gap-2"
@@ -567,6 +639,7 @@ export default function ChatRoom({
             className="hidden"
           />
         </form>
+        )}
       </div>
 
       {/* Lightbox para ver foto enviada en pantalla completa */}

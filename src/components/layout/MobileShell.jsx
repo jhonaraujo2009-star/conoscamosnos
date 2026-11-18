@@ -93,7 +93,11 @@ export default function MobileShell({
                       }`}
                     />
                     {item.badge > 0 && (
-                      <span className="absolute -top-1 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-[#FF2E54] text-[10px] font-bold text-white flex items-center justify-center">
+                      <span
+                        className={`absolute -top-1.5 -right-2.5 min-w-[18px] h-[18px] px-1 rounded-full bg-gradient-to-r from-[#FF2E54] to-rose-500 text-[9.5px] font-black text-white flex items-center justify-center shadow-[0_2px_8px_rgba(255,46,84,0.55)] ring-2 ${
+                          isSwipeDark ? 'ring-[#14060D]' : 'ring-white'
+                        }`}
+                      >
                         {item.badge > 99 ? '99+' : item.badge}
                       </span>
                     )}

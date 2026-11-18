@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Bell, Gem, Gift, Lock, MessageCircle, ShieldCheck, X } from 'lucide-react';
 import { getUserById } from '../../services/userService';
 import {
@@ -18,9 +18,11 @@ export default function GiftNotificationsModal({
   onOpenWithdrawals,
 }) {
   const [senderMap, setSenderMap] = useState({});
+  const fetchedSenderIdsRef = useRef(new Set());
 
   useEffect(() => {
     setSenderMap({});
+    fetchedSenderIdsRef.current = new Set();
   }, [userProfile?.uid]);
 
   useEffect(() => {
@@ -30,11 +32,12 @@ export default function GiftNotificationsModal({
       new Set(
         receivedGifts
           .map((g) => g.senderId)
-          .filter((id) => Boolean(id) && !senderMap[id])
+          .filter((id) => Boolean(id) && !fetchedSenderIdsRef.current.has(id))
       )
     ).slice(0, 30);
 
     if (missingIds.length === 0) return;
+    missingIds.forEach((id) => fetchedSenderIdsRef.current.add(id));
 
     let cancelled = false;
     Promise.all(
@@ -60,7 +63,7 @@ export default function GiftNotificationsModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, userProfile?.uid, receivedGifts, senderMap]);
+  }, [isOpen, userProfile?.uid, receivedGifts]);
 
   if (!isOpen || !userProfile?.uid) return null;
 

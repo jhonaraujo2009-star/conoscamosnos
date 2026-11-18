@@ -10,9 +10,11 @@ import {
   Flag,
   Gem,
   ShieldCheck,
+  Tv,
   X,
   XCircle,
 } from 'lucide-react';
+import { subscribeAllAdImpressions } from '../../services/adRewardService';
 import {
   approvePaymentRequest,
   rejectPaymentRequest,
@@ -34,6 +36,7 @@ export default function AdminPanelModal({ isOpen, onClose, userProfile, onSucces
   const [paymentTxs, setPaymentTxs] = useState([]);
   const [withdrawals, setWithdrawals] = useState([]);
   const [reports, setReports] = useState([]);
+  const [adImpressions, setAdImpressions] = useState([]);
   const [busyId, setBusyId] = useState(null);
   const [payoutRefs, setPayoutRefs] = useState({});
   const [previewImg, setPreviewImg] = useState(null);
@@ -44,11 +47,13 @@ export default function AdminPanelModal({ isOpen, onClose, userProfile, onSucces
     const unsubTxs = subscribeAllPaymentTransactions(setPaymentTxs);
     const unsubWithdrawals = subscribeAllWithdrawals(setWithdrawals);
     const unsubReports = subscribeAllReports(setReports);
+    const unsubAds = subscribeAllAdImpressions(setAdImpressions);
     return () => {
       unsubReqs();
       unsubTxs();
       unsubWithdrawals();
       unsubReports();
+      unsubAds();
     };
   }, [isOpen, userProfile?.role]);
 
@@ -234,6 +239,25 @@ export default function AdminPanelModal({ isOpen, onClose, userProfile, onSucces
               <p className="font-display text-base font-extrabold text-slate-900 mt-0.5">
                 {formatUSD(companyStats.netCompanyBalanceUSD)}
               </p>
+            </div>
+
+            <div className="col-span-2 p-3.5 rounded-2xl bg-gradient-to-r from-zinc-900 to-[#230B1A] text-white flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-400/20 border border-amber-300/30 text-amber-300 flex items-center justify-center">
+                  <Tv className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-amber-200">
+                    Publicidad Recompensada
+                  </p>
+                  <p className="text-xs font-bold text-white/90">
+                    {adImpressions.length} anuncios completados (Likes & Chats gratis)
+                  </p>
+                </div>
+              </div>
+              <span className="text-xs font-black text-emerald-300 shrink-0">
+                ~{formatUSD(adImpressions.reduce((acc, a) => acc + Number(a.estimatedRevenueUSD || 0), 0))}
+              </span>
             </div>
           </div>
 

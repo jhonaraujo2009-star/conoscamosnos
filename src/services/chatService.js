@@ -81,6 +81,7 @@ export async function markChatAsRead(matchId, userId) {
   try {
     await updateDoc(doc(db, 'matches', matchId), {
       [`lastReadBy.${userId}`]: serverTimestamp(),
+      [`lastReadByClientMs.${userId}`]: Date.now(),
     });
   } catch {
     // Ignorar si aún no se ha sincronizado el documento
@@ -105,7 +106,9 @@ export async function sendTextMessage({ matchId, senderId, text }) {
     lastMessage: cleanText.slice(0, 90),
     lastSenderId: senderId,
     lastMessageAt: serverTimestamp(),
+    lastMessageClientMs: nowMs,
     [`lastReadBy.${senderId}`]: serverTimestamp(),
+    [`lastReadByClientMs.${senderId}`]: nowMs,
   });
 }
 
@@ -127,7 +130,9 @@ export async function sendImageMessage({ matchId, senderId, imageUrl }) {
     lastMessage: '📷 Foto enviada',
     lastSenderId: senderId,
     lastMessageAt: serverTimestamp(),
+    lastMessageClientMs: nowMs,
     [`lastReadBy.${senderId}`]: serverTimestamp(),
+    [`lastReadByClientMs.${senderId}`]: nowMs,
   });
 }
 
@@ -169,6 +174,13 @@ export async function sendVirtualGift({ matchId = null, sender, receiver, gift }
 
     const senderData = senderSnap.data();
     const receiverData = receiverSnap.data();
+
+    if (
+      (Array.isArray(senderData.blockedUsers) && senderData.blockedUsers.includes(receiverId)) ||
+      (Array.isArray(receiverData.blockedUsers) && receiverData.blockedUsers.includes(senderId))
+    ) {
+      throw new Error('No puedes enviar regalos a este perfil porque existe un bloqueo activo.');
+    }
 
     const senderCoins = Number(senderData.coins || 0);
     if (senderCoins < gift.price) {
@@ -225,22 +237,33 @@ export async function sendVirtualGift({ matchId = null, sender, receiver, gift }
     };
 
     if (matchSnap.exists()) {
+      const existingMatch = matchSnap.data() || {};
+      const nextGiftUnlocked = {
+        ...(existingMatch.giftUnlockedBy || {}),
+        [senderId]: true,
+      };
       transaction.update(matchRef, {
         participantProfiles,
+        giftUnlockedBy: nextGiftUnlocked,
         lastMessage: `${gift.icon} Envió ${gift.name} (${gift.price} monedas)`,
         lastSenderId: senderId,
         lastMessageAt: serverTimestamp(),
+        lastMessageClientMs: nowMs,
         [`lastReadBy.${senderId}`]: serverTimestamp(),
+        [`lastReadByClientMs.${senderId}`]: nowMs,
       });
     } else {
       transaction.set(matchRef, {
         participants: [senderId, receiverId].sort(),
         participantProfiles,
         isVipDirect: false,
+        giftUnlockedBy: { [senderId]: true },
         lastMessage: `${gift.icon} Envió ${gift.name} (${gift.price} monedas)`,
         lastSenderId: senderId,
         lastMessageAt: serverTimestamp(),
-        [`lastReadBy.${senderId}`]: serverTimestamp(),
+        lastMessageClientMs: nowMs,
+        lastReadBy: { [senderId]: serverTimestamp() },
+        lastReadByClientMs: { [senderId]: nowMs },
         createdAt: serverTimestamp(),
       });
     }

@@ -64,11 +64,12 @@ export async function checkConnectionStatus(currentUid, targetUid) {
     iLiked: likeSnap.exists(),
     isMatched: matchSnap.exists(),
     matchId,
+    matchData: matchSnap.exists() ? { id: matchSnap.id, ...matchSnap.data() } : null,
   };
 }
 
 /**
- * Abre o crea una sala de chat privada 1-a-1 entre dos perfiles independientes (gratis).
+ * Abre o crea una sala de chat privada 1-a-1 entre dos perfiles independientes.
  * Garantiza que únicamente los 2 participantes tengan acceso a la conversación.
  */
 export async function openOrCreateDirectChat({ currentUser, targetUser }) {
@@ -87,6 +88,7 @@ export async function openOrCreateDirectChat({ currentUser, targetUser }) {
 
   const matchId = buildMatchId(fromUid, toUid);
   const matchRef = doc(db, 'matches', matchId);
+  const nowMs = Date.now();
 
   const txResult = await runTransaction(db, async (transaction) => {
     const matchSnap = await transaction.get(matchRef);
@@ -115,9 +117,13 @@ export async function openOrCreateDirectChat({ currentUser, targetUser }) {
         [toUid]: buildParticipantSnapshot(targetUser),
       },
       isVipDirect: false,
+      giftUnlockedBy: {},
       lastMessage: '🔒 Chat privado iniciado. ¡Saluda!',
-      lastSenderId: fromUid,
+      lastSenderId: '',
       lastMessageAt: serverTimestamp(),
+      lastMessageClientMs: nowMs,
+      lastReadBy: { [fromUid]: serverTimestamp() },
+      lastReadByClientMs: { [fromUid]: nowMs },
       createdAt: serverTimestamp(),
     };
 
@@ -184,6 +190,7 @@ export async function sendLike({ currentUser, targetUser, likedPhotoUrl = '' }) 
     });
 
     if (isMutual && !matchSnap.exists()) {
+      const matchNowMs = Date.now();
       transaction.set(matchRef, {
         participants: [fromUid, toUid].sort(),
         participantProfiles: {
@@ -191,9 +198,13 @@ export async function sendLike({ currentUser, targetUser, likedPhotoUrl = '' }) 
           [toUid]: buildParticipantSnapshot(targetUser),
         },
         isVipDirect: false,
+        giftUnlockedBy: {},
         lastMessage: '🎉 ¡Hicieron Match! Envía el primer mensaje.',
         lastSenderId: fromUid,
         lastMessageAt: serverTimestamp(),
+        lastMessageClientMs: matchNowMs,
+        lastReadBy: { [fromUid]: serverTimestamp() },
+        lastReadByClientMs: { [fromUid]: matchNowMs },
         createdAt: serverTimestamp(),
       });
     }

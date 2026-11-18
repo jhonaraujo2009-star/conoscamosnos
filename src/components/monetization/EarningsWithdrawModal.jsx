@@ -14,6 +14,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { ECONOMY_CONFIG, WITHDRAWAL_PAYOUT_METHODS } from '../../config/constants';
+import { subscribeUserPayoutAccount } from '../../services/userService';
 import {
   convertDiamondsToCoins,
   requestDiamondsWithdrawal,
@@ -37,6 +38,7 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
   const [swapAmount, setSwapAmount] = useState(Math.max(MIN_SWAP_DIAMONDS, availableDiamonds));
   const [selectedMethod, setSelectedMethod] = useState(WITHDRAWAL_PAYOUT_METHODS[0]);
   const [payoutDetails, setPayoutDetails] = useState('');
+  const [savedPayoutAccount, setSavedPayoutAccount] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [swapping, setSwapping] = useState(false);
   const [withdrawals, setWithdrawals] = useState([]);
@@ -49,8 +51,22 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
         : ECONOMY_CONFIG.minWithdrawalDiamonds
     );
     setSwapAmount(availableDiamonds >= MIN_SWAP_DIAMONDS ? availableDiamonds : MIN_SWAP_DIAMONDS);
-    const unsub = subscribeMyWithdrawals(userProfile.uid, setWithdrawals);
-    return () => unsub();
+    const unsubW = subscribeMyWithdrawals(userProfile.uid, setWithdrawals);
+    const unsubPayout = subscribeUserPayoutAccount(userProfile.uid, (saved) => {
+      setSavedPayoutAccount(saved);
+      if (saved?.accountValue) {
+        const matched = WITHDRAWAL_PAYOUT_METHODS.find((m) => m.id === saved.methodId);
+        if (matched) setSelectedMethod(matched);
+        const formatted = saved.holderName
+          ? `${saved.accountValue} (${saved.holderName})`
+          : saved.accountValue;
+        setPayoutDetails((prev) => (prev ? prev : formatted));
+      }
+    });
+    return () => {
+      unsubW();
+      unsubPayout();
+    };
   }, [isOpen, userProfile?.uid, availableDiamonds]);
 
   if (!isOpen) return null;
@@ -291,9 +307,30 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
             </div>
 
             <div>
-              <label className="text-xs text-slate-600 font-bold block mb-1">
-                Datos de tu billetera / cuenta
-              </label>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <label className="text-xs text-slate-600 font-bold">
+                  Datos de tu billetera / cuenta
+                </label>
+                {savedPayoutAccount?.accountValue && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const matched = WITHDRAWAL_PAYOUT_METHODS.find(
+                        (m) => m.id === savedPayoutAccount.methodId
+                      );
+                      if (matched) setSelectedMethod(matched);
+                      setPayoutDetails(
+                        savedPayoutAccount.holderName
+                          ? `${savedPayoutAccount.accountValue} (${savedPayoutAccount.holderName})`
+                          : savedPayoutAccount.accountValue
+                      );
+                    }}
+                    className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full hover:bg-emerald-100 transition"
+                  >
+                    ✓ Usar guardada ({savedPayoutAccount.methodName?.split(' ')[0]})
+                  </button>
+                )}
+              </div>
               <input
                 type="text"
                 value={payoutDetails}

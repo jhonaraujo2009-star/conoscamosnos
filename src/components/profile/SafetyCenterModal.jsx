@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Ban,
@@ -71,6 +71,7 @@ export default function SafetyCenterModal({
   const [reportUserMap, setReportUserMap] = useState({});
   const [reportsError, setReportsError] = useState('');
   const [busyUid, setBusyUid] = useState('');
+  const fetchedReportUsersRef = useRef(new Set());
 
   useEffect(() => {
     if (isOpen) {
@@ -84,6 +85,7 @@ export default function SafetyCenterModal({
     setReports([]);
     setReportUserMap({});
     setReportsError('');
+    fetchedReportUsersRef.current = new Set();
   }, [userProfile?.uid]);
 
   const blockedIds = useMemo(
@@ -152,11 +154,12 @@ export default function SafetyCenterModal({
     const missingIds = Array.from(
       new Set(
         reports
-          .filter((r) => r.reportedUserId && !r.reportedUserName && !reportUserMap[r.reportedUserId])
+          .filter((r) => r.reportedUserId && !r.reportedUserName && !fetchedReportUsersRef.current.has(r.reportedUserId))
           .map((r) => r.reportedUserId)
       )
     );
     if (missingIds.length === 0) return;
+    missingIds.forEach((id) => fetchedReportUsersRef.current.add(id));
 
     let cancelled = false;
     Promise.all(
@@ -182,7 +185,7 @@ export default function SafetyCenterModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, reports, reportUserMap]);
+  }, [isOpen, reports]);
 
   if (!isOpen || !userProfile?.uid) return null;
 

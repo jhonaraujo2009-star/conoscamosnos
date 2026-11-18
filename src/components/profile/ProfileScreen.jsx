@@ -5,7 +5,9 @@ import {
   Briefcase,
   CheckCircle2,
   ChevronRight,
+  Crown,
   Flame,
+  Gift,
   GraduationCap,
   Heart,
   Home,
@@ -70,6 +72,7 @@ export default function ProfileScreen({
   const [promptDraft, setPromptDraft] = useState('');
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [togglingGiftGate, setTogglingGiftGate] = useState(false);
   const [uploadingQuickPhoto, setUploadingQuickPhoto] = useState(false);
   const quickFileInputRef = useRef(null);
 
@@ -263,6 +266,24 @@ export default function ProfileScreen({
   const verified = isProfileVerified(userProfile);
   const completion = calculateProfileCompletion(userProfile);
   const isOwnerSession = Boolean(currentAuthUid && userProfile?.uid && currentAuthUid === userProfile.uid);
+
+  const handleToggleGiftGate = async () => {
+    if (!isOwnerSession || togglingGiftGate) return;
+    const nextVal = !userProfile?.requireGiftToChat;
+    setTogglingGiftGate(true);
+    try {
+      await updateUserProfile(userProfile.uid, { requireGiftToChat: nextVal });
+      onSuccess?.(
+        nextVal
+          ? '👑 Modo Creador activado: solo recibirás chats nuevos de quienes te envíen un regalo.'
+          : 'Chat abierto: ahora cualquier persona puede iniciar conversación contigo.'
+      );
+    } catch (err) {
+      onError?.(err.message || 'No se pudo actualizar esta opción.');
+    } finally {
+      setTogglingGiftGate(false);
+    }
+  };
 
   // Chips 100% dinámicos conectados a los campos reales del usuario
   const quickChips = [
@@ -616,6 +637,65 @@ export default function ProfileScreen({
             </button>
           }
         />
+
+        {/* 6.5 OPCIÓN DE MONETIZACIÓN OPCIONAL: SOLO RECIBIR CHAT CON REGALO */}
+        {isOwnerSession && (
+          <section className="relative overflow-hidden rounded-3xl p-4 bg-gradient-to-br from-[#190813] via-[#270B1C] to-[#130912] border border-amber-300/25 shadow-lg text-white">
+            <div className="absolute -right-8 -top-8 w-28 h-28 rounded-full bg-amber-400/15 blur-2xl pointer-events-none" />
+            <div className="relative flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-300 via-amber-400 to-rose-500 text-zinc-950 flex items-center justify-center shrink-0 shadow">
+                  <Crown className="w-5 h-5 stroke-[2.3]" />
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <h3 className="text-xs sm:text-sm font-extrabold text-white leading-tight">
+                      Solo recibir chat si envían un regalo
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/15 text-[9.5px] font-extrabold uppercase tracking-wider text-amber-200">
+                      Opcional
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-rose-100/75 leading-relaxed">
+                    Ideal si deseas monetizar tu perfil: quien quiera abrir un chat nuevo contigo deberá enviarte cualquier regalo virtual (desde 🌹 10 monedas = 10 💎 retirables).
+                  </p>
+                  <div className="pt-0.5 flex items-center gap-2">
+                    <span
+                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                        userProfile?.requireGiftToChat
+                          ? 'bg-emerald-500/20 border border-emerald-400/40 text-emerald-300'
+                          : 'bg-white/10 text-zinc-300'
+                      }`}
+                    >
+                      <Gift className="w-3 h-3" />
+                      {userProfile?.requireGiftToChat ? 'Monetización de chat activa' : 'Chat libre (sin regalo)'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                role="switch"
+                aria-checked={Boolean(userProfile?.requireGiftToChat)}
+                disabled={togglingGiftGate}
+                onClick={handleToggleGiftGate}
+                className={`relative w-12 h-7 rounded-full shrink-0 transition-colors duration-200 mt-0.5 ${
+                  userProfile?.requireGiftToChat
+                    ? 'bg-gradient-to-r from-amber-400 to-[#FF2E54]'
+                    : 'bg-white/20'
+                } disabled:opacity-50`}
+                title="Activar o desactivar chat exclusivo con regalo"
+              >
+                <span
+                  className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white shadow-md transition-transform duration-200 ${
+                    userProfile?.requireGiftToChat ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          </section>
+        )}
 
         {/* 7. BOTÓN EXCLUSIVO PARA EDITAR INFORMACIÓN PÚBLICA */}
         <button

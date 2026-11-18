@@ -173,6 +173,25 @@ export const CHECKOUT_CONFIG = {
   paypalBaseUrl: import.meta.env.VITE_PAYPAL_CHECKOUT_BASE || 'https://www.paypal.com/paypalme/conoscamosnos',
 };
 
+export const ENABLE_DEMO_PAYMENTS = import.meta.env.VITE_ENABLE_DEMO_PAYMENTS === 'true';
+
+/**
+ * Configuración del sistema de Publicidad Recompensada (Rewarded Ads) vs. Monedas:
+ * - provider: 'adsense_h5' | 'monetag' | 'adsterra' | 'custom_url' | 'preview'
+ * - Permite desbloquear Likes y enviar mensajes gratis viendo publicidad, generando ingresos a la plataforma.
+ */
+export const AD_REWARD_CONFIG = {
+  provider: import.meta.env.VITE_AD_PROVIDER || 'preview',
+  adDurationSeconds: Math.max(5, Number(import.meta.env.VITE_AD_DURATION_SECONDS || 8)),
+  adsenseClient: import.meta.env.VITE_ADSENSE_CLIENT || '',
+  monetagZoneId: import.meta.env.VITE_MONETAG_ZONE_ID || '',
+  adsterraDirectLink: import.meta.env.VITE_ADSTERRA_DIRECT_LINK || '',
+  customSponsorUrl: import.meta.env.VITE_CUSTOM_SPONSOR_URL || '',
+  unlockLikeCoins: 15,
+  unlockAllLikesCoins: 45,
+  unlockLikeChatCoins: 20,
+};
+
 export const LOOKING_FOR_OPTIONS = [
   'Nada serio',
   'Pareja estable',

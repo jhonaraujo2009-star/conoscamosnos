@@ -11,6 +11,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
 } from 'firebase/firestore';
@@ -76,9 +77,49 @@ export async function updateUserProfile(uid, updates) {
   if (typeof updates.hideDistance === 'boolean') sanitized.hideDistance = updates.hideDistance;
   if (typeof updates.hideOnlineStatus === 'boolean') sanitized.hideOnlineStatus = updates.hideOnlineStatus;
   if (typeof updates.discoverable === 'boolean') sanitized.discoverable = updates.discoverable;
+  if (typeof updates.requireGiftToChat === 'boolean') {
+    sanitized.requireGiftToChat = updates.requireGiftToChat;
+  }
   if (updates.approxGeo !== undefined) sanitized.approxGeo = updates.approxGeo;
 
   await updateDoc(doc(db, 'users', uid), sanitized);
+}
+
+/**
+ * Guarda la cuenta de cobro privada del usuario (Binance Pay, PayPal, banco, etc.)
+ * en la subcolección estrictamente privada users/{uid}/private/payout.
+ */
+export async function saveUserPayoutAccount(uid, { methodId, methodName, accountValue, holderName = '' }) {
+  if (!uid) throw new Error('Sesión inválida.');
+  const cleanAccount = String(accountValue || '').trim();
+  if (cleanAccount.length < 4) {
+    throw new Error('Ingresa un número de cuenta, ID de Binance o correo de PayPal válido.');
+  }
+  await setDoc(
+    doc(db, 'users', uid, 'private', 'payout'),
+    {
+      methodId: String(methodId || 'binance_pay'),
+      methodName: String(methodName || 'Binance Pay (USDT)'),
+      accountValue: cleanAccount,
+      holderName: String(holderName || '').trim(),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+export function subscribeUserPayoutAccount(uid, callback) {
+  if (!uid || !db) {
+    callback(null);
+    return () => {};
+  }
+  return onSnapshot(
+    doc(db, 'users', uid, 'private', 'payout'),
+    (snap) => {
+      callback(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+    },
+    () => callback(null)
+  );
 }
 
 export async function updatePresence(uid, isOnline) {

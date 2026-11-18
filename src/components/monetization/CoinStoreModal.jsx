@@ -16,7 +16,12 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
-import { COIN_PACKAGES, DIRECT_PAYMENT_METHODS, ECONOMY_CONFIG } from '../../config/constants';
+import {
+  COIN_PACKAGES,
+  DIRECT_PAYMENT_METHODS,
+  ECONOMY_CONFIG,
+  ENABLE_DEMO_PAYMENTS,
+} from '../../config/constants';
 import { getUserCloudinaryFolder, uploadImageToCloudinary } from '../../services/cloudinaryService';
 import {
   buildCheckoutUrl,
@@ -299,34 +304,36 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
                 </a>
               </div>
 
-              {/* Webhook Simulator for immediate testing */}
-              <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200 space-y-2.5">
-                <div className="flex items-center gap-2 text-amber-800 text-xs font-extrabold">
-                  <Sparkles className="w-4 h-4 text-amber-600" />
-                  Recarga Instantánea de Prueba (Modo Demo)
+              {/* Webhook Simulator: restringido a Super Admin o entorno explícito de pruebas */}
+              {(userProfile?.role === 'admin' || ENABLE_DEMO_PAYMENTS) && (
+                <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200 space-y-2.5">
+                  <div className="flex items-center gap-2 text-amber-800 text-xs font-extrabold">
+                    <Sparkles className="w-4 h-4 text-amber-600" />
+                    Recarga Instantánea de Prueba (Solo Admin / Demo)
+                  </div>
+                  <p className="text-[11px] text-amber-900/80 leading-relaxed font-medium">
+                    Acredita <strong>+{selectedPkg.coins} monedas</strong> al instante a tu cuenta para auditar regalos, Boost VIP y funciones premium.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      disabled={simulating}
+                      onClick={() => handleSimulateWebhook('lemonsqueezy')}
+                      className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-white text-xs font-extrabold shadow-sm hover:brightness-105 disabled:opacity-50 transition"
+                    >
+                      {simulating ? 'Acreditando...' : 'Simular Tarjeta'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={simulating}
+                      onClick={() => handleSimulateWebhook('paypal')}
+                      className="py-2.5 px-3 rounded-xl bg-white text-amber-800 border border-amber-300 text-xs font-extrabold hover:bg-amber-100/60 disabled:opacity-50 transition"
+                    >
+                      {simulating ? 'Acreditando...' : 'Simular PayPal'}
+                    </button>
+                  </div>
                 </div>
-                <p className="text-[11px] text-amber-900/80 leading-relaxed font-medium">
-                  Acredita <strong>+{selectedPkg.coins} monedas</strong> al instante a tu perfil para probar regalos, Boost VIP y funciones premium.
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    disabled={simulating}
-                    onClick={() => handleSimulateWebhook('lemonsqueezy')}
-                    className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-white text-xs font-extrabold shadow-sm hover:brightness-105 disabled:opacity-50 transition"
-                  >
-                    {simulating ? 'Acreditando...' : 'Simular Tarjeta'}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={simulating}
-                    onClick={() => handleSimulateWebhook('paypal')}
-                    className="py-2.5 px-3 rounded-xl bg-white text-amber-800 border border-amber-300 text-xs font-extrabold hover:bg-amber-100/60 disabled:opacity-50 transition"
-                  >
-                    {simulating ? 'Acreditando...' : 'Simular PayPal'}
-                  </button>
-                </div>
-              </div>
+              )}
             </div>
           )}
 

@@ -223,13 +223,34 @@ export function formatMessageTime(ts, fallbackMs) {
   }
 }
 
-export function isMatchUnread(match, currentUid) {
+export function isMatchUnread(match, currentUid, optimisticReadMs = 0) {
   if (!match || !currentUid) return false;
   if (!match.lastSenderId || match.lastSenderId === currentUid) return false;
-  const lastMsgMs = toMillis(match.lastMessageAt);
-  const lastReadMs = toMillis(match.lastReadBy?.[currentUid]);
-  if (!lastMsgMs) return true;
+  const lastMsgMs = Math.max(
+    toMillis(match.lastMessageAt),
+    Number(match.lastMessageClientMs || 0)
+  );
+  const lastReadMs = Math.max(
+    toMillis(match.lastReadBy?.[currentUid]),
+    Number(match.lastReadByClientMs?.[currentUid] || 0),
+    Number(optimisticReadMs || 0)
+  );
+  if (!lastMsgMs) return lastReadMs === 0;
   return lastMsgMs > lastReadMs;
+}
+
+/**
+ * Determina si un usuario ya tiene permiso de enviar mensajes a un perfil que exige regalo previo.
+ */
+export function isGiftChatUnlocked(match, senderUid, targetUser) {
+  if (!targetUser?.requireGiftToChat) return true;
+  const targetUid = targetUser.uid || targetUser.id;
+  if (!senderUid || !targetUid || senderUid === targetUid) return true;
+  if (!match) return false;
+  if (match.giftUnlockedBy?.[senderUid] === true) return true;
+  // Si el propio creador ya envió mensaje al usuario en esta sala, la conversación queda abierta
+  if (match.lastSenderId === targetUid) return true;
+  return false;
 }
 
 export function optimizeCloudinaryUrl(url, width = 800) {

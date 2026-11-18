@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from '../config/firebase';
@@ -11,6 +11,7 @@ export function AuthProvider({ children }) {
   const [firebaseUser, setFirebaseUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const sessionSeqRef = useRef(0);
 
   useEffect(() => {
     if (!isFirebaseConfigured || !auth || !db) {
@@ -21,6 +22,8 @@ export function AuthProvider({ children }) {
     let unsubscribeProfile = null;
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      const seq = ++sessionSeqRef.current;
+
       if (unsubscribeProfile) {
         unsubscribeProfile();
         unsubscribeProfile = null;
@@ -41,10 +44,14 @@ export function AuthProvider({ children }) {
         console.error('Error asegurando documento de usuario:', err);
       }
 
+      // Evitar condiciones de carrera si el usuario cambió o cerró sesión durante ensureUserDocument
+      if (seq !== sessionSeqRef.current) return;
+
       const userRef = doc(db, 'users', user.uid);
       unsubscribeProfile = onSnapshot(
         userRef,
         (snapshot) => {
+          if (seq !== sessionSeqRef.current) return;
           if (snapshot.exists()) {
             setUserProfile({ uid: snapshot.id, id: snapshot.id, ...snapshot.data() });
           } else {
@@ -53,6 +60,7 @@ export function AuthProvider({ children }) {
           setLoading(false);
         },
         (error) => {
+          if (seq !== sessionSeqRef.current) return;
           console.error('Error escuchando perfil:', error);
           setLoading(false);
         }
@@ -60,6 +68,7 @@ export function AuthProvider({ children }) {
     });
 
     return () => {
+      sessionSeqRef.current += 1;
       unsubscribeAuth();
       if (unsubscribeProfile) unsubscribeProfile();
     };

@@ -1,16 +1,19 @@
 import { useState } from 'react';
 import {
   AlertCircle,
+  Crown,
   Download,
   Eye,
   EyeOff,
   Flame,
+  Gem,
   Globe,
   Lock,
   Mail,
   MessageCircleHeart,
   ShieldCheck,
   Smartphone,
+  Sparkles,
   User,
 } from 'lucide-react';
 import { isFirebaseConfigured } from '../../config/firebase';
@@ -102,7 +105,7 @@ export default function AuthScreen() {
   const handleInstallAndroid = async () => {
     if (canInstallNative) {
       const res = await promptInstall();
-      if (res?.outcome === 'accepted') {
+      if (res?.status === 'accepted') {
         setInstallHint('¡Listo! La app se está instalando en tu dispositivo.');
       } else {
         setInstallHint('Si cerraste el aviso, abre el menú (⋮) de Chrome → «Instalar aplicación».');
@@ -125,10 +128,10 @@ export default function AuthScreen() {
   };
 
   return (
-    <div className="h-[100dvh] w-screen overflow-y-auto bg-luxury-mesh flex items-center justify-center p-4 sm:p-6 relative">
-      <div className="w-full max-w-md bg-white/95 border border-zinc-200/80 rounded-[32px] p-6 sm:p-8 shadow-luxury backdrop-blur-xl relative z-10 animate-sheet-up">
+    <div className="h-[100dvh] w-screen overflow-y-auto bg-luxury-mesh flex items-start sm:items-center justify-center p-4 sm:p-6 relative">
+      <div className="w-full max-w-md my-auto bg-white/95 border border-zinc-200/80 rounded-[32px] p-6 sm:p-8 shadow-luxury backdrop-blur-xl relative z-10 animate-sheet-up">
         {/* Brand Hero */}
-        <div className="flex flex-col items-center text-center mb-6">
+        <div className="flex flex-col items-center text-center mb-5">
           <div className="w-16 h-16 rounded-[22px] bg-gradient-to-br from-[#FF2E54] via-rose-500 to-amber-400 flex items-center justify-center shadow-lg shadow-[#FF2E54]/30 mb-3.5 ring-4 ring-rose-100/80">
             <Flame className="w-8 h-8 text-white fill-white" />
           </div>
@@ -151,6 +154,33 @@ export default function AuthScreen() {
             <span className="px-2.5 py-1 rounded-full bg-zinc-100 border border-zinc-200/80 text-[11px] font-bold text-zinc-700 flex items-center gap-1">
               <Globe className="w-3 h-3 text-zinc-500" /> Global
             </span>
+          </div>
+        </div>
+
+        {/* Luxury VIP Creator Monetization Highlight Banner */}
+        <div className="mb-5 relative overflow-hidden rounded-[24px] p-4 bg-gradient-to-br from-[#190913] via-[#280B1C] to-[#120A14] border border-amber-300/30 shadow-lg text-white">
+          <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-amber-400/15 blur-2xl pointer-events-none" />
+          <div className="absolute -left-6 -bottom-6 w-20 h-20 rounded-full bg-[#FF2E54]/20 blur-2xl pointer-events-none" />
+          <div className="relative flex items-start gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-300 via-amber-400 to-rose-500 text-zinc-950 flex items-center justify-center shrink-0 shadow-md">
+              <Crown className="w-5 h-5 stroke-[2.3]" />
+            </div>
+            <div className="min-w-0 space-y-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="px-2 py-0.5 rounded-full bg-amber-400/20 border border-amber-300/35 text-amber-200 text-[9.5px] font-black uppercase tracking-wider inline-flex items-center gap-1">
+                  <Sparkles className="w-2.5 h-2.5" /> Programa Creador VIP
+                </span>
+                <span className="text-[10px] font-bold text-emerald-300 inline-flex items-center gap-0.5">
+                  <Gem className="w-3 h-3 text-sky-300" /> Retiros en $ USD
+                </span>
+              </div>
+              <p className="font-display text-[13px] font-extrabold text-white leading-snug">
+                Convierte los regalos y diamantes que recibas en dinero real
+              </p>
+              <p className="text-[11px] text-rose-100/80 leading-relaxed">
+                Monetiza tu perfil de forma opcional y cobra tus ganancias directo a <strong>Binance Pay</strong> o <strong>PayPal</strong>.
+              </p>
+            </div>
           </div>
         </div>
 

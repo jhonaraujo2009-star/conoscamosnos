@@ -1292,23 +1292,35 @@ export default function DiscoverSwipe({
                 </p>
               </div>
 
-              {/* Rompehielos instantáneos */}
-              <div className="space-y-1.5 text-left pt-1">
-                <p className="text-[10px] font-extrabold uppercase tracking-wider text-rose-200/75 text-center">
-                  Rompe el hielo con 1 toque
-                </p>
-                {icebreakers.map((msg) => (
-                  <button
-                    key={msg}
-                    type="button"
-                    disabled={sendingIcebreaker}
-                    onClick={() => sendQuickIcebreaker(msg)}
-                    className="w-full px-3.5 py-2.5 rounded-2xl bg-black/35 hover:bg-black/55 border border-white/15 text-white text-xs font-semibold text-left transition active:scale-[0.99] disabled:opacity-50"
-                  >
-                    {msg}
-                  </button>
-                ))}
-              </div>
+              {/* Rompehielos instantáneos (o aviso si el perfil exige regalo previo) */}
+              {target.requireGiftToChat ? (
+                <div className="p-3.5 rounded-2xl bg-black/40 border border-amber-300/35 text-center space-y-2">
+                  <p className="text-xs font-extrabold text-amber-200 flex items-center justify-center gap-1.5">
+                    <Gift className="w-4 h-4 text-amber-300" />
+                    Chat exclusivo con regalo
+                  </p>
+                  <p className="text-[11px] text-rose-100/80 leading-relaxed">
+                    {target.name} recibe chats nuevos con cualquier regalo virtual. Envíale un detalle para abrir la conversación.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1.5 text-left pt-1">
+                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-rose-200/75 text-center">
+                    Rompe el hielo con 1 toque
+                  </p>
+                  {icebreakers.map((msg) => (
+                    <button
+                      key={msg}
+                      type="button"
+                      disabled={sendingIcebreaker}
+                      onClick={() => sendQuickIcebreaker(msg)}
+                      className="w-full px-3.5 py-2.5 rounded-2xl bg-black/35 hover:bg-black/55 border border-white/15 text-white text-xs font-semibold text-left transition active:scale-[0.99] disabled:opacity-50"
+                    >
+                      {msg}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-2.5 pt-1">
                 <button
@@ -1320,10 +1332,17 @@ export default function DiscoverSwipe({
                 </button>
                 <button
                   type="button"
-                  onClick={openMatchConversation}
+                  onClick={() => {
+                    if (target.requireGiftToChat) {
+                      setMatchPopup(null);
+                      onStartChat?.(target);
+                    } else {
+                      openMatchConversation();
+                    }
+                  }}
                   className={`py-3 rounded-full bg-gradient-to-r ${mood.heartButton} text-white text-xs font-extrabold`}
                 >
-                  Abrir chat
+                  {target.requireGiftToChat ? 'Regalar y chatear' : 'Abrir chat'}
                 </button>
               </div>
             </div>

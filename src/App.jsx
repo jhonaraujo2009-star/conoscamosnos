@@ -2,9 +2,24 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Flame } from 'lucide-react';
 import { getIntentionMood, MIN_AGE } from './config/constants';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { subscribeReceivedGiftTransactions, subscribeUserMatches } from './services/chatService';
-import { openOrCreateDirectChat, subscribeReceivedLikes } from './services/discoveryService';
-import { isMatchUnread } from './utils/formatters';
+import { subscribeUserUnlocks } from './services/adRewardService';
+import {
+  sendVirtualGift,
+  subscribeReceivedGiftTransactions,
+  subscribeUserMatches,
+} from './services/chatService';
+import {
+  checkConnectionStatus,
+  openOrCreateDirectChat,
+  subscribeReceivedLikes,
+} from './services/discoveryService';
+import { getUserById } from './services/userService';
+import {
+  buildMatchId,
+  isGiftChatUnlocked,
+  isMatchUnread,
+  toMillis,
+} from './utils/formatters';
 import AuthScreen from './components/auth/AuthScreen';
 import OnboardingWizard from './components/auth/OnboardingWizard';
 import MobileShell from './components/layout/MobileShell';
@@ -15,6 +30,8 @@ import LikesScreen from './components/discover/LikesScreen';
 import PublicProfileModal from './components/discover/PublicProfileModal';
 import ChatList from './components/chat/ChatList';
 import ChatRoom from './components/chat/ChatRoom';
+import GiftAnimationOverlay from './components/chat/GiftAnimationOverlay';
+import GiftGateChatModal from './components/chat/GiftGateChatModal';
 import ProfileScreen from './components/profile/ProfileScreen';
 import SafetyCenterModal from './components/profile/SafetyCenterModal';
 import CoinStoreModal from './components/monetization/CoinStoreModal';
@@ -22,14 +39,6 @@ import EarningsWithdrawModal from './components/monetization/EarningsWithdrawMod
 import GiftNotificationsModal from './components/monetization/GiftNotificationsModal';
 import BoostModal from './components/home/BoostModal';
 import AdminPanelModal from './components/admin/AdminPanelModal';
-
-function getGiftMillis(ts) {
-  if (!ts) return 0;
-  if (typeof ts.toMillis === 'function') return ts.toMillis();
-  if (typeof ts.seconds === 'number') return ts.seconds * 1000;
-  const parsed = new Date(ts).getTime();
-  return Number.isNaN(parsed) ? 0 : parsed;
-}
 
 function MainApp() {
   const { firebaseUser, userProfile, loading } = useAuth();
@@ -44,9 +53,19 @@ function MainApp() {
   const [matches, setMatches] = useState([]);
   const [receivedLikes, setReceivedLikes] = useState([]);
   const [receivedGifts, setReceivedGifts] = useState([]);
+  const [userUnlocks, setUserUnlocks] = useState({
+    revealedLikeIds: [],
+    chatUnlockedUserIds: [],
+    totalAdsWatched: 0,
+  });
+  const [likesSeenAt, setLikesSeenAt] = useState(0);
   const [giftsSeenAt, setGiftsSeenAt] = useState(0);
+  const [optimisticReadMap, setOptimisticReadMap] = useState({});
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [activeChat, setActiveChat] = useState(null);
+  const [giftGateTarget, setGiftGateTarget] = useState(null);
+  const [sendingGateGiftId, setSendingGateGiftId] = useState(null);
+  const [gateGiftAnim, setGateGiftAnim] = useState(null);
 
   const [coinStoreOpen, setCoinStoreOpen] = useState(false);
   const [withdrawalsOpen, setWithdrawalsOpen] = useState(false);
@@ -96,16 +115,27 @@ function MainApp() {
     setSafetyCenterOpen(false);
     setSafetyInitialTab('blocked');
     setAdminOpen(false);
+    setGiftGateTarget(null);
+    setSendingGateGiftId(null);
+    setGateGiftAnim(null);
     setReceivedGifts([]);
+    setOptimisticReadMap({});
+    setUserUnlocks({ revealedLikeIds: [], chatUnlockedUserIds: [], totalAdsWatched: 0 });
     seenGiftIdsRef.current = new Set();
     giftsLoadedRef.current = false;
     try {
-      const savedSeen = firebaseUser?.uid
+      const savedGiftsSeen = firebaseUser?.uid
         ? Number(localStorage.getItem(`conoscamosnos_gifts_seen_${firebaseUser.uid}`) || 0)
         : 0;
-      setGiftsSeenAt(Number.isNaN(savedSeen) ? 0 : savedSeen);
+      setGiftsSeenAt(Number.isNaN(savedGiftsSeen) ? 0 : savedGiftsSeen);
+
+      const savedLikesSeen = firebaseUser?.uid
+        ? Number(localStorage.getItem(`conoscamosnos_likes_seen_${firebaseUser.uid}`) || 0)
+        : 0;
+      setLikesSeenAt(Number.isNaN(savedLikesSeen) ? 0 : savedLikesSeen);
     } catch {
       setGiftsSeenAt(0);
+      setLikesSeenAt(0);
     }
     setSwipeScope('global');
     setSwipeIntention('Todos');
@@ -120,6 +150,7 @@ function MainApp() {
       setMatches([]);
       setReceivedLikes([]);
       setReceivedGifts([]);
+      setUserUnlocks({ revealedLikeIds: [], chatUnlockedUserIds: [], totalAdsWatched: 0 });
       seenGiftIdsRef.current = new Set();
       giftsLoadedRef.current = false;
       return;
@@ -130,6 +161,7 @@ function MainApp() {
       (err) => console.error('Error suscribiendo matches:', err)
     );
     const unsubLikes = subscribeReceivedLikes(userProfile.uid, setReceivedLikes);
+    const unsubUnlocks = subscribeUserUnlocks(userProfile.uid, setUserUnlocks);
     const unsubGifts = subscribeReceivedGiftTransactions(
       userProfile.uid,
       (list) => {
@@ -156,15 +188,58 @@ function MainApp() {
     return () => {
       unsubMatches();
       unsubLikes();
+      unsubUnlocks();
       unsubGifts();
     };
   }, [userProfile?.uid, userProfile?.onboardingCompleted, handleSuccess]);
+
+  const markLikesAsSeen = useCallback(() => {
+    const now = Date.now();
+    setLikesSeenAt(now);
+    if (userProfile?.uid) {
+      try {
+        localStorage.setItem(`conoscamosnos_likes_seen_${userProfile.uid}`, String(now));
+      } catch {
+        // ignore storage restrictions
+      }
+    }
+  }, [userProfile?.uid]);
+
+  const handleChangeTab = useCallback(
+    (nextTab) => {
+      setActiveTab(nextTab);
+      // Al abrir la pestaña Likes, desaparece inmediatamente la burbuja de Likes.
+      // La burbuja de Chat NO desaparece al abrir la pestaña: solo descuenta al abrir cada conversación.
+      if (nextTab === 'likes') {
+        markLikesAsSeen();
+      }
+    },
+    [markLikesAsSeen]
+  );
+
+  // Si llegan likes nuevos mientras el usuario ya está viendo la pestaña Likes, mantenerlos marcados como vistos
+  useEffect(() => {
+    if (activeTab === 'likes' && receivedLikes.length > 0) {
+      markLikesAsSeen();
+    }
+  }, [activeTab, receivedLikes.length, markLikesAsSeen]);
+
+  const unreadLikesCount = useMemo(() => {
+    if (!userProfile?.uid || activeTab === 'likes') return 0;
+    const blockedSet = new Set(userProfile.blockedUsers || []);
+    return receivedLikes.filter((like) => {
+      if (!like?.fromUserId || blockedSet.has(like.fromUserId)) return false;
+      const ms = toMillis(like.createdAt);
+      if (!likesSeenAt) return true;
+      return ms === 0 || ms > likesSeenAt;
+    }).length;
+  }, [receivedLikes, userProfile?.uid, userProfile?.blockedUsers, likesSeenAt, activeTab]);
 
   const unreadGiftsCount = useMemo(() => {
     if (!userProfile?.uid) return 0;
     return receivedGifts.filter((g) => {
       if (g.receiverId !== userProfile.uid) return false;
-      const ms = getGiftMillis(g.createdAt);
+      const ms = toMillis(g.createdAt);
       if (!giftsSeenAt) return true;
       return ms === 0 || ms > giftsSeenAt;
     }).length;
@@ -183,15 +258,30 @@ function MainApp() {
     setGiftNotificationsOpen(true);
   }, [userProfile?.uid]);
 
+  const handleMarkMatchReadOptimistic = useCallback((matchId) => {
+    if (!matchId) return;
+    setOptimisticReadMap((prev) => ({ ...prev, [matchId]: Date.now() }));
+  }, []);
+
+  const handleOpenChatSession = useCallback(
+    (chatSession) => {
+      if (chatSession?.match?.id) {
+        handleMarkMatchReadOptimistic(chatSession.match.id);
+      }
+      setActiveChat(chatSession);
+    },
+    [handleMarkMatchReadOptimistic]
+  );
+
   const unreadChatsCount = useMemo(() => {
     if (!userProfile?.uid) return 0;
     const blockedSet = new Set(userProfile.blockedUsers || []);
     return matches.filter((m) => {
       const peerId = (m.participants || []).find((p) => p !== userProfile.uid);
       if (!peerId || blockedSet.has(peerId)) return false;
-      return isMatchUnread(m, userProfile.uid);
+      return isMatchUnread(m, userProfile.uid, optimisticReadMap[m.id]);
     }).length;
-  }, [matches, userProfile?.uid, userProfile?.blockedUsers]);
+  }, [matches, userProfile?.uid, userProfile?.blockedUsers, optimisticReadMap]);
 
   const handleStartDirectChat = useCallback(
     async (targetUser) => {
@@ -200,21 +290,83 @@ function MainApp() {
       if (!targetUid || targetUid === userProfile.uid) return;
 
       try {
+        const freshTarget = (await getUserById(targetUid).catch(() => null)) || targetUser;
+
+        if (Array.isArray(userProfile.blockedUsers) && userProfile.blockedUsers.includes(targetUid)) {
+          throw new Error('Desbloquea a este usuario primero para enviarle mensajes.');
+        }
+        if (Array.isArray(freshTarget.blockedUsers) && freshTarget.blockedUsers.includes(userProfile.uid)) {
+          throw new Error('Este perfil no está disponible para recibir mensajes.');
+        }
+
+        const matchId = buildMatchId(userProfile.uid, targetUid);
+        let existingMatch = matches.find((m) => m.id === matchId) || null;
+        if (!existingMatch && freshTarget.requireGiftToChat) {
+          const conn = await checkConnectionStatus(userProfile.uid, targetUid).catch(() => null);
+          existingMatch = conn?.matchData || null;
+        }
+
+        // Si el perfil exige regalo para iniciar chats nuevos y este usuario aún no ha desbloqueado con regalo
+        if (!isGiftChatUnlocked(existingMatch, userProfile.uid, freshTarget)) {
+          setSelectedProfile(null);
+          setGiftGateTarget(freshTarget);
+          return;
+        }
+
         const res = await openOrCreateDirectChat({
           currentUser: userProfile,
-          targetUser,
+          targetUser: freshTarget,
         });
         setSelectedProfile(null);
-        setActiveChat({
+        handleOpenChatSession({
           match: res.matchData,
-          peerUser: targetUser,
+          peerUser: freshTarget,
         });
         setActiveTab('chat');
       } catch (err) {
         handleError(err.message || 'No se pudo abrir la conversación privada.');
       }
     },
-    [userProfile, handleError]
+    [userProfile, matches, handleOpenChatSession, handleError]
+  );
+
+  const handleSendGiftToUnlockChat = useCallback(
+    async (gift) => {
+      if (!userProfile?.uid || !giftGateTarget || sendingGateGiftId) return;
+      setSendingGateGiftId(gift.id);
+      try {
+        const target = giftGateTarget;
+        const res = await sendVirtualGift({
+          sender: userProfile,
+          receiver: target,
+          gift,
+        });
+        setGiftGateTarget(null);
+        setGateGiftAnim({
+          giftIcon: gift.icon,
+          giftName: gift.name,
+          giftValue: gift.price,
+          diamondsCredited: gift.price,
+          isReceiver: false,
+        });
+        handleSuccess(`${gift.icon} ¡Enviaste ${gift.name}! Chat privado desbloqueado con ${target.name}.`);
+        const targetUid = target.uid || target.id;
+        handleOpenChatSession({
+          match: {
+            id: res.matchId,
+            participants: [userProfile.uid, targetUid].sort(),
+            giftUnlockedBy: { [userProfile.uid]: true },
+          },
+          peerUser: target,
+        });
+        setActiveTab('chat');
+      } catch (err) {
+        handleError(err.message || 'No se pudo enviar el regalo.');
+      } finally {
+        setSendingGateGiftId(null);
+      }
+    },
+    [userProfile, giftGateTarget, sendingGateGiftId, handleSuccess, handleOpenChatSession, handleError]
   );
 
   if (loading) {
@@ -258,9 +410,9 @@ function MainApp() {
 
       <MobileShell
         activeTab={activeTab}
-        onChangeTab={setActiveTab}
+        onChangeTab={handleChangeTab}
         unreadBadgeCount={unreadChatsCount}
-        likesBadgeCount={receivedLikes.length}
+        likesBadgeCount={unreadLikesCount}
         themeMood={activeMood}
       >
         <div className={activeTab === 'swipe' ? 'flex-1 h-full min-h-0 flex flex-col' : 'hidden'}>
@@ -280,7 +432,7 @@ function MainApp() {
             onSelectProfile={setSelectedProfile}
             onStartChat={handleStartDirectChat}
             onOpenChat={(chatSession) => {
-              setActiveChat(chatSession);
+              handleOpenChatSession(chatSession);
               setActiveTab('chat');
             }}
             onOpenBoost={() => setBoostOpen(true)}
@@ -310,11 +462,15 @@ function MainApp() {
             key={`likes-${userProfile.uid}`}
             currentUser={userProfile}
             receivedLikes={receivedLikes}
+            matches={matches}
+            userUnlocks={userUnlocks}
             onSelectProfile={setSelectedProfile}
             onStartChat={handleStartDirectChat}
             onOpenCoinStore={() => setCoinStoreOpen(true)}
-            onGoToSwipe={() => setActiveTab('swipe')}
+            onGoToSwipe={() => handleChangeTab('swipe')}
             onOpenBoost={() => setBoostOpen(true)}
+            onSuccess={handleSuccess}
+            onError={handleError}
           />
         )}
 
@@ -323,14 +479,15 @@ function MainApp() {
             key={`chatlist-${userProfile.uid}`}
             matches={matches}
             currentUser={userProfile}
-            onSelectMatch={setActiveChat}
+            optimisticReadMap={optimisticReadMap}
+            onSelectMatch={handleOpenChatSession}
             onStartChat={handleStartDirectChat}
             onSelectProfile={setSelectedProfile}
             onOpenSafetyCenter={(tab = 'blocked') => {
               setSafetyInitialTab(tab);
               setSafetyCenterOpen(true);
             }}
-            onGoToSwipe={() => setActiveTab('swipe')}
+            onGoToSwipe={() => handleChangeTab('swipe')}
           />
         )}
 
@@ -365,7 +522,7 @@ function MainApp() {
         onStartChat={handleStartDirectChat}
         onOpenChat={(chatSession) => {
           setSelectedProfile(null);
-          setActiveChat(chatSession);
+          handleOpenChatSession(chatSession);
           setActiveTab('chat');
         }}
         onOpenCoinStore={() => setCoinStoreOpen(true)}
@@ -379,12 +536,28 @@ function MainApp() {
           peerUser={activeChat.peerUser}
           currentUser={userProfile}
           onBack={() => setActiveChat(null)}
+          onMarkRead={handleMarkMatchReadOptimistic}
           onOpenProfile={(peer) => setSelectedProfile(peer)}
           onOpenCoinStore={() => setCoinStoreOpen(true)}
           onSuccess={handleSuccess}
           onError={handleError}
         />
       )}
+
+      <GiftGateChatModal
+        isOpen={Boolean(giftGateTarget)}
+        targetUser={giftGateTarget}
+        userCoins={userProfile?.coins || 0}
+        sendingGiftId={sendingGateGiftId}
+        onClose={() => setGiftGateTarget(null)}
+        onSelectGift={handleSendGiftToUnlockChat}
+        onOpenCoinStore={() => setCoinStoreOpen(true)}
+      />
+
+      <GiftAnimationOverlay
+        giftEvent={gateGiftAnim}
+        onComplete={() => setGateGiftAnim(null)}
+      />
 
       <CoinStoreModal
         key={`coins-${userProfile.uid}`}

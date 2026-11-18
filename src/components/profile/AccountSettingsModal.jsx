@@ -1,26 +1,34 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Bell,
   CheckCircle2,
   ChevronRight,
   Coins,
+  Crown,
   Download,
   Eye,
   EyeOff,
   Gem,
+  Landmark,
   Lock,
   LogOut,
   Mail,
   MapPin,
+  Save,
   ShieldCheck,
   Smartphone,
   Wand2,
   X,
   Zap,
 } from 'lucide-react';
+import { WITHDRAWAL_PAYOUT_METHODS } from '../../config/constants';
 import { usePwaInstall } from '../../hooks/usePwaInstall';
 import { logoutUser } from '../../services/authService';
-import { updateUserProfile } from '../../services/userService';
+import {
+  saveUserPayoutAccount,
+  subscribeUserPayoutAccount,
+  updateUserProfile,
+} from '../../services/userService';
 import { calculateWithdrawalBreakdown, formatUSD, isBoostActive } from '../../utils/formatters';
 
 function SettingsSwitchRow({ icon: Icon, title, description, checked, busy, onToggle, accent }) {
@@ -80,12 +88,54 @@ export default function AccountSettingsModal({
   const [busySetting, setBusySetting] = useState('');
   const [locatingGps, setLocatingGps] = useState(false);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [savedPayout, setSavedPayout] = useState(null);
+  const [payoutMethodId, setPayoutMethodId] = useState(WITHDRAWAL_PAYOUT_METHODS[0].id);
+  const [payoutAccountValue, setPayoutAccountValue] = useState('');
+  const [payoutHolderName, setPayoutHolderName] = useState('');
+  const [savingPayout, setSavingPayout] = useState(false);
   const { isInstalled, canInstallNative, isIOS, promptInstall } = usePwaInstall();
+
+  useEffect(() => {
+    if (!isOpen || !userProfile?.uid || currentAuthUid !== userProfile.uid) {
+      return;
+    }
+    const unsub = subscribeUserPayoutAccount(userProfile.uid, (data) => {
+      setSavedPayout(data);
+      if (data) {
+        setPayoutMethodId(data.methodId || WITHDRAWAL_PAYOUT_METHODS[0].id);
+        setPayoutAccountValue(data.accountValue || '');
+        setPayoutHolderName(data.holderName || '');
+      }
+    });
+    return () => unsub();
+  }, [isOpen, userProfile?.uid, currentAuthUid]);
 
   // Seguridad estricta: solo el dueño autenticado de este uid puede abrir su configuración privada
   if (!isOpen || !userProfile?.uid || currentAuthUid !== userProfile.uid) {
     return null;
   }
+
+  const activePayoutMethod =
+    WITHDRAWAL_PAYOUT_METHODS.find((m) => m.id === payoutMethodId) || WITHDRAWAL_PAYOUT_METHODS[0];
+
+  const handleSavePayoutAccount = async (e) => {
+    e.preventDefault();
+    if (savingPayout) return;
+    setSavingPayout(true);
+    try {
+      await saveUserPayoutAccount(userProfile.uid, {
+        methodId: activePayoutMethod.id,
+        methodName: activePayoutMethod.name,
+        accountValue: payoutAccountValue,
+        holderName: payoutHolderName,
+      });
+      onSuccess?.(`✅ Cuenta de cobro (${activePayoutMethod.name}) guardada en tu bóveda privada.`);
+    } catch (err) {
+      onError?.(err.message || 'No se pudo guardar tu cuenta de cobro.');
+    } finally {
+      setSavingPayout(false);
+    }
+  };
 
   const boosted = isBoostActive(userProfile);
   const diamonds = Number(userProfile.earningsDiamonds || 0);
@@ -103,6 +153,9 @@ export default function AccountSettingsModal({
         hideDistance: nextValue ? 'Tu distancia y ciudad están ocultas.' : 'Tu ubicación es visible.',
         hideOnlineStatus: nextValue ? 'Estado en línea ocultado.' : 'Estado en línea visible.',
         discoverable: nextValue ? 'Perfil visible en Descubrir.' : 'Perfil pausado de Descubrir.',
+        requireGiftToChat: nextValue
+          ? '👑 Solo recibirás chats nuevos de quienes te envíen un regalo.'
+          : 'Chat abierto: ahora todos pueden escribirte.',
       };
       onSuccess?.(labels[field] || 'Ajuste guardado.');
     } catch (err) {
@@ -289,6 +342,100 @@ export default function AccountSettingsModal({
             </button>
           </section>
 
+          {/* 2.5 Cuenta Privada de Cobro (PayPal, Binance Pay, Banco) */}
+          <section className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <p className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400">
+                Cuenta de Cobro para Retiros ($ USD)
+              </p>
+              {savedPayout?.accountValue && (
+                <span className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[9.5px] font-extrabold inline-flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" /> Configurada
+                </span>
+              )}
+            </div>
+
+            <form
+              onSubmit={handleSavePayoutAccount}
+              className="bg-white rounded-3xl p-4 shadow-card border border-zinc-200/70 space-y-3"
+            >
+              <div className="flex items-start gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                  <Landmark className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-extrabold text-zinc-900">
+                    Dónde recibes tus pagos de la plataforma
+                  </p>
+                  <p className="text-[11px] text-zinc-500 leading-snug mt-0.5">
+                    Configura tu <strong>Binance Pay</strong>, <strong>PayPal</strong> o cuenta bancaria. Se pre-carga automáticamente al retirar tus Diamantes.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2.5">
+                <div>
+                  <label className="text-[11px] font-bold text-zinc-600 block mb-1">
+                    Método de cobro
+                  </label>
+                  <select
+                    value={payoutMethodId}
+                    onChange={(e) => setPayoutMethodId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-bold text-zinc-900 focus:outline-none focus:bg-white focus:border-zinc-900 transition"
+                  >
+                    {WITHDRAWAL_PAYOUT_METHODS.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-zinc-600 block mb-1">
+                    Número de cuenta, PayPal o Binance ID
+                  </label>
+                  <input
+                    type="text"
+                    value={payoutAccountValue}
+                    onChange={(e) => setPayoutAccountValue(e.target.value)}
+                    placeholder={activePayoutMethod.placeholder}
+                    required
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-semibold text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:bg-white focus:border-zinc-900 transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-zinc-600 block mb-1">
+                    Nombre del titular (opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={payoutHolderName}
+                    onChange={(e) => setPayoutHolderName(e.target.value)}
+                    placeholder="Ej. María Pérez"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-semibold text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:bg-white focus:border-zinc-900 transition"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 pt-0.5">
+                <span className="text-[10px] font-semibold text-zinc-400 flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-emerald-600 shrink-0" />
+                  Bóveda privada · Invisible a otros usuarios
+                </span>
+                <button
+                  type="submit"
+                  disabled={savingPayout}
+                  className="px-4 py-2 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-extrabold inline-flex items-center gap-1.5 shadow-sm disabled:opacity-50 shrink-0 transition"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {savingPayout ? 'Guardando...' : 'Guardar'}
+                </button>
+              </div>
+            </form>
+          </section>
+
           {/* 3. Notificaciones de Regalos y Centro de Bloqueados / Reportados */}
           <section className="space-y-2">
             <p className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 px-1">
@@ -359,6 +506,15 @@ export default function AccountSettingsModal({
               Smart Photos y Visibilidad
             </p>
             <div className="bg-white rounded-3xl px-4 py-2 shadow-card">
+              <SettingsSwitchRow
+                icon={Crown}
+                title="Solo recibir chat si envían un regalo"
+                description="Opcional: monetiza tus conversaciones exigiendo cualquier regalo virtual para escribirte."
+                checked={Boolean(userProfile.requireGiftToChat)}
+                busy={busySetting === 'requireGiftToChat'}
+                accent="bg-amber-50 text-amber-600"
+                onToggle={() => handleToggleSetting('requireGiftToChat', !userProfile.requireGiftToChat)}
+              />
               <SettingsSwitchRow
                 icon={Wand2}
                 title="Smart Photos"
