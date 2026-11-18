@@ -169,6 +169,7 @@ export function subscribeVipUsers({ scope, countryCode, currentUserId, blockedUs
       .map((d) => ({ uid: d.id, id: d.id, ...d.data() }))
       .filter((u) => {
         if (u.id === currentUserId) return false;
+        if (u.isBanned || u.accountStatus === 'banned' || u.accountStatus === 'suspended') return false;
         if (u.discoverable === false) return false;
         if (blockedSet.has(u.id)) return false;
         if (Array.isArray(u.blockedUsers) && u.blockedUsers.includes(currentUserId)) return false;
@@ -216,6 +217,7 @@ export function subscribePopularUsers({ scope, countryCode, currentUserId, block
       .map((d) => ({ uid: d.id, id: d.id, ...d.data() }))
       .filter((u) => {
         if (u.id === currentUserId || blockedSet.has(u.id)) return false;
+        if (u.isBanned || u.accountStatus === 'banned' || u.accountStatus === 'suspended') return false;
         if (u.discoverable === false) return false;
         if (Array.isArray(u.blockedUsers) && u.blockedUsers.includes(currentUserId)) return false;
         const hasPhoto = Array.isArray(u.photos) && u.photos.length > 0 && Boolean(u.photos[0]);
@@ -298,6 +300,7 @@ export async function fetchDiscoverProfiles({
     })
     .filter((u) => {
       if (u.id === currentUser.uid) return false;
+      if (u.isBanned || u.accountStatus === 'banned' || u.accountStatus === 'suspended') return false;
       if (u.discoverable === false) return false;
       if (blockedSet.has(u.id)) return false;
       if (Array.isArray(u.blockedUsers) && u.blockedUsers.includes(currentUser.uid)) return false;
@@ -407,6 +410,15 @@ export function subscribeAllReports(onData, onError) {
       if (onError) onError(err);
     }
   );
+}
+
+export async function requestBlueCheckVerification(uid) {
+  if (!uid) throw new Error('Sesión inválida.');
+  await updateDoc(doc(db, 'users', uid), {
+    verificationStatus: 'pending',
+    verificationRequestedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
 }
 
 export async function updateReportStatus({ reportId, adminId, status }) {

@@ -12,7 +12,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['SUPER_ADMIN', 'admin'];
     }
 
     function isValidPackageCoins(amount) {
@@ -52,12 +52,23 @@ service cloud.firestore {
         && request.resource.data.get('totalWithdrawnUSD', 0) == 0
         && request.resource.data.likesCount == 0
         && request.resource.data.giftsReceivedCount == 0
-        && request.resource.data.isBoosted == false;
+        && request.resource.data.isBoosted == false
+        && request.resource.data.get('isBanned', false) == false
+        && request.resource.data.get('verifiedBadge', false) == false
+        && request.resource.data.get('accountStatus', 'active') == 'active';
 
       allow update: if isAdmin()
         || (
-          // Actualización del propio dueño (perfil, presencia, privacidad, gasto de monedas, boost pagado, retiro o canje 1:1)
+          // Actualización del propio dueño (nunca puede auto-aprobar Check Azul ni quitarse un baneo)
           isOwner(userId)
+          && resource.data.get('isBanned', false) == false
+          && request.resource.data.get('isBanned', false) == false
+          && request.resource.data.get('accountStatus', 'active') == resource.data.get('accountStatus', 'active')
+          && request.resource.data.get('verifiedBadge', false) == resource.data.get('verifiedBadge', false)
+          && (
+            request.resource.data.get('verificationStatus', 'none') == resource.data.get('verificationStatus', 'none')
+            || request.resource.data.get('verificationStatus', 'none') == 'pending'
+          )
           && request.resource.data.role == resource.data.role
           && request.resource.data.get('totalWithdrawnUSD', 0) == resource.data.get('totalWithdrawnUSD', 0)
           && request.resource.data.likesCount == resource.data.likesCount
@@ -251,6 +262,13 @@ service cloud.firestore {
         && request.resource.data.reportedUserId != request.auth.uid;
       allow update: if isAdmin();
       allow delete: if false;
+    }
+
+    // ==================== CONFIGURACIÓN GLOBAL DE LA APP ====================
+    // Lectura para usuarios autenticados (precios vigentes de diamantes/paquetes), escritura exclusiva SUPER_ADMIN.
+    match /appConfig/{configId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
   }
 }

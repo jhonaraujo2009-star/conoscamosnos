@@ -14,6 +14,7 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
+import { isSuperAdminRole } from '../../contexts/AuthContext';
 import { subscribeAllAdImpressions } from '../../services/adRewardService';
 import {
   approvePaymentRequest,
@@ -42,7 +43,7 @@ export default function AdminPanelModal({ isOpen, onClose, userProfile, onSucces
   const [previewImg, setPreviewImg] = useState(null);
 
   useEffect(() => {
-    if (!isOpen || userProfile?.role !== 'admin') return;
+    if (!isOpen || !isSuperAdminRole(userProfile?.role)) return;
     const unsubReqs = subscribeAllPaymentRequests(setPaymentRequests);
     const unsubTxs = subscribeAllPaymentTransactions(setPaymentTxs);
     const unsubWithdrawals = subscribeAllWithdrawals(setWithdrawals);
@@ -87,7 +88,7 @@ export default function AdminPanelModal({ isOpen, onClose, userProfile, onSucces
     };
   }, [paymentRequests, paymentTxs, withdrawals, reports]);
 
-  if (!isOpen || userProfile?.role !== 'admin') return null;
+  if (!isOpen || !isSuperAdminRole(userProfile?.role)) return null;
 
   const filteredRecharges = paymentRequests.filter((r) =>
     statusFilter === 'all' ? true : r.status === statusFilter

@@ -82,15 +82,7 @@ export function formatSwipeActivity(user) {
 
 export function isProfileVerified(user) {
   if (!user) return false;
-  const photosCount = Array.isArray(user.photos) ? user.photos.filter(Boolean).length : 0;
-  const hasRealBio = typeof user.bio === 'string' && user.bio.trim().length >= 12;
-  const hasCity = typeof user.city === 'string' && user.city.trim().length >= 2;
-  return Boolean(
-    user.onboardingCompleted &&
-      photosCount >= 1 &&
-      hasRealBio &&
-      (hasCity || Boolean(user.hideDistance))
-  );
+  return Boolean(user.verifiedBadge === true || user.verificationStatus === 'approved');
 }
 
 export function triggerHaptic(pattern = 12) {
@@ -132,10 +124,12 @@ export function formatUSD(amount) {
   }).format(Number(amount || 0));
 }
 
-export function calculateWithdrawalBreakdown(diamonds) {
+export function calculateWithdrawalBreakdown(diamonds, config = ECONOMY_CONFIG) {
   const safeDiamonds = Math.max(0, Math.floor(Number(diamonds || 0)));
-  const grossUSD = Number((safeDiamonds * ECONOMY_CONFIG.baseDiamondValueUSD).toFixed(2));
-  const netPayoutUSD = Number((safeDiamonds * ECONOMY_CONFIG.diamondToNetUSDRate).toFixed(2));
+  const baseRate = Number(config?.baseDiamondValueUSD ?? ECONOMY_CONFIG.baseDiamondValueUSD);
+  const netRate = Number(config?.diamondToNetUSDRate ?? ECONOMY_CONFIG.diamondToNetUSDRate);
+  const grossUSD = Number((safeDiamonds * baseRate).toFixed(2));
+  const netPayoutUSD = Number((safeDiamonds * netRate).toFixed(2));
   const platformFeeUSD = Number((grossUSD - netPayoutUSD).toFixed(2));
   return {
     diamonds: safeDiamonds,
@@ -145,12 +139,12 @@ export function calculateWithdrawalBreakdown(diamonds) {
   };
 }
 
-export function calculateGiftEconomics(coinCost) {
+export function calculateGiftEconomics(coinCost, config = ECONOMY_CONFIG) {
   const coins = Math.max(0, Math.floor(Number(coinCost || 0)));
-  const diamonds = coins * ECONOMY_CONFIG.diamondsPerCoin;
+  const diamonds = coins * Number(config?.diamondsPerCoin ?? ECONOMY_CONFIG.diamondsPerCoin);
   return {
     coins,
-    ...calculateWithdrawalBreakdown(diamonds),
+    ...calculateWithdrawalBreakdown(diamonds, config),
   };
 }
 

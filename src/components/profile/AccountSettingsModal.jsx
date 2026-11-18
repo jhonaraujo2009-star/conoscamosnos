@@ -22,6 +22,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { WITHDRAWAL_PAYOUT_METHODS } from '../../config/constants';
+import { isSuperAdminRole } from '../../contexts/AuthContext';
 import { usePwaInstall } from '../../hooks/usePwaInstall';
 import { logoutUser } from '../../services/authService';
 import {
@@ -641,20 +642,20 @@ export default function AccountSettingsModal({
             )}
           </section>
 
-          {/* 6. Panel Super Admin (únicamente si role === 'admin') */}
-          {userProfile.role === 'admin' && (
+          {/* 6. Panel Super Admin (únicamente si role === 'SUPER_ADMIN' o 'admin') */}
+          {isSuperAdminRole(userProfile.role) && (
             <button
               type="button"
               onClick={() => {
                 onClose();
                 onOpenAdmin?.();
               }}
-              className="w-full py-3.5 px-4 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-extrabold flex items-center justify-between"
+              className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#171026] to-[#261229] border border-amber-300/35 text-amber-200 text-xs font-extrabold flex items-center justify-between shadow-md hover:brightness-110 transition"
             >
               <span className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4" /> Panel Super Admin
+                <Crown className="w-4 h-4 text-amber-400" /> Abrir Dashboard Super Admin
               </span>
-              <span>Abrir →</span>
+              <span>/admin-dashboard →</span>
             </button>
           )}
 

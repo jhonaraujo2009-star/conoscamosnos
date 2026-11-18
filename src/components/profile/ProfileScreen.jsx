@@ -31,7 +31,11 @@ import {
   MIN_AGE,
 } from '../../config/constants';
 import { getUserCloudinaryFolder, uploadImageToCloudinary } from '../../services/cloudinaryService';
-import { subscribeUserReports, updateUserProfile } from '../../services/userService';
+import {
+  requestBlueCheckVerification,
+  subscribeUserReports,
+  updateUserProfile,
+} from '../../services/userService';
 import {
   calculateProfileCompletion,
   getPrimaryPhoto,
@@ -73,6 +77,7 @@ export default function ProfileScreen({
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [saving, setSaving] = useState(false);
   const [togglingGiftGate, setTogglingGiftGate] = useState(false);
+  const [requestingCheck, setRequestingCheck] = useState(false);
   const [uploadingQuickPhoto, setUploadingQuickPhoto] = useState(false);
   const quickFileInputRef = useRef(null);
 
@@ -285,6 +290,21 @@ export default function ProfileScreen({
     }
   };
 
+  const handleRequestBlueCheck = async () => {
+    if (!isOwnerSession || requestingCheck || verified || userProfile?.verificationStatus === 'pending') {
+      return;
+    }
+    setRequestingCheck(true);
+    try {
+      await requestBlueCheckVerification(userProfile.uid);
+      onSuccess?.('☑️ Solicitud de Check Azul enviada al equipo de Super Admin.');
+    } catch (err) {
+      onError?.(err.message || 'No se pudo enviar la solicitud de verificación.');
+    } finally {
+      setRequestingCheck(false);
+    }
+  };
+
   // Chips 100% dinámicos conectados a los campos reales del usuario
   const quickChips = [
     {
@@ -355,6 +375,25 @@ export default function ProfileScreen({
                 <span>Vista previa (como te ven)</span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
+              {isOwnerSession && !verified && (
+                <button
+                  type="button"
+                  disabled={requestingCheck || userProfile?.verificationStatus === 'pending'}
+                  onClick={handleRequestBlueCheck}
+                  className={`mt-1.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold transition ${
+                    userProfile?.verificationStatus === 'pending'
+                      ? 'bg-amber-50 border border-amber-200 text-amber-800'
+                      : 'bg-sky-50 border border-sky-200 text-sky-700 hover:bg-sky-100'
+                  }`}
+                >
+                  <BadgeCheck className="w-3 h-3" />
+                  {userProfile?.verificationStatus === 'pending'
+                    ? 'Check Azul en revisión'
+                    : requestingCheck
+                    ? 'Enviando...'
+                    : 'Solicitar Check Azul'}
+                </button>
+              )}
               {(userProfile?.discoverable === false ||
                 userProfile?.hideAge ||
                 userProfile?.hideDistance ||

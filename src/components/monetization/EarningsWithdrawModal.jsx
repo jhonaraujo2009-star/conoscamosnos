@@ -14,6 +14,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { ECONOMY_CONFIG, WITHDRAWAL_PAYOUT_METHODS } from '../../config/constants';
+import { useAuth } from '../../contexts/AuthContext';
 import { subscribeUserPayoutAccount } from '../../services/userService';
 import {
   convertDiamondsToCoins,
@@ -26,6 +27,8 @@ import GiftShowcaseCard from './GiftShowcaseCard';
 const MIN_SWAP_DIAMONDS = 10;
 
 export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, onSuccess, onError }) {
+  const { economyConfig } = useAuth();
+  const liveEconomy = economyConfig || ECONOMY_CONFIG;
   const availableDiamonds = Number(userProfile?.earningsDiamonds || 0);
   const currentCoins = Number(userProfile?.coins || 0);
   const pendingDiamonds = Number(userProfile?.pendingWithdrawalDiamonds || 0);
@@ -33,7 +36,7 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
 
   const [activeMode, setActiveMode] = useState('withdraw');
   const [amountDiamonds, setAmountDiamonds] = useState(
-    Math.max(ECONOMY_CONFIG.minWithdrawalDiamonds, availableDiamonds)
+    Math.max(liveEconomy.minWithdrawalDiamonds, availableDiamonds)
   );
   const [swapAmount, setSwapAmount] = useState(Math.max(MIN_SWAP_DIAMONDS, availableDiamonds));
   const [selectedMethod, setSelectedMethod] = useState(WITHDRAWAL_PAYOUT_METHODS[0]);
@@ -46,9 +49,9 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
   useEffect(() => {
     if (!isOpen || !userProfile?.uid) return;
     setAmountDiamonds(
-      availableDiamonds >= ECONOMY_CONFIG.minWithdrawalDiamonds
+      availableDiamonds >= liveEconomy.minWithdrawalDiamonds
         ? availableDiamonds
-        : ECONOMY_CONFIG.minWithdrawalDiamonds
+        : liveEconomy.minWithdrawalDiamonds
     );
     setSwapAmount(availableDiamonds >= MIN_SWAP_DIAMONDS ? availableDiamonds : MIN_SWAP_DIAMONDS);
     const unsubW = subscribeMyWithdrawals(userProfile.uid, setWithdrawals);
@@ -67,13 +70,13 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
       unsubW();
       unsubPayout();
     };
-  }, [isOpen, userProfile?.uid, availableDiamonds]);
+  }, [isOpen, userProfile?.uid, availableDiamonds, liveEconomy.minWithdrawalDiamonds]);
 
   if (!isOpen) return null;
 
-  const availableSummary = calculateWithdrawalBreakdown(availableDiamonds);
-  const preview = calculateWithdrawalBreakdown(amountDiamonds);
-  const canWithdraw = availableDiamonds >= ECONOMY_CONFIG.minWithdrawalDiamonds;
+  const availableSummary = calculateWithdrawalBreakdown(availableDiamonds, liveEconomy);
+  const preview = calculateWithdrawalBreakdown(amountDiamonds, liveEconomy);
+  const canWithdraw = availableDiamonds >= liveEconomy.minWithdrawalDiamonds;
   const canSwap = availableDiamonds >= MIN_SWAP_DIAMONDS;
 
   const handleSubmit = async (e) => {
@@ -173,17 +176,17 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
             </div>
             <p className="text-[11px] text-slate-500 leading-relaxed">
               Todos los <strong>regalos virtuales</strong> que te envían (comprados con monedas) suman{' '}
-              <strong>1 Diamante (💎) por moneda</strong> (valor base {formatUSD(ECONOMY_CONFIG.baseDiamondValueUSD)}/💎).
-              Al retirar en dinero real recibes el <strong>{Math.round(ECONOMY_CONFIG.creatorShareRatio * 100)}% neto</strong>{' '}
-              (<strong>${ECONOMY_CONFIG.diamondToNetUSDRate.toFixed(3)} USD/💎</strong>) y la plataforma retiene{' '}
-              {Math.round(ECONOMY_CONFIG.platformFeeRatio * 100)}% para pasarelas y operación.
+              <strong>1 Diamante (💎) por moneda</strong> (valor base {formatUSD(liveEconomy.baseDiamondValueUSD)}/💎).
+              Al retirar en dinero real recibes el <strong>{Math.round(liveEconomy.creatorShareRatio * 100)}% neto</strong>{' '}
+              (<strong>${liveEconomy.diamondToNetUSDRate.toFixed(3)} USD/💎</strong>) y la plataforma retiene{' '}
+              {Math.round(liveEconomy.platformFeeRatio * 100)}% para pasarelas y operación.
             </p>
             <div className="grid grid-cols-3 gap-1.5 pt-1 text-center">
               {[500, 1000, 5000].map((sample) => (
                 <div key={sample} className="p-2 rounded-xl bg-slate-50 border border-slate-200/80">
                   <p className="text-[11px] font-extrabold text-sky-700">{sample} 💎</p>
                   <p className="text-[11px] font-black text-emerald-600">
-                    {formatUSD(sample * ECONOMY_CONFIG.diamondToNetUSDRate)}
+                    {formatUSD(sample * liveEconomy.diamondToNetUSDRate)}
                   </p>
                 </div>
               ))}

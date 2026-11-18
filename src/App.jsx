@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Flame } from 'lucide-react';
+import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import { Flame, LogOut, ShieldAlert } from 'lucide-react';
 import { getIntentionMood, MIN_AGE } from './config/constants';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { subscribeUserUnlocks } from './services/adRewardService';
+import { logoutUser } from './services/authService';
 import {
   sendVirtualGift,
   subscribeReceivedGiftTransactions,
@@ -38,10 +40,53 @@ import CoinStoreModal from './components/monetization/CoinStoreModal';
 import EarningsWithdrawModal from './components/monetization/EarningsWithdrawModal';
 import GiftNotificationsModal from './components/monetization/GiftNotificationsModal';
 import BoostModal from './components/home/BoostModal';
+import AdminDashboardPage from './components/admin/AdminDashboardPage';
 import AdminPanelModal from './components/admin/AdminPanelModal';
 
-function MainApp() {
-  const { firebaseUser, userProfile, loading } = useAuth();
+function FullScreenLoader() {
+  return (
+    <div className="h-[100dvh] w-screen bg-black flex flex-col items-center justify-center gap-3 overflow-hidden">
+      <div className="w-14 h-14 rounded-full bg-[#FF2E54] flex items-center justify-center animate-pulse">
+        <Flame className="w-8 h-8 text-white fill-white" />
+      </div>
+    </div>
+  );
+}
+
+function SuspendedAccountScreen({ userProfile }) {
+  return (
+    <div className="h-[100dvh] w-screen bg-[#0D0912] text-white flex items-center justify-center p-6">
+      <div className="w-full max-w-sm rounded-[32px] bg-[#171222] border border-rose-500/30 p-7 text-center space-y-4 shadow-2xl">
+        <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-500/20 border border-rose-400/40 text-[#FF2E54] flex items-center justify-center">
+          <ShieldAlert className="w-7 h-7" />
+        </div>
+        <div>
+          <h2 className="font-display text-xl font-black text-white">Cuenta Suspendida</h2>
+          <p className="text-xs text-zinc-400 mt-1.5 leading-relaxed">
+            Tu acceso a Conoscamosnos fue restringido por el equipo de moderación.
+          </p>
+        </div>
+        {userProfile?.banReason && (
+          <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-200 font-semibold">
+            Motivo: {userProfile.banReason}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => logoutUser(userProfile?.uid)}
+          className="w-full py-3 rounded-full bg-white text-zinc-950 text-xs font-black flex items-center justify-center gap-2 hover:bg-zinc-200 transition"
+        >
+          <LogOut className="w-4 h-4" />
+          Cerrar sesión
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function UserAppView({ onSuccess, onError }) {
+  const navigate = useNavigate();
+  const { firebaseUser, userProfile, isBanned } = useAuth();
 
   // 5 Pestañas: 'swipe' | 'explore' | 'likes' | 'chat' | 'profile'
   const [activeTab, setActiveTab] = useState('swipe');
@@ -75,22 +120,11 @@ function MainApp() {
   const [safetyInitialTab, setSafetyInitialTab] = useState('blocked');
   const [adminOpen, setAdminOpen] = useState(false);
 
-  const [toast, setToast] = useState(null);
   const seenGiftIdsRef = useRef(new Set());
   const giftsLoadedRef = useRef(false);
 
-  const showToast = useCallback((type, message) => {
-    setToast({ type, message, id: Date.now() });
-  }, []);
-
-  const handleSuccess = useCallback((msg) => showToast('success', msg), [showToast]);
-  const handleError = useCallback((msg) => showToast('error', msg), [showToast]);
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 4000);
-    return () => clearTimeout(t);
-  }, [toast]);
+  const handleSuccess = onSuccess;
+  const handleError = onError;
 
   const activeMood = useMemo(() => getIntentionMood(swipeMoodKey), [swipeMoodKey]);
 
@@ -369,32 +403,13 @@ function MainApp() {
     [userProfile, giftGateTarget, sendingGateGiftId, handleSuccess, handleOpenChatSession, handleError]
   );
 
-  if (loading) {
-    return (
-      <div className="h-[100dvh] w-screen bg-black flex flex-col items-center justify-center gap-3 overflow-hidden">
-        <div className="w-14 h-14 rounded-full bg-[#FF2E54] flex items-center justify-center animate-pulse">
-          <Flame className="w-8 h-8 text-white fill-white" />
-        </div>
-      </div>
-    );
+  if (isBanned) {
+    return <SuspendedAccountScreen userProfile={userProfile} />;
   }
 
-  if (!firebaseUser) {
-    return <AuthScreen />;
-  }
-
-  if (!userProfile) {
-    return (
-      <div className="h-[100dvh] w-screen bg-black flex items-center justify-center p-6 text-center overflow-hidden">
-        <div className="w-10 h-10 rounded-full border-2 border-[#FF2E54] border-t-transparent animate-spin" />
-      </div>
-    );
-  }
-
-  if (!userProfile.onboardingCompleted) {
+  if (!userProfile?.onboardingCompleted) {
     return (
       <div className="h-[100dvh] w-screen overflow-y-auto bg-[#F4F4F6]">
-        <NotificationBanner toast={toast} onDismiss={() => setToast(null)} />
         <OnboardingWizard
           userProfile={userProfile}
           onSuccess={handleSuccess}
@@ -406,8 +421,6 @@ function MainApp() {
 
   return (
     <>
-      <NotificationBanner toast={toast} onDismiss={() => setToast(null)} />
-
       <MobileShell
         activeTab={activeTab}
         onChangeTab={handleChangeTab}
@@ -508,7 +521,7 @@ function MainApp() {
               setSafetyCenterOpen(true);
             }}
             onOpenGiftNotifications={handleOpenGiftNotifications}
-            onOpenAdmin={() => setAdminOpen(true)}
+            onOpenAdmin={() => navigate('/admin-dashboard')}
             onSuccess={handleSuccess}
             onError={handleError}
           />
@@ -633,10 +646,87 @@ function MainApp() {
   );
 }
 
+/**
+ * Enrutador principal protegido por roles (Firebase Auth + Firestore users/{uid}.role):
+ * - Si role === 'SUPER_ADMIN' (o 'admin') al iniciar sesión -> redirige automáticamente a /admin-dashboard.
+ * - /admin-dashboard -> accesible únicamente por SUPER_ADMIN; botón Navbar "Entrar a Conoscamosnos (Modo Usuario)" lleva a /app.
+ * - /app -> vista normal de swipes, explorar, likes, chat y perfil.
+ */
+function AppRoutes() {
+  const { firebaseUser, userProfile, loading, isSuperAdmin } = useAuth();
+  const [toast, setToast] = useState(null);
+
+  const showToast = useCallback((type, message) => {
+    setToast({ type, message, id: Date.now() });
+  }, []);
+
+  const handleSuccess = useCallback((msg) => showToast('success', msg), [showToast]);
+  const handleError = useCallback((msg) => showToast('error', msg), [showToast]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  if (loading || (firebaseUser && !userProfile)) {
+    return <FullScreenLoader />;
+  }
+
+  const defaultAuthHome = isSuperAdmin ? '/admin-dashboard' : '/app';
+
+  return (
+    <>
+      <NotificationBanner toast={toast} onDismiss={() => setToast(null)} />
+      <Routes>
+        <Route
+          path="/login"
+          element={firebaseUser ? <Navigate to={defaultAuthHome} replace /> : <AuthScreen />}
+        />
+
+        <Route
+          path="/admin-dashboard"
+          element={
+            !firebaseUser ? (
+              <Navigate to="/login" replace />
+            ) : !isSuperAdmin ? (
+              <Navigate to="/app" replace />
+            ) : (
+              <AdminDashboardPage onSuccess={handleSuccess} onError={handleError} />
+            )
+          }
+        />
+
+        <Route
+          path="/app"
+          element={
+            !firebaseUser ? (
+              <Navigate to="/login" replace />
+            ) : (
+              <UserAppView onSuccess={handleSuccess} onError={handleError} />
+            )
+          }
+        />
+
+        <Route
+          path="/"
+          element={<Navigate to={firebaseUser ? defaultAuthHome : '/login'} replace />}
+        />
+        <Route
+          path="*"
+          element={<Navigate to={firebaseUser ? defaultAuthHome : '/login'} replace />}
+        />
+      </Routes>
+    </>
+  );
+}
+
 export default function App() {
   return (
     <AuthProvider>
-      <MainApp />
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
     </AuthProvider>
   );
 }

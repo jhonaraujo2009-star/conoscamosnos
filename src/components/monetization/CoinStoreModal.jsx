@@ -22,6 +22,7 @@ import {
   ECONOMY_CONFIG,
   ENABLE_DEMO_PAYMENTS,
 } from '../../config/constants';
+import { isSuperAdminRole, useAuth } from '../../contexts/AuthContext';
 import { getUserCloudinaryFolder, uploadImageToCloudinary } from '../../services/cloudinaryService';
 import {
   buildCheckoutUrl,
@@ -51,7 +52,15 @@ function DynamicQrCode({ payload }) {
 }
 
 export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess, onError }) {
-  const [selectedPkg, setSelectedPkg] = useState(COIN_PACKAGES[1]);
+  const { economyConfig } = useAuth();
+  const livePackages =
+    Array.isArray(economyConfig?.coinPackages) && economyConfig.coinPackages.length > 0
+      ? economyConfig.coinPackages
+      : COIN_PACKAGES;
+  const liveEconomy = economyConfig || ECONOMY_CONFIG;
+
+  const [selectedPkgId, setSelectedPkgId] = useState(livePackages[1]?.id || livePackages[0].id);
+  const selectedPkg = livePackages.find((p) => p.id === selectedPkgId) || livePackages[0];
   const [activeTab, setActiveTab] = useState('direct'); // 'direct' | 'auto'
   const [simulating, setSimulating] = useState(false);
 
@@ -177,15 +186,15 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
               1. Elige tu paquete de monedas
             </p>
             <div className="grid grid-cols-2 gap-2.5">
-              {COIN_PACKAGES.map((pkg) => {
+              {livePackages.map((pkg) => {
                 const active = selectedPkg.id === pkg.id;
                 const perCoin = (pkg.priceUSD / pkg.coins).toFixed(3);
-                const giftReturn = calculateGiftEconomics(pkg.coins);
+                const giftReturn = calculateGiftEconomics(pkg.coins, liveEconomy);
                 return (
                   <button
                     key={pkg.id}
                     type="button"
-                    onClick={() => setSelectedPkg(pkg)}
+                    onClick={() => setSelectedPkgId(pkg.id)}
                     className={`relative p-3.5 rounded-2xl border text-left transition ${
                       active
                         ? 'bg-gradient-to-br from-amber-50 to-rose-50 border-amber-400 shadow-md ring-1 ring-amber-300'
@@ -305,7 +314,7 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
               </div>
 
               {/* Webhook Simulator: restringido a Super Admin o entorno explícito de pruebas */}
-              {(userProfile?.role === 'admin' || ENABLE_DEMO_PAYMENTS) && (
+              {(isSuperAdminRole(userProfile?.role) || ENABLE_DEMO_PAYMENTS) && (
                 <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200 space-y-2.5">
                   <div className="flex items-center gap-2 text-amber-800 text-xs font-extrabold">
                     <Sparkles className="w-4 h-4 text-amber-600" />
