@@ -1,4 +1,4 @@
-import { admin, getAdminFirestore } from '../config/firebaseAdmin.js';
+import { getAdminAuth, getAdminFirestore } from '../config/firebaseAdmin.js';
 
 const DEFAULT_PACKAGES = [
   { id: 'pack_100', coins: 100, priceUSD: 1.99, label: 'Inicio' },
@@ -43,7 +43,7 @@ export async function createNowPaymentsInvoice({
 
   try {
     const db = getAdminFirestore();
-    const decoded = await admin.auth().verifyIdToken(bearerMatch[1]);
+    const decoded = await getAdminAuth().verifyIdToken(bearerMatch[1]);
     uid = decoded.uid;
 
     const configSnap = await db.collection('appConfig').doc('economy').get();

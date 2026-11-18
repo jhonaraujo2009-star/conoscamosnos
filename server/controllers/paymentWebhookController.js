@@ -1,4 +1,4 @@
-import { admin, getAdminFirestore } from '../config/firebaseAdmin.js';
+import { FieldValue, getAdminFirestore } from '../config/firebaseAdmin.js';
 
 const DEFAULT_PACKAGES = [
   { id: 'pack_100', coins: 100, priceUSD: 1.99 },
@@ -150,7 +150,7 @@ export async function processVerifiedPaymentWebhook({ payload }) {
 
     transaction.update(userRef, {
       [creditField]: currentBalance + unitsToCredit,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
 
     transaction.set(txRef, {
@@ -168,7 +168,7 @@ export async function processVerifiedPaymentWebhook({ payload }) {
       verifiedSignature: true,
       source: 'webhook',
       status: 'completed',
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
     });
 
     return {
