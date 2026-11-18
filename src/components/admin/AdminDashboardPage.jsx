@@ -7,8 +7,10 @@ import {
   BadgeCheck,
   Ban,
   BarChart3,
+  Building2,
   Check,
   CheckCircle2,
+  Clock,
   Coins,
   Copy,
   Crown,
@@ -28,8 +30,11 @@ import {
   Tv,
   Unlock,
   Users,
+  Wallet,
   Webhook,
+  X,
   XCircle,
+  ZoomIn,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { subscribeAllAdImpressions } from '../../services/adRewardService';
@@ -53,6 +58,7 @@ import {
   subscribeAllWithdrawals,
 } from '../../services/withdrawalService';
 import {
+  formatGiftDate,
   formatUSD,
   getPrimaryPhoto,
   isProfileVerified,
@@ -85,6 +91,9 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
   const [verificationFilter, setVerificationFilter] = useState('all'); // 'pending' | 'verified' | 'all'
   const [userSearch, setUserSearch] = useState('');
   const [treasurySubTab, setTreasurySubTab] = useState('recharges'); // 'recharges' | 'withdrawals' | 'webhooks'
+  const [treasuryStatusFilter, setTreasuryStatusFilter] = useState('all'); // 'all' | 'pending' | 'done' | 'rejected'
+  const [treasurySearch, setTreasurySearch] = useState('');
+  const [copiedTreasuryKey, setCopiedTreasuryKey] = useState('');
   const [busyId, setBusyId] = useState('');
   const [payoutRefs, setPayoutRefs] = useState({});
   const [previewImg, setPreviewImg] = useState(null);
@@ -228,6 +237,13 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
     ).length;
     const pendingRechargesCount = paymentRequests.filter((r) => r.status === 'pending').length;
     const pendingWithdrawalsCount = withdrawals.filter((w) => w.status === 'pending').length;
+    const pendingRechargesUSD = paymentRequests
+      .filter((r) => r.status === 'pending')
+      .reduce((acc, r) => acc + Number(r.amountUSD || 0), 0);
+    const pendingWithdrawalsUSD = withdrawals
+      .filter((w) => w.status === 'pending')
+      .reduce((acc, w) => acc + Number(w.netPayoutUSD || 0), 0);
+    const paidWithdrawalsCount = withdrawals.filter((w) => w.status === 'paid').length;
 
     return {
       totalUsers,
@@ -251,6 +267,9 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
       pendingVerificationsCount,
       pendingRechargesCount,
       pendingWithdrawalsCount,
+      pendingRechargesUSD,
+      pendingWithdrawalsUSD,
+      paidWithdrawalsCount,
     };
   }, [users, dateFilter, paymentRequests, paymentTxs, adImpressions, withdrawals, reports]);
 
@@ -428,6 +447,80 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
       onError?.('No se pudo copiar el endpoint.');
     }
   };
+
+  const handleCopyTreasuryText = async (key, text, label = 'Dato') => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(String(text));
+      setCopiedTreasuryKey(key);
+      onSuccess?.(`${label} copiado al portapapeles.`);
+      setTimeout(() => {
+        setCopiedTreasuryKey((prev) => (prev === key ? '' : prev));
+      }, 1800);
+    } catch {
+      onError?.('No se pudo copiar automáticamente.');
+    }
+  };
+
+  const filteredPaymentRequests = useMemo(() => {
+    const q = treasurySearch.trim().toLowerCase();
+    return [...paymentRequests]
+      .filter((r) => {
+        if (treasuryStatusFilter === 'pending' && r.status !== 'pending') return false;
+        if (treasuryStatusFilter === 'done' && r.status !== 'approved') return false;
+        if (treasuryStatusFilter === 'rejected' && r.status !== 'rejected') return false;
+        if (!q) return true;
+        return (
+          (r.userName || '').toLowerCase().includes(q) ||
+          (r.userEmail || '').toLowerCase().includes(q) ||
+          (r.methodName || '').toLowerCase().includes(q) ||
+          (r.referenceNumber || '').toLowerCase().includes(q)
+        );
+      })
+      .sort((a, b) => {
+        const ap = a.status === 'pending' ? 0 : 1;
+        const bp = b.status === 'pending' ? 0 : 1;
+        if (ap !== bp) return ap - bp;
+        return toMillis(b.createdAt) - toMillis(a.createdAt);
+      });
+  }, [paymentRequests, treasuryStatusFilter, treasurySearch]);
+
+  const filteredWithdrawals = useMemo(() => {
+    const q = treasurySearch.trim().toLowerCase();
+    return [...withdrawals]
+      .filter((w) => {
+        if (treasuryStatusFilter === 'pending' && w.status !== 'pending') return false;
+        if (treasuryStatusFilter === 'done' && w.status !== 'paid') return false;
+        if (treasuryStatusFilter === 'rejected' && w.status !== 'rejected') return false;
+        if (!q) return true;
+        return (
+          (w.userName || '').toLowerCase().includes(q) ||
+          (w.userEmail || '').toLowerCase().includes(q) ||
+          (w.payoutMethodName || '').toLowerCase().includes(q) ||
+          (w.payoutDetails || '').toLowerCase().includes(q) ||
+          (w.payoutReference || '').toLowerCase().includes(q)
+        );
+      })
+      .sort((a, b) => {
+        const ap = a.status === 'pending' ? 0 : 1;
+        const bp = b.status === 'pending' ? 0 : 1;
+        if (ap !== bp) return ap - bp;
+        return toMillis(b.createdAt) - toMillis(a.createdAt);
+      });
+  }, [withdrawals, treasuryStatusFilter, treasurySearch]);
+
+  const filteredPaymentTxs = useMemo(() => {
+    const q = treasurySearch.trim().toLowerCase();
+    return paymentTxs.filter((tx) => {
+      if (!q) return true;
+      return (
+        (tx.userName || '').toLowerCase().includes(q) ||
+        (tx.userId || '').toLowerCase().includes(q) ||
+        (tx.provider || '').toLowerCase().includes(q) ||
+        (tx.externalPaymentId || '').toLowerCase().includes(q)
+      );
+    });
+  }, [paymentTxs, treasurySearch]);
 
   const maxDailyCount = Math.max(1, ...metrics.dailyBuckets.map((b) => b.count));
   const funnelTotal = Math.max(1, metrics.adUsersCount + metrics.payingUsersCount);
@@ -1093,232 +1186,616 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
           </section>
         )}
 
-        {/* ==================== TAB 4: TESORERÍA (RECARGAS, RETIROS Y WEBHOOKS) ==================== */}
+        {/* ==================== TAB 4: TESORERÍA FINTECH (RECARGAS, RETIROS Y NOWPAYMENTS) ==================== */}
         {activeTab === 'treasury' && (
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="inline-flex p-1 rounded-2xl bg-white/5 border border-white/10 text-xs">
-                {[
-                  { id: 'recharges', label: `Recargas Manuales (${metrics.pendingRechargesCount})` },
-                  { id: 'withdrawals', label: `Retiros USD (${metrics.pendingWithdrawalsCount})` },
-                  { id: 'webhooks', label: `Pagos API / Webhooks (${paymentTxs.length})` },
-                ].map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => setTreasurySubTab(t.id)}
-                    className={`px-3.5 py-2 rounded-xl font-extrabold transition ${
-                      treasurySubTab === t.id
-                        ? 'bg-white text-zinc-950'
-                        : 'text-zinc-400 hover:text-white'
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
+          <div className="space-y-5">
+            {/* Resumen Ejecutivo de Tesorería (KPIs interactivos) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              <div className="rounded-3xl p-4 sm:p-5 bg-gradient-to-br from-[#10231D] via-[#0F1B1A] to-[#0D1318] border border-emerald-400/25 space-y-2 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10.5px] font-extrabold uppercase tracking-wider text-emerald-300">
+                    Ingresos Totales
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center">
+                    <ArrowDownLeft className="w-4 h-4" />
+                  </div>
+                </div>
+                <p className="font-display text-2xl sm:text-3xl font-black text-white tabular-nums">
+                  {formatUSD(metrics.totalRevenueUSD)}
+                </p>
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10.5px] text-zinc-400 pt-1 border-t border-white/10">
+                  <span>API: <strong className="text-zinc-200">{formatUSD(metrics.gatewayCompletedUSD)}</strong></span>
+                  <span>Manual: <strong className="text-zinc-200">{formatUSD(metrics.manualApprovedUSD)}</strong></span>
+                  <span>Ads: <strong className="text-amber-300">{formatUSD(metrics.adEstRevenueUSD)}</strong></span>
+                </div>
               </div>
-              <div className="flex items-center gap-4 text-xs">
-                <span className="text-emerald-300 font-bold flex items-center gap-1">
-                  <ArrowDownLeft className="w-3.5 h-3.5" /> Ingresos: {formatUSD(metrics.totalRevenueUSD)}
-                </span>
-                <span className="text-sky-300 font-bold flex items-center gap-1">
-                  <ArrowUpRight className="w-3.5 h-3.5" /> Pagado: {formatUSD(metrics.totalPaidOutUSD)}
-                </span>
+
+              <div className="rounded-3xl p-4 sm:p-5 bg-gradient-to-br from-[#231911] via-[#17131B] to-[#12101A] border border-amber-400/30 space-y-2 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10.5px] font-extrabold uppercase tracking-wider text-amber-300">
+                    Por Validar / Pagar
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="space-y-1.5 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTreasurySubTab('recharges');
+                      setTreasuryStatusFilter('pending');
+                    }}
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-between text-xs transition"
+                  >
+                    <span className="text-zinc-300 font-semibold">Recargas pend.</span>
+                    <span className="font-extrabold text-amber-300 tabular-nums">
+                      {metrics.pendingRechargesCount} ({formatUSD(metrics.pendingRechargesUSD)})
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTreasurySubTab('withdrawals');
+                      setTreasuryStatusFilter('pending');
+                    }}
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-between text-xs transition"
+                  >
+                    <span className="text-zinc-300 font-semibold">Retiros por pagar</span>
+                    <span className="font-extrabold text-sky-300 tabular-nums">
+                      {metrics.pendingWithdrawalsCount} ({formatUSD(metrics.pendingWithdrawalsUSD)})
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-3xl p-4 sm:p-5 bg-gradient-to-br from-[#0F1B29] via-[#111522] to-[#10101A] border border-sky-400/25 space-y-2 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10.5px] font-extrabold uppercase tracking-wider text-sky-300">
+                    Pagado a Creadores
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-sky-500/20 text-sky-300 flex items-center justify-center">
+                    <ArrowUpRight className="w-4 h-4" />
+                  </div>
+                </div>
+                <p className="font-display text-2xl sm:text-3xl font-black text-white tabular-nums">
+                  {formatUSD(metrics.totalPaidOutUSD)}
+                </p>
+                <p className="text-[11px] text-zinc-400 pt-1 border-t border-white/10">
+                  <strong className="text-sky-200">{metrics.paidWithdrawalsCount}</strong> liquidaciones confirmadas
+                </p>
+              </div>
+
+              <div className="rounded-3xl p-4 sm:p-5 bg-gradient-to-br from-[#19132B] via-[#131020] to-[#0F0E17] border border-indigo-400/25 space-y-2 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10.5px] font-extrabold uppercase tracking-wider text-indigo-300">
+                    Balance Neto Caja
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center">
+                    <Building2 className="w-4 h-4" />
+                  </div>
+                </div>
+                <p className="font-display text-2xl sm:text-3xl font-black text-white tabular-nums">
+                  {formatUSD(metrics.netBalanceUSD)}
+                </p>
+                <p className="text-[11px] text-zinc-400 pt-1 border-t border-white/10">
+                  Margen retenido tras retiros enviados
+                </p>
               </div>
             </div>
 
+            {/* Barra de Navegación + Búsqueda + Filtros Rápidos */}
+            <div className="rounded-3xl p-3.5 bg-[#12101D] border border-white/10 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="inline-flex flex-wrap p-1 rounded-2xl bg-white/5 border border-white/10 text-xs gap-1">
+                  {[
+                    {
+                      id: 'recharges',
+                      label: 'Recargas Manuales',
+                      count: metrics.pendingRechargesCount,
+                      icon: Coins,
+                      badgeAccent: 'bg-amber-400 text-zinc-950',
+                    },
+                    {
+                      id: 'withdrawals',
+                      label: 'Retiros Creadores',
+                      count: metrics.pendingWithdrawalsCount,
+                      icon: Wallet,
+                      badgeAccent: 'bg-sky-400 text-zinc-950',
+                    },
+                    {
+                      id: 'webhooks',
+                      label: 'NowPayments IPN',
+                      count: paymentTxs.length,
+                      icon: Webhook,
+                      badgeAccent: 'bg-emerald-400/20 text-emerald-300',
+                    },
+                  ].map((t) => {
+                    const TabIcon = t.icon;
+                    const active = treasurySubTab === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => {
+                          setTreasurySubTab(t.id);
+                          setTreasuryStatusFilter('all');
+                        }}
+                        className={`px-3.5 py-2 rounded-xl font-extrabold inline-flex items-center gap-1.5 transition ${
+                          active
+                            ? 'bg-white text-zinc-950 shadow-sm'
+                            : 'text-zinc-300 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <TabIcon className="w-3.5 h-3.5" />
+                        <span>{t.label}</span>
+                        {t.count > 0 && (
+                          <span
+                            className={`px-1.5 py-0.5 rounded-full text-[10px] font-black tabular-nums ${
+                              active && t.id !== 'webhooks'
+                                ? 'bg-[#FF2E54] text-white'
+                                : t.badgeAccent
+                            }`}
+                          >
+                            {t.count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="relative flex-1 min-w-[210px] max-w-xs">
+                  <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    value={treasurySearch}
+                    onChange={(e) => setTreasurySearch(e.target.value)}
+                    placeholder="Buscar usuario, ref, TxID o cuenta..."
+                    className="w-full pl-8 pr-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-sky-400"
+                  />
+                </div>
+              </div>
+
+              {treasurySubTab !== 'webhooks' && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-white/10 text-xs">
+                  {[
+                    { id: 'all', label: 'Todos' },
+                    {
+                      id: 'pending',
+                      label:
+                        treasurySubTab === 'recharges'
+                          ? `Pendientes (${metrics.pendingRechargesCount})`
+                          : `Por Pagar (${metrics.pendingWithdrawalsCount})`,
+                    },
+                    {
+                      id: 'done',
+                      label: treasurySubTab === 'recharges' ? 'Aprobados' : 'Pagados',
+                    },
+                    { id: 'rejected', label: 'Rechazados' },
+                  ].map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setTreasuryStatusFilter(f.id)}
+                      className={`px-3 py-1 rounded-full text-[11px] font-extrabold transition ${
+                        treasuryStatusFilter === f.id
+                          ? 'bg-sky-500 text-zinc-950 shadow-sm'
+                          : 'bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* SUB-TAB 1: RECARGAS MANUALES */}
             {treasurySubTab === 'recharges' && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {paymentRequests.length === 0 ? (
-                  <p className="text-xs text-zinc-500 col-span-2 text-center py-10">
-                    Sin solicitudes manuales de recarga.
-                  </p>
+                {filteredPaymentRequests.length === 0 ? (
+                  <div className="col-span-full rounded-3xl bg-[#12101D] border border-white/10 p-10 text-center space-y-2">
+                    <Coins className="w-8 h-8 text-zinc-600 mx-auto" />
+                    <p className="text-sm font-bold text-zinc-300">
+                      Sin solicitudes en este filtro
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      Cambia el filtro de estado o búsqueda para revisar otros comprobantes.
+                    </p>
+                  </div>
                 ) : (
-                  paymentRequests.map((req) => (
-                    <div
-                      key={req.id}
-                      className="p-4 rounded-3xl bg-[#12101D] border border-white/10 space-y-3"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-extrabold text-white">
-                            {req.countryFlag} {req.userName}
-                          </p>
-                          <p className="text-[11px] text-zinc-400">
-                            {req.methodName} • Ref:{' '}
-                            <span className="font-mono text-zinc-200">{req.referenceNumber}</span>
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-black text-emerald-400">{formatUSD(req.amountUSD)}</p>
-                          <p className="text-xs font-bold text-amber-300">+{req.coinsToCredit} 🪙</p>
-                        </div>
-                      </div>
+                  filteredPaymentRequests.map((req) => {
+                    const userObj = userById[req.userId];
+                    const avatar =
+                      req.userPhoto || getPrimaryPhoto(userObj || { name: req.userName || '?' }, 120);
+                    const isPending = req.status === 'pending';
+                    const isApproved = req.status === 'approved';
+                    const copyKey = `req_${req.id}`;
 
-                      {req.proofUrl && (
-                        <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-black/40">
-                          <img
-                            src={req.proofUrl}
-                            alt="Comprobante"
-                            onClick={() => setPreviewImg(req.proofUrl)}
-                            className="w-full max-h-40 object-contain cursor-pointer"
-                          />
-                          <a
-                            href={req.proofUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="absolute bottom-2 right-2 px-2.5 py-1 rounded-full bg-black/75 text-white text-[10px] font-bold inline-flex items-center gap-1"
-                          >
-                            Abrir <ExternalLink className="w-3 h-3" />
-                          </a>
-                        </div>
-                      )}
+                    return (
+                      <div
+                        key={req.id}
+                        className={`rounded-3xl p-4 sm:p-5 bg-[#12101D] border space-y-3.5 transition ${
+                          isPending
+                            ? 'border-amber-400/35 shadow-[0_10px_30px_-14px_rgba(245,158,11,0.35)]'
+                            : 'border-white/10'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <img
+                              src={avatar}
+                              alt={req.userName}
+                              className="w-11 h-11 rounded-2xl object-cover bg-zinc-800 border border-white/10 shrink-0"
+                            />
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="text-sm font-extrabold text-white truncate">
+                                  {req.countryFlag} {req.userName}
+                                </p>
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-[9.5px] font-black uppercase ${
+                                    isPending
+                                      ? 'bg-amber-500/20 border border-amber-400/40 text-amber-300'
+                                      : isApproved
+                                      ? 'bg-emerald-500/20 border border-emerald-400/40 text-emerald-300'
+                                      : 'bg-rose-500/20 border border-rose-400/40 text-rose-300'
+                                  }`}
+                                >
+                                  {isPending ? 'Pendiente' : isApproved ? 'Aprobada' : 'Rechazada'}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-zinc-400 truncate mt-0.5">
+                                {req.methodName} · {formatGiftDate(req.createdAt)}
+                              </p>
+                            </div>
+                          </div>
 
-                      {req.status === 'pending' ? (
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            disabled={busyId === req.id}
-                            onClick={() => handleRejectRecharge(req)}
-                            className="py-2.5 rounded-xl bg-rose-500/15 border border-rose-400/30 text-rose-300 text-xs font-extrabold flex items-center justify-center gap-1 hover:bg-rose-500/25 disabled:opacity-50"
-                          >
-                            <XCircle className="w-4 h-4" /> Rechazar
-                          </button>
-                          <button
-                            type="button"
-                            disabled={busyId === req.id}
-                            onClick={() => handleApproveRecharge(req)}
-                            className="py-2.5 rounded-xl bg-emerald-500 text-zinc-950 text-xs font-black flex items-center justify-center gap-1 hover:brightness-110 disabled:opacity-50"
-                          >
-                            <CheckCircle2 className="w-4 h-4" /> Aprobar
-                          </button>
-                        </div>
-                      ) : (
-                        <p className="text-[11px] font-extrabold uppercase text-zinc-400">
-                          Estado: {req.status}
-                        </p>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-
-            {treasurySubTab === 'withdrawals' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {withdrawals.length === 0 ? (
-                  <p className="text-xs text-zinc-500 col-span-2 text-center py-10">
-                    Sin solicitudes de retiro de creadores.
-                  </p>
-                ) : (
-                  withdrawals.map((w) => (
-                    <div
-                      key={w.id}
-                      className="p-4 rounded-3xl bg-[#12101D] border border-white/10 space-y-3"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-extrabold text-white">
-                            {w.countryFlag} {w.userName}
-                          </p>
-                          <p className="text-[11px] text-sky-300 font-semibold">
-                            {w.payoutMethodName}: {w.payoutDetails}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-black text-emerald-400">
-                            Pagar {formatUSD(w.netPayoutUSD)}
-                          </p>
-                          <p className="text-[11px] text-zinc-400">{w.amountDiamonds} 💎</p>
-                        </div>
-                      </div>
-
-                      {w.status === 'pending' ? (
-                        <div className="space-y-2">
-                          <input
-                            type="text"
-                            placeholder="TxID / Referencia del pago enviado"
-                            value={payoutRefs[w.id] || ''}
-                            onChange={(e) =>
-                              setPayoutRefs((prev) => ({ ...prev, [w.id]: e.target.value }))
-                            }
-                            className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white focus:outline-none focus:border-sky-400"
-                          />
-                          <div className="grid grid-cols-2 gap-2">
-                            <button
-                              type="button"
-                              disabled={busyId === w.id}
-                              onClick={() => handleRejectWithdrawal(w)}
-                              className="py-2 rounded-xl bg-rose-500/15 border border-rose-400/30 text-rose-300 text-xs font-extrabold disabled:opacity-50"
-                            >
-                              Rechazar y Devolver 💎
-                            </button>
-                            <button
-                              type="button"
-                              disabled={busyId === w.id}
-                              onClick={() => handlePayWithdrawal(w)}
-                              className="py-2 rounded-xl bg-sky-500 text-zinc-950 text-xs font-black disabled:opacity-50"
-                            >
-                              Confirmar Pago
-                            </button>
+                          <div className="text-right shrink-0">
+                            <p className="font-display text-base font-black text-emerald-400 tabular-nums">
+                              {formatUSD(req.amountUSD)}
+                            </p>
+                            <p className="text-xs font-extrabold text-amber-300">
+                              +{req.coinsToCredit} 🪙
+                            </p>
                           </div>
                         </div>
-                      ) : (
-                        <div className="text-[11px] text-zinc-400 flex justify-between">
-                          <span className="uppercase font-bold">Estado: {w.status}</span>
-                          {w.payoutReference && (
-                            <span className="font-mono text-emerald-300">Ref: {w.payoutReference}</span>
-                          )}
+
+                        {/* Referencia con copia 1-tap */}
+                        <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-2xl bg-black/35 border border-white/10">
+                          <div className="min-w-0">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block">
+                              Referencia / Hash
+                            </span>
+                            <span className="text-xs font-mono font-bold text-zinc-100 break-all">
+                              {req.referenceNumber}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleCopyTreasuryText(copyKey, req.referenceNumber, 'Referencia')
+                            }
+                            className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-[11px] font-bold text-white inline-flex items-center gap-1 shrink-0 transition"
+                          >
+                            {copiedTreasuryKey === copyKey ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                            {copiedTreasuryKey === copyKey ? 'Copiado' : 'Copiar'}
+                          </button>
                         </div>
-                      )}
-                    </div>
-                  ))
+
+                        {req.proofUrl && (
+                          <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-black/50 group">
+                            <img
+                              src={req.proofUrl}
+                              alt="Comprobante"
+                              onClick={() => setPreviewImg(req.proofUrl)}
+                              className="w-full h-36 object-contain cursor-pointer group-hover:scale-[1.02] transition"
+                            />
+                            <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setPreviewImg(req.proofUrl)}
+                                className="px-2.5 py-1 rounded-full bg-black/80 hover:bg-black text-white text-[10px] font-bold inline-flex items-center gap-1 backdrop-blur-sm"
+                              >
+                                <ZoomIn className="w-3 h-3" /> Ampliar
+                              </button>
+                              <a
+                                href={req.proofUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-2.5 py-1 rounded-full bg-black/80 hover:bg-black text-white text-[10px] font-bold inline-flex items-center gap-1 backdrop-blur-sm"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            </div>
+                          </div>
+                        )}
+
+                        {isPending ? (
+                          <div className="grid grid-cols-2 gap-2.5 pt-1">
+                            <button
+                              type="button"
+                              disabled={busyId === req.id}
+                              onClick={() => handleRejectRecharge(req)}
+                              className="py-2.5 rounded-xl bg-rose-500/15 border border-rose-400/30 text-rose-300 text-xs font-extrabold flex items-center justify-center gap-1.5 hover:bg-rose-500/25 disabled:opacity-50 transition"
+                            >
+                              <XCircle className="w-4 h-4" /> Rechazar
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busyId === req.id}
+                              onClick={() => handleApproveRecharge(req)}
+                              className="py-2.5 rounded-xl bg-gradient-to-r from-emerald-400 to-teal-400 text-zinc-950 text-xs font-black flex items-center justify-center gap-1.5 hover:brightness-110 disabled:opacity-50 shadow-md transition"
+                            >
+                              <CheckCircle2 className="w-4 h-4" />
+                              {busyId === req.id ? 'Procesando...' : `Aprobar +${req.coinsToCredit} 🪙`}
+                            </button>
+                          </div>
+                        ) : (
+                          req.rejectionReason && (
+                            <p className="text-[11px] text-rose-300/90 bg-rose-500/10 border border-rose-400/20 rounded-xl px-3 py-2">
+                              Motivo: {req.rejectionReason}
+                            </p>
+                          )
+                        )}
+                      </div>
+                    );
+                  })
                 )}
               </div>
             )}
 
+            {/* SUB-TAB 2: RETIROS USD A CREADORES */}
+            {treasurySubTab === 'withdrawals' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredWithdrawals.length === 0 ? (
+                  <div className="col-span-full rounded-3xl bg-[#12101D] border border-white/10 p-10 text-center space-y-2">
+                    <Wallet className="w-8 h-8 text-zinc-600 mx-auto" />
+                    <p className="text-sm font-bold text-zinc-300">
+                      Sin solicitudes de retiro en este filtro
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      Los retiros de Diamantes solicitados por creadores aparecerán aquí.
+                    </p>
+                  </div>
+                ) : (
+                  filteredWithdrawals.map((w) => {
+                    const userObj = userById[w.userId];
+                    const avatar =
+                      w.userPhoto || getPrimaryPhoto(userObj || { name: w.userName || '?' }, 120);
+                    const isPending = w.status === 'pending';
+                    const isPaid = w.status === 'paid';
+                    const copyAcctKey = `acct_${w.id}`;
+                    const copyRefKey = `wref_${w.id}`;
+
+                    return (
+                      <div
+                        key={w.id}
+                        className={`rounded-3xl p-4 sm:p-5 bg-[#12101D] border space-y-3.5 transition ${
+                          isPending
+                            ? 'border-sky-400/35 shadow-[0_10px_30px_-14px_rgba(56,189,248,0.3)]'
+                            : 'border-white/10'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <img
+                              src={avatar}
+                              alt={w.userName}
+                              className="w-11 h-11 rounded-2xl object-cover bg-zinc-800 border border-white/10 shrink-0"
+                            />
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="text-sm font-extrabold text-white truncate">
+                                  {w.countryFlag} {w.userName}
+                                </p>
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-[9.5px] font-black uppercase ${
+                                    isPending
+                                      ? 'bg-sky-500/20 border border-sky-400/40 text-sky-300'
+                                      : isPaid
+                                      ? 'bg-emerald-500/20 border border-emerald-400/40 text-emerald-300'
+                                      : 'bg-rose-500/20 border border-rose-400/40 text-rose-300'
+                                  }`}
+                                >
+                                  {isPending ? 'Por pagar' : isPaid ? 'Pagado' : 'Reembolsado'}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-zinc-400 truncate mt-0.5">
+                                {w.userEmail || 'Creador'} · {formatGiftDate(w.createdAt)}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <p className="font-display text-base font-black text-emerald-400 tabular-nums">
+                              {formatUSD(w.netPayoutUSD)}
+                            </p>
+                            <p className="text-[11px] font-bold text-sky-300">{w.amountDiamonds} 💎</p>
+                          </div>
+                        </div>
+
+                        {/* Cuenta de cobro copiable en 1 toque */}
+                        <div className="p-3 rounded-2xl bg-sky-500/10 border border-sky-400/25 flex items-center justify-between gap-2.5">
+                          <div className="min-w-0">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-sky-300 block">
+                              {w.payoutMethodName}
+                            </span>
+                            <span className="text-xs font-mono font-bold text-white break-all">
+                              {w.payoutDetails}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleCopyTreasuryText(copyAcctKey, w.payoutDetails, 'Cuenta de cobro')
+                            }
+                            className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-[11px] font-bold text-white inline-flex items-center gap-1 shrink-0 transition"
+                          >
+                            {copiedTreasuryKey === copyAcctKey ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                            {copiedTreasuryKey === copyAcctKey ? 'Copiado' : 'Copiar'}
+                          </button>
+                        </div>
+
+                        {isPending ? (
+                          <div className="space-y-2.5">
+                            <input
+                              type="text"
+                              placeholder="Pega aquí el TxID / Hash de la transferencia enviada"
+                              value={payoutRefs[w.id] || ''}
+                              onChange={(e) =>
+                                setPayoutRefs((prev) => ({ ...prev, [w.id]: e.target.value }))
+                              }
+                              className="w-full px-3.5 py-2.5 rounded-xl bg-white/5 border border-white/15 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-sky-400"
+                            />
+                            <div className="grid grid-cols-2 gap-2.5">
+                              <button
+                                type="button"
+                                disabled={busyId === w.id}
+                                onClick={() => handleRejectWithdrawal(w)}
+                                className="py-2.5 rounded-xl bg-rose-500/15 border border-rose-400/30 text-rose-300 text-xs font-extrabold hover:bg-rose-500/25 disabled:opacity-50 transition"
+                              >
+                                Devolver 💎
+                              </button>
+                              <button
+                                type="button"
+                                disabled={busyId === w.id}
+                                onClick={() => handlePayWithdrawal(w)}
+                                className="py-2.5 rounded-xl bg-gradient-to-r from-sky-400 to-emerald-400 text-zinc-950 text-xs font-black hover:brightness-110 disabled:opacity-50 shadow-md transition"
+                              >
+                                {busyId === w.id ? 'Confirmando...' : `Confirmar ${formatUSD(w.netPayoutUSD)}`}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between gap-2 pt-1 text-[11px]">
+                            <span className="text-zinc-400">
+                              Bruto {formatUSD(w.grossUSD)} · Fee {formatUSD(w.platformFeeUSD)}
+                            </span>
+                            {w.payoutReference && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleCopyTreasuryText(copyRefKey, w.payoutReference, 'Referencia de pago')
+                                }
+                                className="font-mono text-emerald-300 hover:text-emerald-200 inline-flex items-center gap-1"
+                              >
+                                Ref: {w.payoutReference}
+                                {copiedTreasuryKey === copyRefKey ? (
+                                  <Check className="w-3 h-3" />
+                                ) : (
+                                  <Copy className="w-3 h-3 opacity-70" />
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+            {/* SUB-TAB 3: PAGOS AUTOMÁTICOS NOWPAYMENTS (IPN VERIFICADOS) */}
             {treasurySubTab === 'webhooks' && (
-              <div className="rounded-3xl bg-[#12101D] border border-white/10 overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-white/5 text-zinc-400 uppercase text-[10px] font-extrabold">
-                    <tr>
-                      <th className="px-4 py-3">Proveedor</th>
-                      <th className="px-4 py-3">Usuario</th>
-                      <th className="px-4 py-3">Monto</th>
-                      <th className="px-4 py-3">Acreditado</th>
-                      <th className="px-4 py-3">Firma / Origen</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {paymentTxs.length === 0 ? (
+              <div className="rounded-3xl bg-[#12101D] border border-white/10 overflow-hidden">
+                <div className="px-5 py-3.5 border-b border-white/10 flex flex-wrap items-center justify-between gap-2 bg-white/[0.02]">
+                  <p className="text-xs font-extrabold text-white flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    Historial de Acreditaciones Automáticas NowPayments (HMAC-SHA512)
+                  </p>
+                  <span className="text-[11px] font-bold text-emerald-300 tabular-nums">
+                    Total API: {formatUSD(metrics.gatewayCompletedUSD)}
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-white/5 text-zinc-400 uppercase text-[10px] font-extrabold tracking-wider">
                       <tr>
-                        <td colSpan={5} className="px-4 py-8 text-center text-zinc-500">
-                          Aún no se han recibido pagos automáticos vía Webhook.
-                        </td>
+                        <th className="px-4 py-3">Pasarela / ID</th>
+                        <th className="px-4 py-3">Usuario</th>
+                        <th className="px-4 py-3">Monto</th>
+                        <th className="px-4 py-3">Acreditado</th>
+                        <th className="px-4 py-3">Fecha</th>
+                        <th className="px-4 py-3">Seguridad</th>
                       </tr>
-                    ) : (
-                      paymentTxs.map((tx) => (
-                        <tr key={tx.id}>
-                          <td className="px-4 py-3 font-extrabold uppercase text-sky-300">
-                            {tx.provider || 'gateway'}
-                          </td>
-                          <td className="px-4 py-3 text-white font-semibold">
-                            {tx.userName || tx.userId}
-                          </td>
-                          <td className="px-4 py-3 text-emerald-400 font-black">
-                            {formatUSD(tx.amountUSD)}
-                          </td>
-                          <td className="px-4 py-3 text-amber-300 font-bold">
-                            +{tx.coinsCredited || tx.diamondsCredited || 0}
-                          </td>
-                          <td className="px-4 py-3 text-zinc-400">
-                            {tx.verifiedSignature ? '🔒 Firma HMAC/SHA verificada' : tx.source || 'admin'}
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {filteredPaymentTxs.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-10 text-center text-zinc-500">
+                            Aún no se han recibido pagos automáticos vía NowPayments IPN.
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ) : (
+                        filteredPaymentTxs.map((tx) => {
+                          const copyTxKey = `tx_${tx.id}`;
+                          return (
+                            <tr key={tx.id} className="hover:bg-white/[0.02] transition">
+                              <td className="px-4 py-3.5">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-sky-500/15 border border-sky-400/30 text-[10px] font-black uppercase text-sky-300">
+                                  {tx.provider || 'nowpayments'}
+                                </span>
+                                {tx.externalPaymentId && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleCopyTreasuryText(copyTxKey, tx.externalPaymentId, 'ID de pago')
+                                    }
+                                    className="block mt-1 font-mono text-[10px] text-zinc-400 hover:text-white inline-flex items-center gap-1"
+                                  >
+                                    #{tx.externalPaymentId}
+                                    {copiedTreasuryKey === copyTxKey ? (
+                                      <Check className="w-2.5 h-2.5 text-emerald-400" />
+                                    ) : (
+                                      <Copy className="w-2.5 h-2.5" />
+                                    )}
+                                  </button>
+                                )}
+                              </td>
+                              <td className="px-4 py-3.5 text-white font-bold">
+                                {tx.userName || tx.userId}
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <span className="text-emerald-400 font-black tabular-nums">
+                                  {formatUSD(tx.amountUSD)}
+                                </span>
+                                {tx.currency && (
+                                  <span className="ml-1 text-[10px] text-zinc-400 uppercase">
+                                    {tx.currency}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3.5 font-extrabold text-amber-300 tabular-nums">
+                                +{tx.coinsCredited || tx.diamondsCredited || 0}{' '}
+                                {tx.creditField === 'diamonds' ? '💎' : '🪙'}
+                              </td>
+                              <td className="px-4 py-3.5 text-zinc-400">
+                                {formatGiftDate(tx.createdAt)}
+                              </td>
+                              <td className="px-4 py-3.5">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-400/25 text-[10px] font-extrabold text-emerald-300">
+                                  <ShieldCheck className="w-3 h-3" />
+                                  {tx.verifiedSignature ? 'HMAC-SHA512 OK' : tx.source || 'admin'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>
@@ -1502,14 +1979,37 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
 
       {previewImg && (
         <div
-          className="fixed inset-0 z-[80] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-[80] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
           onClick={() => setPreviewImg(null)}
         >
-          <img
-            src={previewImg}
-            alt="Comprobante ampliado"
-            className="max-w-full max-h-[88dvh] rounded-2xl shadow-2xl"
-          />
+          <div
+            className="relative max-w-3xl w-full flex flex-col items-center gap-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-full flex items-center justify-end gap-2">
+              <a
+                href={previewImg}
+                target="_blank"
+                rel="noreferrer"
+                className="px-3.5 py-2 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold inline-flex items-center gap-1.5 transition"
+              >
+                <ExternalLink className="w-3.5 h-3.5" /> Abrir original
+              </a>
+              <button
+                type="button"
+                onClick={() => setPreviewImg(null)}
+                className="p-2 rounded-full bg-white text-zinc-950 hover:bg-zinc-200 transition shadow-lg"
+                aria-label="Cerrar imagen"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <img
+              src={previewImg}
+              alt="Comprobante ampliado"
+              className="max-w-full max-h-[82dvh] rounded-2xl shadow-2xl border border-white/15 object-contain"
+            />
+          </div>
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Component, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { Coins, Flame, LogOut, Play, ShieldAlert, Sparkles, Tv, X } from 'lucide-react';
 import { AD_REWARD_CONFIG, getIntentionMood, MIN_AGE } from './config/constants';
@@ -889,12 +889,58 @@ function AppRoutes() {
   );
 }
 
+class AppErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, errorMessage: '' };
+  }
+
+  static getDerivedStateFromError(error) {
+    return {
+      hasError: true,
+      errorMessage: error?.message || 'Error inesperado de interfaz.',
+    };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="h-[100dvh] w-screen bg-[#FAF8FA] text-zinc-900 flex items-center justify-center p-6">
+          <div className="w-full max-w-sm rounded-[32px] bg-white border border-zinc-200/80 p-7 text-center space-y-4 shadow-xl">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-50 border border-rose-200 text-[#FF2E54] flex items-center justify-center">
+              <Flame className="w-7 h-7" />
+            </div>
+            <div>
+              <h2 className="font-display text-lg font-black text-zinc-900">
+                Reintentando vista
+              </h2>
+              <p className="text-xs text-zinc-500 mt-1.5 leading-relaxed">
+                Ocurrió un inconveniente temporal mostrando esta sección. Toca abajo para recuperarla al instante.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => this.setState({ hasError: false, errorMessage: '' })}
+              className="w-full py-3 rounded-full bg-zinc-900 text-white text-xs font-extrabold hover:bg-zinc-800 transition"
+            >
+              Volver a la aplicación
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
-    </AuthProvider>
+    <AppErrorBoundary>
+      <AuthProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </AuthProvider>
+    </AppErrorBoundary>
   );
 }
