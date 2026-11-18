@@ -11,7 +11,6 @@ import {
   Play,
   Sparkles,
   Tv,
-  X,
   Zap,
 } from 'lucide-react';
 import { AD_REWARD_CONFIG } from '../../config/constants';
@@ -21,7 +20,6 @@ import {
   unlockChatWithCoins,
   unlockLikeWithCoins,
 } from '../../services/adRewardService';
-import { triggerMonetagZoneTag } from '../../services/monetagLoader';
 import { getUserById, subscribePopularUsers } from '../../services/userService';
 import {
   formatUserDistanceLabel,
@@ -32,6 +30,7 @@ import {
   isUserActuallyOnline,
 } from '../../utils/formatters';
 import RewardedAdModal from '../monetization/RewardedAdModal';
+import UnlockChoiceModal from '../monetization/UnlockChoiceModal';
 
 function HeartArrow3D() {
   return (
@@ -585,141 +584,38 @@ export default function LikesScreen({
       </div>
 
       {/* Modal de Elección Luxury: Gratis con Anuncio vs Monedas al Instante */}
-      {choiceModal && (
-        <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="w-full max-w-md bg-white rounded-t-[32px] sm:rounded-[32px] overflow-hidden shadow-2xl animate-sheet-up">
-            <div className="px-5 py-5 bg-gradient-to-br from-[#190913] via-[#2A0B1E] to-[#120911] text-white relative">
-              <button
-                type="button"
-                onClick={() => setChoiceModal(null)}
-                className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition"
-                aria-label="Cerrar"
-              >
-                <X className="w-4 h-4" />
-              </button>
-
-              <div className="flex items-center gap-3.5 pr-8">
-                <div className="w-14 h-14 rounded-2xl overflow-hidden ring-2 ring-amber-300/50 bg-zinc-800 shrink-0">
-                  <img
-                    src={getPrimaryPhoto(choiceModal.user, 200)}
-                    alt=""
-                    className={`w-full h-full object-cover ${
-                      choiceModal.mode === 'reveal_like' ? 'blur-md scale-110' : ''
-                    }`}
-                  />
-                </div>
-                <div className="min-w-0">
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-[9.5px] font-black uppercase tracking-wider">
-                    <Sparkles className="w-2.5 h-2.5" />
-                    {choiceModal.mode === 'unlock_chat' ? 'Chat desde Likes' : 'Descubre quién te dio Like'}
-                  </span>
-                  <h3 className="font-display text-base font-black text-white mt-1 leading-tight">
-                    {choiceModal.mode === 'unlock_chat'
-                      ? `Enviar mensaje a ${choiceModal.user.name}`
-                      : 'Elige cómo revelar este perfil'}
-                  </h3>
-                  <p className="text-[11px] text-rose-100/80 mt-0.5">
-                    Elige la opción gratuita con anuncio o desbloquea sin esperas con tus monedas.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-5 space-y-3 bg-[#FAF7F9]">
-              {/* Opción 1: Anuncio Publicitario Gratis (Monetag zona 311878 solo para quien no paga 10 monedas) */}
-              <button
-                type="button"
-                onClick={() => {
-                  const target = choiceModal;
-                  if (AD_REWARD_CONFIG.provider === 'monetag') {
-                    triggerMonetagZoneTag();
-                  }
-                  setChoiceModal(null);
-                  setActiveAd({ purpose: target.mode, user: target.user });
-                }}
-                className="w-full p-4 rounded-3xl bg-white border-2 border-emerald-200 hover:border-emerald-400 shadow-card text-left flex items-center justify-between gap-3 transition active:scale-[0.99]"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 text-white flex items-center justify-center shrink-0 shadow-sm">
-                    <Play className="w-5 h-5 fill-white" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-sm font-extrabold text-zinc-900">
-                        {choiceModal.mode === 'unlock_chat'
-                          ? 'Enviar mensaje gratis'
-                          : 'Desbloquear foto y perfil gratis'}
-                      </p>
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[9.5px] font-black uppercase">
-                        $0
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-zinc-500 mt-0.5">
-                      {choiceModal.mode === 'unlock_chat'
-                        ? `¿No tienes ${AD_REWARD_CONFIG.unlockLikeChatCoins} monedas? Mira 1 anuncio (${AD_REWARD_CONFIG.adDurationSeconds}s) para abrir el chat.`
-                        : `¿No tienes ${AD_REWARD_CONFIG.unlockLikeCoins} monedas? Mira 1 anuncio (${AD_REWARD_CONFIG.adDurationSeconds}s) y descubre quién te dio ❤️.`}
-                    </p>
-                  </div>
-                </div>
-                <Tv className="w-4 h-4 text-emerald-600 shrink-0" />
-              </button>
-
-              {/* Opción 2: Pagar con Monedas al Instante */}
-              <button
-                type="button"
-                disabled={busyCoinAction}
-                onClick={() => handleUnlockSingleWithCoins(choiceModal.mode, choiceModal.user)}
-                className="w-full p-4 rounded-3xl bg-white border border-amber-200/90 hover:border-amber-400 shadow-card text-left flex items-center justify-between gap-3 transition active:scale-[0.99] disabled:opacity-50"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 to-[#FF2E54] text-white flex items-center justify-center shrink-0 shadow-sm">
-                    <Coins className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-extrabold text-zinc-900">
-                      Desbloquear al instante (Sin anuncios)
-                    </p>
-                    <p className="text-[11px] text-zinc-500 mt-0.5">
-                      Usa{' '}
-                      <strong>
-                        {choiceModal.mode === 'unlock_chat'
-                          ? AD_REWARD_CONFIG.unlockLikeChatCoins
-                          : AD_REWARD_CONFIG.unlockLikeCoins}{' '}
-                        monedas
-                      </strong>{' '}
-                      · Tu saldo: {userCoins} 🪙
-                    </p>
-                  </div>
-                </div>
-                <span className="px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-black shrink-0">
-                  {choiceModal.mode === 'unlock_chat'
-                    ? AD_REWARD_CONFIG.unlockLikeChatCoins
-                    : AD_REWARD_CONFIG.unlockLikeCoins}{' '}
-                  🪙
-                </span>
-              </button>
-
-              {choiceModal.mode === 'reveal_like' && lockedLikers.length >= 2 && (
-                <button
-                  type="button"
-                  disabled={busyCoinAction}
-                  onClick={handleUnlockAllLikesWithCoins}
-                  className="w-full py-3 rounded-full bg-zinc-900 text-white text-xs font-extrabold hover:bg-zinc-800 transition flex items-center justify-center gap-1.5"
-                >
-                  <Crown className="w-3.5 h-3.5 text-amber-400" />
-                  Revelar TODOS los {lockedLikers.length} Likes por {unlockAllCost} monedas
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <UnlockChoiceModal
+        isOpen={Boolean(choiceModal)}
+        mode={choiceModal?.mode || 'reveal_like'}
+        targetUser={choiceModal?.user}
+        alreadyLikedMe
+        userCoins={userCoins}
+        coinCost={
+          choiceModal?.mode === 'unlock_chat'
+            ? AD_REWARD_CONFIG.unlockLikeChatCoins
+            : AD_REWARD_CONFIG.unlockLikeCoins
+        }
+        busyCoins={busyCoinAction}
+        lockedLikesCount={lockedLikers.length}
+        unlockAllCost={unlockAllCost}
+        onClose={() => setChoiceModal(null)}
+        onWatchAd={() => {
+          const target = choiceModal;
+          setChoiceModal(null);
+          setActiveAd({ purpose: target.mode, user: target.user });
+        }}
+        onUnlockWithCoins={() =>
+          handleUnlockSingleWithCoins(choiceModal.mode, choiceModal.user)
+        }
+        onUnlockAllLikes={handleUnlockAllLikesWithCoins}
+      />
 
       {/* Reproductor de Anuncio Recompensado */}
       <RewardedAdModal
         isOpen={Boolean(activeAd)}
         purpose={activeAd?.purpose || 'reveal_like'}
         targetName={activeAd?.user?.name || 'esta persona'}
+        targetUser={activeAd?.user}
         coinCost={
           activeAd?.purpose === 'unlock_chat'
             ? AD_REWARD_CONFIG.unlockLikeChatCoins
