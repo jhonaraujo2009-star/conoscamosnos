@@ -397,7 +397,13 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
           {/* TAB 2: Transferencia Directa */}
           {activeTab === 'direct' && (
             <div className="space-y-3.5">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div
+                className={`grid gap-2 ${
+                  DIRECT_PAYMENT_METHODS.length <= 2
+                    ? 'grid-cols-2'
+                    : 'grid-cols-1 sm:grid-cols-3'
+                }`}
+              >
                 {DIRECT_PAYMENT_METHODS.map((method) => {
                   const active = selectedMethod.id === method.id;
                   return (
@@ -463,9 +469,19 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
 
                 {qrOpen && (
                   <div className="flex flex-col items-center py-2 border-t border-zinc-100">
-                    <DynamicQrCode
-                      payload={`${selectedMethod.qrPrefix}${selectedMethod.accountValue}&amount=${selectedPkg.priceUSD}`}
-                    />
+                    {selectedMethod.qrImageUrl ? (
+                      <div className="p-2.5 bg-white rounded-2xl border border-zinc-200 shadow-sm">
+                        <img
+                          src={selectedMethod.qrImageUrl}
+                          alt={`QR oficial de ${selectedMethod.name}`}
+                          className="w-44 h-44 object-contain rounded-xl"
+                        />
+                      </div>
+                    ) : (
+                      <DynamicQrCode
+                        payload={`${selectedMethod.qrPrefix}${selectedMethod.accountValue}&amount=${selectedPkg.priceUSD}`}
+                      />
+                    )}
                     <span className="text-[10px] font-semibold text-zinc-400 mt-1.5">
                       QR de cobro para {selectedMethod.name}
                     </span>

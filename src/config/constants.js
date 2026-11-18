@@ -117,37 +117,45 @@ export const ECONOMY_CONFIG = {
 };
 
 export const DIRECT_PAYMENT_METHODS = [
-  {
-    id: 'binance_pay',
-    name: 'Binance Pay (USDT Global)',
-    currency: 'USDT',
-    badge: 'Instantáneo Global',
-    accountLabel: 'Binance Pay ID / Correo',
-    accountValue: import.meta.env.VITE_BINANCE_PAY_ID || '384920194',
-    extraInstructions: 'Envía exactamente el monto equivalente en USDT (1 USDT = 1 USD) sin comisiones de red usando Binance Pay.',
-    qrPrefix: 'binance://pay?id=',
-  },
+  import.meta.env.VITE_BINANCE_PAY_ID
+    ? {
+        id: 'binance_pay',
+        name: 'Binance Pay (USDT)',
+        currency: 'USDT',
+        badge: 'Instantáneo Global',
+        accountLabel: 'Binance Pay ID / Correo',
+        accountValue: import.meta.env.VITE_BINANCE_PAY_ID,
+        extraInstructions:
+          'Envía exactamente el monto equivalente en USDT (1 USDT = 1 USD) sin comisiones de red usando Binance Pay.',
+        qrPrefix: 'binance://pay?id=',
+      }
+    : null,
   {
     id: 'zinli',
     name: 'Zinli (USD)',
     currency: 'USD',
-    badge: 'LATAM Sin Comisiones',
-    accountLabel: 'Correo / Teléfono registrado en Zinli',
-    accountValue: import.meta.env.VITE_ZINLI_EMAIL || 'pagos@conoscamosnos.app',
-    extraInstructions: 'Abre tu app Zinli, toca Enviar dinero en USD a este correo y adjunta la captura con tu número de referencia.',
+    badge: 'USD Directo',
+    accountLabel: 'Correo registrado en Zinli',
+    accountValue: import.meta.env.VITE_ZINLI_EMAIL || 'jhonaraujo2009@gmail.com',
+    extraInstructions:
+      'Abre tu app Zinli, toca Enviar dinero en USD a este correo (o escanea el QR oficial) y adjunta tu captura con el número de referencia.',
     qrPrefix: 'zinli://pay?to=',
+    qrImageUrl: import.meta.env.VITE_ZINLI_QR_URL || '',
   },
   {
     id: 'pago_movil',
-    name: 'Pago Móvil (Local)',
-    currency: 'VES / Local',
-    badge: 'Local Directo',
-    accountLabel: 'Datos Pago Móvil',
-    accountValue: import.meta.env.VITE_PAGO_MOVIL_INFO || '0414-0000000 | V-12345678 | Banesco (0134)',
-    extraInstructions: 'Calcula el monto a la tasa oficial del día y adjunta los últimos 6 dígitos de referencia + captura.',
+    name: 'Pago Móvil (Venezuela)',
+    currency: 'VES',
+    badge: 'Banco de Venezuela',
+    accountLabel: 'Teléfono · Cédula · Banco',
+    accountValue:
+      import.meta.env.VITE_PAGO_MOVIL_INFO ||
+      '0412-0496690 | V-23493744 | Banco de Venezuela (0102)',
+    extraInstructions:
+      'Calcula el monto en Bolívares a la tasa BCV del día y adjunta los últimos dígitos de referencia + captura del Pago Móvil.',
     qrPrefix: 'pagomovil://pay?data=',
   },
-];
+].filter(Boolean);
 
 export const WITHDRAWAL_PAYOUT_METHODS = [
   { id: 'binance_pay', name: 'Binance Pay (USDT)', placeholder: 'Tu Binance Pay ID o correo de Binance' },
