@@ -266,8 +266,8 @@
       (function () {
         var params = new URLSearchParams(window.location.search);
         var token = params.get('token') || '';
-        var durRaw = parseInt(params.get('dur') || '8', 10);
-        var duration = Number.isFinite(durRaw) && durRaw >= 5 ? Math.min(durRaw, 30) : 8;
+        var durRaw = parseInt(params.get('dur') || '12', 10);
+        var duration = Number.isFinite(durRaw) && durRaw >= 5 ? Math.min(durRaw, 60) : 12;
         var purpose = params.get('purpose') === 'unlock_chat' ? 'unlock_chat' : 'reveal_like';
         var targetName = (params.get('name') || 'esta persona').slice(0, 40);
         var zoneId = (params.get('zone') || '311878').replace(/[^0-9]/g, '') || '311878';

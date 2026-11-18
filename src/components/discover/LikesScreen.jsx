@@ -13,7 +13,8 @@ import {
   Tv,
   Zap,
 } from 'lucide-react';
-import { AD_REWARD_CONFIG } from '../../config/constants';
+import { resolveAccessPolicy } from '../../config/constants';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   recordAdRewardUnlock,
   unlockAllLikesWithCoins,
@@ -104,6 +105,9 @@ export default function LikesScreen({
   onSuccess,
   onError,
 }) {
+  const { economyConfig } = useAuth();
+  const policy = useMemo(() => resolveAccessPolicy(economyConfig), [economyConfig]);
+
   const [subTab, setSubTab] = useState('likes'); // 'likes' | 'top_picks'
   const [topPicks, setTopPicks] = useState([]);
   const [likerProfiles, setLikerProfiles] = useState([]);
@@ -129,14 +133,26 @@ export default function LikesScreen({
   const revealedSet = useMemo(() => {
     const set = new Set(userUnlocks?.revealedLikeIds || []);
     matchedPeerSet.forEach((uid) => set.add(uid));
+    if (policy.isFreeMode) {
+      likerProfiles.forEach((u) => {
+        const id = u.uid || u.id;
+        if (id) set.add(id);
+      });
+    }
     return set;
-  }, [userUnlocks?.revealedLikeIds, matchedPeerSet]);
+  }, [userUnlocks?.revealedLikeIds, matchedPeerSet, policy.isFreeMode, likerProfiles]);
 
   const chatUnlockedSet = useMemo(() => {
     const set = new Set(userUnlocks?.chatUnlockedUserIds || []);
     matchedPeerSet.forEach((uid) => set.add(uid));
+    if (policy.isFreeMode) {
+      likerProfiles.forEach((u) => {
+        const id = u.uid || u.id;
+        if (id) set.add(id);
+      });
+    }
     return set;
-  }, [userUnlocks?.chatUnlockedUserIds, matchedPeerSet]);
+  }, [userUnlocks?.chatUnlockedUserIds, matchedPeerSet, policy.isFreeMode, likerProfiles]);
 
   useEffect(() => {
     if (!currentUser?.uid) return;
@@ -188,13 +204,13 @@ export default function LikesScreen({
   const lockedLikers = likerProfiles.filter((u) => !revealedSet.has(u.uid || u.id));
   const userCoins = Number(currentUser?.coins || 0);
   const unlockAllCost = Math.min(
-    AD_REWARD_CONFIG.unlockAllLikesCoins,
-    lockedLikers.length * AD_REWARD_CONFIG.unlockLikeCoins
+    policy.unlockAllLikesCoins,
+    lockedLikers.length * policy.unlockLikeCoins
   );
 
   const handleCardTap = (user) => {
     const uid = user.uid || user.id;
-    if (revealedSet.has(uid)) {
+    if (policy.isFreeMode || revealedSet.has(uid)) {
       onSelectProfile?.(user);
     } else {
       setChoiceModal({ mode: 'reveal_like', user });
@@ -205,8 +221,8 @@ export default function LikesScreen({
     e.stopPropagation();
     const uid = user.uid || user.id;
 
-    // Si ya existe chat o ya se desbloqueó el chat de este perfil, o si exige regalo del creador, abrir directo
-    if (chatUnlockedSet.has(uid) || user.requireGiftToChat) {
+    // En Modo Libre, chat ya desbloqueado o creador con regalo: abrir directo sin modal extra
+    if (policy.isFreeMode || chatUnlockedSet.has(uid) || user.requireGiftToChat) {
       onStartChat?.(user);
       return;
     }
@@ -215,17 +231,21 @@ export default function LikesScreen({
   };
 
   const handleUnlockSingleWithCoins = async (mode, user) => {
-    if (!currentUser?.uid || !user || busyCoinAction) return;
+    if (!currentUser?.uid || !user || busyCoinAction || !policy.enableCoinCharges) return;
     const targetUid = user.uid || user.id;
     const cost =
       mode === 'unlock_chat'
-        ? AD_REWARD_CONFIG.unlockLikeChatCoins
-        : AD_REWARD_CONFIG.unlockLikeCoins;
+        ? policy.unlockLikeChatCoins
+        : policy.unlockLikeCoins;
 
     if (userCoins < cost) {
       setChoiceModal(null);
       setActiveAd(null);
-      onError?.(`Necesitas ${cost} monedas. Recarga en la tienda o mira 1 anuncio gratis.`);
+      onError?.(
+        policy.enableRewardedAds
+          ? `Necesitas ${cost} monedas. Recarga en la tienda o mira 1 anuncio gratis.`
+          : `Necesitas ${cost} monedas. Recarga en la tienda para desbloquear.`
+      );
       onOpenCoinStore?.();
       return;
     }
@@ -252,7 +272,7 @@ export default function LikesScreen({
   };
 
   const handleUnlockAllLikesWithCoins = async () => {
-    if (!currentUser?.uid || lockedLikers.length === 0 || busyCoinAction) return;
+    if (!currentUser?.uid || lockedLikers.length === 0 || busyCoinAction || !policy.enableCoinCharges) return;
     const cost = unlockAllCost;
     if (userCoins < cost) {
       setChoiceModal(null);
@@ -282,6 +302,7 @@ export default function LikesScreen({
         uid: currentUser.uid,
         purpose,
         targetUid,
+        estimatedRevenueUSD: policy.estimatedRevenuePerAdUSD,
       });
       setActiveAd(null);
       if (purpose === 'unlock_chat') {
@@ -346,22 +367,47 @@ export default function LikesScreen({
       {subTab === 'likes' ? (
         likerProfiles.length > 0 ? (
           <div className="flex-1 p-4 space-y-3.5">
-            {/* Banner elegante explicando doble vía: Anuncio Gratis o Monedas */}
-            {lockedLikers.length > 0 && (
+            {/* Banner dinámico según política global configurada por el Super Admin */}
+            {policy.isFreeMode ? (
+              <div className="rounded-3xl p-3.5 bg-gradient-to-r from-emerald-50 via-white to-rose-50 border border-emerald-200/80 text-zinc-800 shadow-sm flex items-center justify-between gap-2">
+                <span className="text-xs font-extrabold text-emerald-800 inline-flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+                  Modo Libre activo: mira quién te dio Like y chatea gratis
+                </span>
+              </div>
+            ) : lockedLikers.length > 0 ? (
               <div className="rounded-3xl p-4 bg-gradient-to-br from-[#190913] via-[#270B1C] to-[#120A14] border border-amber-300/25 text-white shadow-md space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="px-2.5 py-0.5 rounded-full bg-amber-400/20 border border-amber-300/35 text-amber-200 text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1">
                     <Sparkles className="w-3 h-3" /> {lockedLikers.length} por descubrir
                   </span>
-                  <span className="text-[10px] font-bold text-emerald-300 inline-flex items-center gap-1">
-                    <Tv className="w-3 h-3" /> Gratis con anuncio
-                  </span>
+                  {policy.enableRewardedAds && (
+                    <span className="text-[10px] font-bold text-emerald-300 inline-flex items-center gap-1">
+                      <Tv className="w-3 h-3" /> Gratis con anuncio ({policy.adDurationSeconds}s)
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-rose-100/85 leading-relaxed">
-                  Toca cualquier perfil difuminado que te dio ❤️ en Swipe para desbloquearlo por <strong>{AD_REWARD_CONFIG.unlockLikeCoins} monedas</strong> o <strong>gratis viendo 1 anuncio</strong>.
+                  {policy.enableCoinCharges && policy.enableRewardedAds ? (
+                    <>
+                      Toca cualquier perfil difuminado que te dio ❤️ en Swipe para desbloquearlo por{' '}
+                      <strong>{policy.unlockLikeCoins} monedas</strong> o{' '}
+                      <strong>gratis viendo 1 anuncio</strong>.
+                    </>
+                  ) : policy.enableRewardedAds ? (
+                    <>
+                      Toca cualquier perfil difuminado para descubrir quién te dio ❤️{' '}
+                      <strong>100% gratis viendo 1 anuncio</strong>.
+                    </>
+                  ) : (
+                    <>
+                      Toca cualquier perfil difuminado que te dio ❤️ para revelarlo al instante por{' '}
+                      <strong>{policy.unlockLikeCoins} monedas</strong>.
+                    </>
+                  )}
                 </p>
               </div>
-            )}
+            ) : null}
 
             <div className="grid grid-cols-2 gap-3">
               {likerProfiles.map((user) => {
@@ -404,7 +450,11 @@ export default function LikesScreen({
 
                           <div className="w-full py-1.5 px-2 rounded-full bg-white/95 text-zinc-900 text-[10px] font-black flex items-center justify-center gap-1 shadow">
                             <Play className="w-3 h-3 fill-[#FF2E54] text-[#FF2E54]" />
-                            Anuncio o {AD_REWARD_CONFIG.unlockLikeCoins} 🪙
+                            {policy.enableRewardedAds && policy.enableCoinCharges
+                              ? `Anuncio o ${policy.unlockLikeCoins} 🪙`
+                              : policy.enableRewardedAds
+                              ? `Ver anuncio (${policy.adDurationSeconds}s)`
+                              : `Revelar ${policy.unlockLikeCoins} 🪙`}
                           </div>
                         </div>
                       ) : (
@@ -463,7 +513,13 @@ export default function LikesScreen({
             <HeartArrow3D />
             <p className="text-sm font-bold text-zinc-800 mt-4">Aún no tienes Likes pendientes</p>
             <p className="text-xs font-medium text-zinc-500 mt-1 max-w-[260px] leading-relaxed">
-              Cuando alguien te dé Like podrás descubrir quién es gratis viendo 1 anuncio o al instante con tus monedas.
+              {policy.isFreeMode
+                ? 'Cuando alguien te dé Like en Swipe lo verás aquí totalmente gratis al instante.'
+                : policy.enableRewardedAds && policy.enableCoinCharges
+                ? 'Cuando alguien te dé Like podrás descubrir quién es gratis viendo 1 anuncio o al instante con tus monedas.'
+                : policy.enableRewardedAds
+                ? 'Cuando alguien te dé Like podrás descubrir quién es gratis viendo 1 anuncio.'
+                : 'Cuando alguien te dé Like podrás descubrir quién es al instante con tus monedas.'}
             </p>
           </div>
         )
@@ -541,25 +597,29 @@ export default function LikesScreen({
 
       {/* Barra de acción inferior */}
       <div className="p-4 pt-2 bg-transparent space-y-2">
-        {subTab === 'likes' && lockedLikers.length >= 2 ? (
-          <div className="grid grid-cols-2 gap-2.5">
-            <button
-              type="button"
-              onClick={() => setChoiceModal({ mode: 'reveal_like', user: lockedLikers[0] })}
-              className="bg-zinc-900 text-white rounded-full py-3.5 px-3 text-xs font-extrabold shadow-md flex items-center justify-center gap-1.5 active:scale-[0.99] transition-transform"
-            >
-              <Play className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-              Ver 1 con Anuncio
-            </button>
-            <button
-              type="button"
-              disabled={busyCoinAction}
-              onClick={handleUnlockAllLikesWithCoins}
-              className="bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white rounded-full py-3.5 px-3 text-xs font-extrabold shadow-md flex items-center justify-center gap-1.5 active:scale-[0.99] transition-transform disabled:opacity-50"
-            >
-              <Coins className="w-3.5 h-3.5" />
-              Ver Todos ({unlockAllCost} 🪙)
-            </button>
+        {subTab === 'likes' && !policy.isFreeMode && lockedLikers.length >= 2 && (policy.enableRewardedAds || policy.enableCoinCharges) ? (
+          <div className={`grid gap-2.5 ${policy.enableRewardedAds && policy.enableCoinCharges ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {policy.enableRewardedAds && (
+              <button
+                type="button"
+                onClick={() => setChoiceModal({ mode: 'reveal_like', user: lockedLikers[0] })}
+                className="bg-zinc-900 text-white rounded-full py-3.5 px-3 text-xs font-extrabold shadow-md flex items-center justify-center gap-1.5 active:scale-[0.99] transition-transform"
+              >
+                <Play className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                Ver 1 con Anuncio
+              </button>
+            )}
+            {policy.enableCoinCharges && (
+              <button
+                type="button"
+                disabled={busyCoinAction}
+                onClick={handleUnlockAllLikesWithCoins}
+                className="bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white rounded-full py-3.5 px-3 text-xs font-extrabold shadow-md flex items-center justify-center gap-1.5 active:scale-[0.99] transition-transform disabled:opacity-50"
+              >
+                <Coins className="w-3.5 h-3.5" />
+                Ver Todos ({unlockAllCost} 🪙)
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2.5">
@@ -583,7 +643,7 @@ export default function LikesScreen({
         )}
       </div>
 
-      {/* Modal de Elección Luxury: Gratis con Anuncio vs Monedas al Instante */}
+      {/* Modal de Elección Luxury según política global del Admin */}
       <UnlockChoiceModal
         isOpen={Boolean(choiceModal)}
         mode={choiceModal?.mode || 'reveal_like'}
@@ -592,8 +652,8 @@ export default function LikesScreen({
         userCoins={userCoins}
         coinCost={
           choiceModal?.mode === 'unlock_chat'
-            ? AD_REWARD_CONFIG.unlockLikeChatCoins
-            : AD_REWARD_CONFIG.unlockLikeCoins
+            ? policy.unlockLikeChatCoins
+            : policy.unlockLikeCoins
         }
         busyCoins={busyCoinAction}
         lockedLikesCount={lockedLikers.length}
@@ -619,8 +679,8 @@ export default function LikesScreen({
         adSession={activeAd?.session || null}
         coinCost={
           activeAd?.purpose === 'unlock_chat'
-            ? AD_REWARD_CONFIG.unlockLikeChatCoins
-            : AD_REWARD_CONFIG.unlockLikeCoins
+            ? policy.unlockLikeChatCoins
+            : policy.unlockLikeCoins
         }
         onClose={() => setActiveAd(null)}
         onRewardEarned={handleAdCompleted}

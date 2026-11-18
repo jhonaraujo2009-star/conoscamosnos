@@ -23,6 +23,7 @@ import {
   INTERESTED_IN_OPTIONS,
   LOOKING_FOR_OPTIONS,
   MIN_AGE,
+  resolveAccessPolicy,
 } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
 import { sendTextMessage, sendVirtualGift } from '../../services/chatService';
@@ -139,10 +140,11 @@ export default function DiscoverSwipe({
   onError,
 }) {
   const { economyConfig } = useAuth();
+  const accessPolicy = useMemo(() => resolveAccessPolicy(economyConfig), [economyConfig]);
   const [localScope, setLocalScope] = useState('global');
   const [localIntention, setLocalIntention] = useState('Todos');
   const [localGenderPref, setLocalGenderPref] = useState(currentUser?.interestedIn || 'Todos');
-  const [localAgeRange, setLocalAgeRange] = useState({ min: MIN_AGE, max: 60 });
+  const [localAgeRange, setLocalAgeRange] = useState({ min: MIN_AGE, max: 99 });
 
   const scope = controlledScope ?? localScope;
   const setScope = onScopeChange ?? setLocalScope;
@@ -583,7 +585,7 @@ export default function DiscoverSwipe({
     scope !== 'global' ||
     genderPreference !== (currentUser?.interestedIn || 'Todos') ||
     ageRange?.min > MIN_AGE ||
-    ageRange?.max < 60;
+    ageRange?.max < 99;
 
   return (
     <div
@@ -715,7 +717,7 @@ export default function DiscoverSwipe({
                     setScope('global');
                     setIntention('Todos');
                     setGenderPreference(currentUser?.interestedIn || 'Todos');
-                    setAgeRange({ min: MIN_AGE, max: 60 });
+                    setAgeRange({ min: MIN_AGE, max: 99 });
                   }}
                   className="px-2.5 py-1 rounded-full bg-white/10 text-zinc-200 text-[11px] font-bold hover:bg-white/20"
                 >
@@ -1147,7 +1149,15 @@ export default function DiscoverSwipe({
                   type="button"
                   onClick={() => onStartChat?.(topCard)}
                   className="w-12 h-12 rounded-full bg-zinc-900/95 border border-white/20 text-sky-400 flex items-center justify-center shadow-lg active:scale-90 transition-transform"
-                  title="Enviar mensaje (Gratis con Match · Directo: 10 monedas o 1 anuncio)"
+                  title={
+                    accessPolicy.isFreeMode
+                      ? 'Enviar mensaje privado gratis (Modo Libre activo)'
+                      : accessPolicy.enableCoinCharges && accessPolicy.enableRewardedAds
+                      ? `Enviar mensaje (Gratis con Match · Directo: ${accessPolicy.unlockLikeChatCoins} monedas o 1 anuncio)`
+                      : accessPolicy.enableRewardedAds
+                      ? 'Enviar mensaje (Gratis con Match · Directo: 1 anuncio)'
+                      : `Enviar mensaje (Gratis con Match · Directo: ${accessPolicy.unlockLikeChatCoins} monedas)`
+                  }
                   aria-label="Chatear"
                 >
                   <MessageCircle className="w-5 h-5 stroke-[2.4]" />

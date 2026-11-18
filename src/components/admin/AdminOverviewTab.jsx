@@ -31,6 +31,7 @@ const RANK_BADGES = [
 
 export default function AdminOverviewTab({
   metrics,
+  accessPolicy,
   dateFilter,
   onDateFilterChange,
   onNavigateTab,
@@ -44,6 +45,35 @@ export default function AdminOverviewTab({
     metrics.pendingVerificationsCount +
     metrics.pendingRechargesCount +
     metrics.pendingWithdrawalsCount;
+
+  const modeBadge =
+    accessPolicy?.unlockMode === 'free'
+      ? {
+          title: 'Modo Libre (Todo Gratis para el público)',
+          desc: 'Chats directos y Likes revelados gratis sin monedas ni anuncios para maximizar retención.',
+          pill: 'Libre / Gratis',
+          pillClass: 'bg-emerald-500/20 border-emerald-400/35 text-emerald-300',
+        }
+      : accessPolicy?.unlockMode === 'ads_only'
+      ? {
+          title: `Solo Anuncios Monetag (${accessPolicy.adDurationSeconds}s)`,
+          desc: 'Sin cobrar monedas al público; los usuarios desbloquean viendo 1 anuncio.',
+          pill: 'Solo Anuncios',
+          pillClass: 'bg-sky-500/20 border-sky-400/35 text-sky-300',
+        }
+      : accessPolicy?.unlockMode === 'coins_only'
+      ? {
+          title: `Solo Monedas (${accessPolicy.unlockLikeChatCoins} 🪙)`,
+          desc: 'Anuncios desactivados globalmente; desbloqueo inmediato solo con monedas.',
+          pill: 'Solo Monedas',
+          pillClass: 'bg-amber-400/20 border-amber-300/35 text-amber-200',
+        }
+      : {
+          title: `Híbrido: Anuncio (${accessPolicy?.adDurationSeconds || 12}s) o ${accessPolicy?.unlockLikeChatCoins || 10} Monedas`,
+          desc: 'Cada usuario elige ver 1 anuncio gratis o usar monedas al instante.',
+          pill: 'Monedas + Ads',
+          pillClass: 'bg-rose-500/20 border-rose-400/35 text-rose-200',
+        };
 
   return (
     <div className="space-y-6">
@@ -76,6 +106,27 @@ export default function AdminOverviewTab({
           ))}
         </div>
       </div>
+
+      {/* Estado Global Actual de Monetización con acceso directo en 1 toque */}
+      <AdminSectionCard accent="amber" className="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 space-y-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border ${modeBadge.pillClass}`}>
+              {modeBadge.pill}
+            </span>
+            <p className="text-xs sm:text-sm font-black text-white truncate">{modeBadge.title}</p>
+          </div>
+          <p className="text-[11px] text-zinc-400 leading-relaxed">{modeBadge.desc}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onNavigateTab('settings')}
+          className="px-4 py-2.5 rounded-full bg-white text-zinc-950 text-xs font-black hover:bg-amber-50 active:scale-[0.98] transition shrink-0 shadow"
+        >
+          Cambiar Cobros / Modo Libre →
+        </button>
+      </AdminSectionCard>
 
       {/* Bento KPI Grid (4 tarjetas editoriales) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -48,7 +48,6 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         globIgnores: ['sw.js', 'ad-viewer.html'],
         navigateFallbackDenylist: [/^\/ad-viewer\.html/, /^\/api\//],
-        importScripts: ['/sw.js'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/res\.cloudinary\.com\/.*/i,

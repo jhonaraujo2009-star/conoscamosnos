@@ -54,7 +54,13 @@ export function subscribeUserUnlocks(uid, callback) {
  * Registra un desbloqueo obtenido gratuitamente tras ver un anuncio publicitario completo.
  * También guarda la impresión para métricas del Panel Super Admin.
  */
-export async function recordAdRewardUnlock({ uid, purpose, targetUid, provider = AD_REWARD_CONFIG.provider }) {
+export async function recordAdRewardUnlock({
+  uid,
+  purpose,
+  targetUid,
+  provider = AD_REWARD_CONFIG.provider,
+  estimatedRevenueUSD = Number((AD_REWARD_CONFIG.estimatedAdCpmUSD / 1000).toFixed(4)),
+}) {
   if (!uid || !targetUid) {
     throw new Error('Datos inválidos para registrar la recompensa del anuncio.');
   }
@@ -82,7 +88,7 @@ export async function recordAdRewardUnlock({ uid, purpose, targetUid, provider =
       targetUserId: targetUid,
       purpose,
       provider,
-      estimatedRevenueUSD: 0.015,
+      estimatedRevenueUSD: Number(Number(estimatedRevenueUSD || 0.005).toFixed(4)),
       createdAt: serverTimestamp(),
     });
   } catch {

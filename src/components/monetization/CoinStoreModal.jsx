@@ -6,7 +6,6 @@ import {
   Clock,
   Coins,
   Copy,
-  CreditCard,
   Download,
   ExternalLink,
   ImagePlus,
@@ -19,14 +18,13 @@ import {
 } from 'lucide-react';
 import {
   COIN_PACKAGES,
-  DIRECT_PAYMENT_METHODS,
   ECONOMY_CONFIG,
   ENABLE_DEMO_PAYMENTS,
+  resolveDirectPaymentMethods,
 } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
 import { getUserCloudinaryFolder, uploadImageToCloudinary } from '../../services/cloudinaryService';
 import {
-  buildCheckoutUrl,
   createNowPaymentsCheckout,
   simulateAutoPaymentConfirmation,
   submitManualPaymentRequest,
@@ -61,17 +59,23 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
       ? economyConfig.coinPackages
       : COIN_PACKAGES;
   const liveEconomy = economyConfig || ECONOMY_CONFIG;
-  const activeDirectNames = DIRECT_PAYMENT_METHODS.map((m) => m.name.replace(/\s*\(.*\)$/, '')).join(' / ');
+  const liveDirectMethods = useMemo(
+    () => resolveDirectPaymentMethods(economyConfig),
+    [economyConfig]
+  );
+  const activeDirectNames = liveDirectMethods.map((m) => m.name.replace(/\s*\(.*\)$/, '')).join(' / ');
 
   const [selectedPkgId, setSelectedPkgId] = useState(livePackages[1]?.id || livePackages[0].id);
   const selectedPkg = livePackages.find((p) => p.id === selectedPkgId) || livePackages[0];
   const [activeTab, setActiveTab] = useState('auto'); // 'auto' | 'direct'
   const [rulesOpen, setRulesOpen] = useState(false);
-  const [qrOpen, setQrOpen] = useState(Boolean(DIRECT_PAYMENT_METHODS[0]?.qrImageUrl));
+  const [qrOpen, setQrOpen] = useState(Boolean(liveDirectMethods[0]?.qrImageUrl));
   const [simulating, setSimulating] = useState(false);
   const [creatingInvoice, setCreatingInvoice] = useState(false);
 
-  const [selectedMethod, setSelectedMethod] = useState(DIRECT_PAYMENT_METHODS[0]);
+  const [selectedMethodId, setSelectedMethodId] = useState(liveDirectMethods[0]?.id || 'zinli');
+  const selectedMethod =
+    liveDirectMethods.find((m) => m.id === selectedMethodId) || liveDirectMethods[0] || null;
   const [referenceNumber, setReferenceNumber] = useState('');
   const [proofUrl, setProofUrl] = useState('');
   const [uploadingProof, setUploadingProof] = useState(false);
@@ -81,14 +85,19 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
   const fileInputRef = useRef(null);
 
   useEffect(() => {
+    if (liveDirectMethods.length > 0 && !liveDirectMethods.some((m) => m.id === selectedMethodId)) {
+      setSelectedMethodId(liveDirectMethods[0].id);
+      setQrOpen(Boolean(liveDirectMethods[0]?.qrImageUrl));
+    }
+  }, [liveDirectMethods, selectedMethodId]);
+
+  useEffect(() => {
     if (!isOpen || !userProfile?.uid) return;
     const unsub = subscribeMyPaymentRequests(userProfile.uid, setMyRequests);
     return () => unsub();
   }, [isOpen, userProfile?.uid]);
 
   if (!isOpen) return null;
-
-  const lemonCheckout = buildCheckoutUrl('lemonsqueezy', userProfile.uid, selectedPkg);
 
   const handleNowPaymentsCheckout = async () => {
     if (creatingInvoice) return;
@@ -348,18 +357,6 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
                   )}
                 </button>
 
-                {lemonCheckout.url && (
-                  <a
-                    href={lemonCheckout.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="w-full py-2.5 px-3 rounded-2xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 text-indigo-800 text-[11px] font-extrabold flex items-center justify-center gap-1.5 transition"
-                  >
-                    <CreditCard className="w-3.5 h-3.5" />
-                    Tarjeta Visa / Mastercard
-                  </a>
-                )}
-
                 <p className="text-[10.5px] text-center text-zinc-400 font-medium">
                   🔒 Acreditación automática al instante cuando NowPayments confirma la red.
                 </p>
@@ -387,21 +384,27 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
           {/* TAB 2: Transferencia Directa */}
           {activeTab === 'direct' && (
             <div className="space-y-3.5">
+              {liveDirectMethods.length === 0 || !selectedMethod ? (
+                <div className="p-6 rounded-3xl bg-white border border-zinc-200/85 text-center text-xs text-zinc-500">
+                  Los métodos de transferencia directa están pausados temporalmente. Usa Pago Automático o intenta más tarde.
+                </div>
+              ) : (
+                <>
               <div
                 className={`grid gap-2 ${
-                  DIRECT_PAYMENT_METHODS.length <= 2
+                  liveDirectMethods.length <= 2
                     ? 'grid-cols-2'
                     : 'grid-cols-1 sm:grid-cols-3'
                 }`}
               >
-                {DIRECT_PAYMENT_METHODS.map((method) => {
+                {liveDirectMethods.map((method) => {
                   const active = selectedMethod.id === method.id;
                   return (
                     <button
                       key={method.id}
                       type="button"
                       onClick={() => {
-                        setSelectedMethod(method);
+                        setSelectedMethodId(method.id);
                         setQrOpen(Boolean(method.qrImageUrl));
                         setCopied(false);
                       }}
@@ -571,6 +574,8 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
                     : `Enviar Comprobante (+${selectedPkg.coins} 🪙)`}
                 </button>
               </form>
+                </>
+              )}
 
               {myRequests.length > 0 && (
                 <div className="space-y-2 pt-1">

@@ -10,7 +10,6 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { VIP_DM_COST } from '../config/constants';
 import { buildMatchId } from '../utils/formatters';
 
 export function subscribeReceivedLikes(currentUid, callback) {
@@ -217,71 +216,4 @@ export async function sendLike({ currentUser, targetUser, likedPhotoUrl = '' }) 
   });
 
   return result;
-}
-
-/**
- * Mensaje Directo VIP (50 monedas): abre/crea chat inmediato con etiqueta VIP destacada.
- */
-export async function startVipDirectMessage({ currentUser, targetUser }) {
-  const fromUid = currentUser.uid;
-  const toUid = targetUser.uid || targetUser.id;
-  const matchId = buildMatchId(fromUid, toUid);
-
-  const senderRef = doc(db, 'users', fromUid);
-  const matchRef = doc(db, 'matches', matchId);
-
-  const txResult = await runTransaction(db, async (transaction) => {
-    const [senderSnap, matchSnap] = await Promise.all([
-      transaction.get(senderRef),
-      transaction.get(matchRef),
-    ]);
-
-    if (matchSnap.exists()) {
-      return { matchId, createdNow: false, matchData: { id: matchSnap.id, ...matchSnap.data() } };
-    }
-
-    if (!senderSnap.exists()) {
-      throw new Error('Tu perfil no fue encontrado.');
-    }
-
-    const currentCoins = Number(senderSnap.data().coins || 0);
-    if (currentCoins < VIP_DM_COST) {
-      throw new Error(`Necesitas ${VIP_DM_COST} monedas para enviar un Mensaje Directo VIP.`);
-    }
-
-    const newMatchData = {
-      participants: [fromUid, toUid].sort(),
-      participantProfiles: {
-        [fromUid]: buildParticipantSnapshot(currentUser),
-        [toUid]: buildParticipantSnapshot(targetUser),
-      },
-      isVipDirect: true,
-      vipInitiatorId: fromUid,
-      lastMessage: '⚡ Mensaje Directo VIP desbloqueado',
-      lastSenderId: fromUid,
-      lastMessageAt: serverTimestamp(),
-      createdAt: serverTimestamp(),
-    };
-
-    transaction.update(senderRef, {
-      coins: currentCoins - VIP_DM_COST,
-      updatedAt: serverTimestamp(),
-    });
-
-    transaction.set(matchRef, newMatchData);
-
-    return { matchId, createdNow: true, matchData: { id: matchId, ...newMatchData } };
-  });
-
-  if (txResult.createdNow) {
-    await addDoc(collection(db, 'matches', matchId, 'messages'), {
-      senderId: fromUid,
-      type: 'system',
-      text: `⚡ ${currentUser.name} activó un Mensaje Directo VIP`,
-      clientCreatedAt: Date.now(),
-      createdAt: serverTimestamp(),
-    });
-  }
-
-  return txResult;
 }

@@ -16,11 +16,26 @@ async function parseWebhookBody(request) {
 }
 
 export async function GET() {
+  const hasFirebaseAdmin = Boolean(
+    process.env.FIREBASE_SERVICE_ACCOUNT_JSON ||
+      (process.env.FIREBASE_PROJECT_ID &&
+        process.env.FIREBASE_CLIENT_EMAIL &&
+        process.env.FIREBASE_PRIVATE_KEY)
+  );
+  const hasApiKey = Boolean(process.env.NOWPAYMENTS_API_KEY);
+  const hasIpnSecret = Boolean(process.env.NOWPAYMENTS_IPN_SECRET);
+
   return Response.json(
     {
       ok: true,
       endpoint: '/api/webhooks/payments',
       providers: ['nowpayments'],
+      configured: {
+        apiKey: hasApiKey,
+        ipnSecret: hasIpnSecret,
+        firebaseAdmin: hasFirebaseAdmin,
+        ready: hasApiKey && hasIpnSecret && hasFirebaseAdmin,
+      },
     },
     { status: 200 }
   );

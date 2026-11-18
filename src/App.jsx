@@ -1,7 +1,7 @@
 import { Component, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Flame, LogOut, ShieldAlert } from 'lucide-react';
-import { AD_REWARD_CONFIG, getIntentionMood, MIN_AGE } from './config/constants';
+import { getIntentionMood, MIN_AGE, resolveAccessPolicy } from './config/constants';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import {
   recordAdRewardUnlock,
@@ -91,14 +91,16 @@ function SuspendedAccountScreen({ userProfile }) {
 
 function UserAppView({ onSuccess, onError }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { firebaseUser, userProfile, economyConfig, isBanned } = useAuth();
+  const accessPolicy = useMemo(() => resolveAccessPolicy(economyConfig), [economyConfig]);
 
   // 5 Pestañas: 'swipe' | 'explore' | 'likes' | 'chat' | 'profile'
   const [activeTab, setActiveTab] = useState('swipe');
   const [swipeScope, setSwipeScope] = useState('global');
   const [swipeIntention, setSwipeIntention] = useState('Todos');
   const [swipeGenderPref, setSwipeGenderPref] = useState(null);
-  const [swipeAgeRange, setSwipeAgeRange] = useState({ min: MIN_AGE, max: 60 });
+  const [swipeAgeRange, setSwipeAgeRange] = useState({ min: MIN_AGE, max: 99 });
   const [swipeMoodKey, setSwipeMoodKey] = useState('Todos');
   const [matches, setMatches] = useState([]);
   const [receivedLikes, setReceivedLikes] = useState([]);
@@ -133,6 +135,20 @@ function UserAppView({ onSuccess, onError }) {
 
   const handleSuccess = onSuccess;
   const handleError = onError;
+
+  // Mostrar notificación clara cuando NowPayments devuelve al usuario tras completar/cancelar una factura
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const paymentStatus = params.get('payment');
+    if (!paymentStatus) return;
+
+    if (paymentStatus === 'success') {
+      handleSuccess('⚡ ¡Pago enviado! En cuanto NowPayments confirme en blockchain verás tus monedas acreditadas al instante.');
+    } else if (paymentStatus === 'cancel') {
+      handleError('Pago cancelado. Puedes intentarlo cuando gustes desde la Tienda de Monedas.');
+    }
+    navigate('/app', { replace: true });
+  }, [location.search, navigate, handleSuccess, handleError]);
 
   const activeMood = useMemo(() => getIntentionMood(swipeMoodKey), [swipeMoodKey]);
 
@@ -185,7 +201,7 @@ function UserAppView({ onSuccess, onError }) {
     setSwipeScope('global');
     setSwipeIntention('Todos');
     setSwipeGenderPref(null);
-    setSwipeAgeRange({ min: MIN_AGE, max: 60 });
+    setSwipeAgeRange({ min: MIN_AGE, max: 99 });
     setSwipeMoodKey('Todos');
     setActiveTab('swipe');
   }, [firebaseUser?.uid]);
@@ -358,9 +374,9 @@ function UserAppView({ onSuccess, onError }) {
           return;
         }
 
-        // Regla estricta: solo chatear gratis si ya hicieron Match (existe match) o ya se desbloqueó el chat.
-        // En Swipe, Explorar, Likes o Perfil, si no son Match debe pagar 10 monedas o ver 1 anuncio gratis.
+        // Regla global dinámica desde Panel Super Admin (Libre / Solo Ads / Solo Monedas / Híbrido)
         const isChatUnlocked =
+          accessPolicy.isFreeMode ||
           Boolean(options.skipLikeChatGate) ||
           Boolean(existingMatch) ||
           (userUnlocks?.chatUnlockedUserIds || []).includes(targetUid);
@@ -385,19 +401,27 @@ function UserAppView({ onSuccess, onError }) {
         handleError(err.message || 'No se pudo abrir la conversación privada.');
       }
     },
-    [userProfile, matches, userUnlocks, handleOpenChatSession, handleError]
+    [userProfile, matches, userUnlocks, accessPolicy.isFreeMode, handleOpenChatSession, handleError]
   );
 
   const handleUnlockLikeChatWithCoins = useCallback(
     async (target) => {
       if (!userProfile?.uid || !target || busyLikeChatCoins) return;
+      if (!accessPolicy.enableCoinCharges) {
+        await handleStartDirectChat(target, { skipLikeChatGate: true });
+        return;
+      }
       const targetUid = target.uid || target.id;
-      const cost = AD_REWARD_CONFIG.unlockLikeChatCoins;
+      const cost = accessPolicy.unlockLikeChatCoins;
       if (Number(userProfile.coins || 0) < cost) {
         setLikeChatGateTarget(null);
         setLikeChatAdTarget(null);
         setLikeChatAdSession(null);
-        handleError(`Necesitas ${cost} monedas. Recarga en la tienda o mira 1 anuncio gratis.`);
+        handleError(
+          accessPolicy.enableRewardedAds
+            ? `Necesitas ${cost} monedas. Recarga en la tienda o mira 1 anuncio gratis.`
+            : `Necesitas ${cost} monedas. Recarga en la tienda para continuar.`
+        );
         setCoinStoreOpen(true);
         return;
       }
@@ -420,7 +444,16 @@ function UserAppView({ onSuccess, onError }) {
         setBusyLikeChatCoins(false);
       }
     },
-    [userProfile, busyLikeChatCoins, handleError, handleSuccess, handleStartDirectChat]
+    [
+      userProfile,
+      busyLikeChatCoins,
+      accessPolicy.enableCoinCharges,
+      accessPolicy.enableRewardedAds,
+      accessPolicy.unlockLikeChatCoins,
+      handleError,
+      handleSuccess,
+      handleStartDirectChat,
+    ]
   );
 
   const handleLikeChatAdCompleted = useCallback(async () => {
@@ -432,6 +465,7 @@ function UserAppView({ onSuccess, onError }) {
         uid: userProfile.uid,
         purpose: 'unlock_chat',
         targetUid,
+        estimatedRevenueUSD: accessPolicy.estimatedRevenuePerAdUSD,
       });
       setLikeChatAdTarget(null);
       setLikeChatAdSession(null);
@@ -440,7 +474,14 @@ function UserAppView({ onSuccess, onError }) {
     } catch (err) {
       handleError(err.message || 'No se pudo registrar el desbloqueo del chat.');
     }
-  }, [userProfile?.uid, likeChatAdTarget, handleSuccess, handleStartDirectChat, handleError]);
+  }, [
+    userProfile?.uid,
+    likeChatAdTarget,
+    accessPolicy.estimatedRevenuePerAdUSD,
+    handleSuccess,
+    handleStartDirectChat,
+    handleError,
+  ]);
 
   const handleSendGiftToUnlockChat = useCallback(
     async (gift) => {
@@ -618,6 +659,7 @@ function UserAppView({ onSuccess, onError }) {
       <PublicProfileModal
         targetUser={selectedProfile}
         currentUser={userProfile}
+        userUnlocks={userUnlocks}
         onClose={() => setSelectedProfile(null)}
         onStartChat={handleStartDirectChat}
         onOpenCoinStore={() => setCoinStoreOpen(true)}
@@ -661,7 +703,7 @@ function UserAppView({ onSuccess, onError }) {
             : false
         }
         userCoins={userProfile?.coins || 0}
-        coinCost={AD_REWARD_CONFIG.unlockLikeChatCoins}
+        coinCost={accessPolicy.unlockLikeChatCoins}
         busyCoins={busyLikeChatCoins}
         onClose={() => setLikeChatGateTarget(null)}
         onWatchAd={(adSession) => {
@@ -679,7 +721,7 @@ function UserAppView({ onSuccess, onError }) {
         targetName={likeChatAdTarget?.name || 'esta persona'}
         targetUser={likeChatAdTarget}
         adSession={likeChatAdSession}
-        coinCost={AD_REWARD_CONFIG.unlockLikeChatCoins}
+        coinCost={accessPolicy.unlockLikeChatCoins}
         onClose={() => {
           setLikeChatAdTarget(null);
           setLikeChatAdSession(null);

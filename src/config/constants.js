@@ -52,7 +52,6 @@ export const BOOST_PLANS = [
   },
 ];
 
-export const VIP_DM_COST = 50;
 export const MAX_PHOTOS = 6;
 export const MIN_AGE = 18;
 
@@ -116,46 +115,71 @@ export const ECONOMY_CONFIG = {
   minWithdrawalDiamonds: 500, // 500 diamantes = $3.00 USD netos mínimos
 };
 
-export const DIRECT_PAYMENT_METHODS = [
-  import.meta.env.VITE_BINANCE_PAY_ID
-    ? {
-        id: 'binance_pay',
-        name: 'Binance Pay (USDT)',
-        currency: 'USDT',
-        badge: 'Instantáneo Global',
-        accountLabel: 'Binance Pay ID / Correo',
-        accountValue: import.meta.env.VITE_BINANCE_PAY_ID,
-        extraInstructions:
-          'Envía exactamente el monto equivalente en USDT (1 USDT = 1 USD) sin comisiones de red usando Binance Pay.',
-        qrPrefix: 'binance://pay?id=',
-      }
-    : null,
-  {
-    id: 'zinli',
-    name: 'Zinli (USD)',
-    currency: 'USD',
-    badge: 'USD Directo',
-    accountLabel: 'Correo registrado en Zinli',
-    accountValue: import.meta.env.VITE_ZINLI_EMAIL || 'jhonaraujo2009@gmail.com',
-    extraInstructions:
-      'Abre tu app Zinli, toca Enviar dinero en USD a este correo (o escanea el QR oficial) y adjunta tu captura con el número de referencia.',
-    qrPrefix: 'zinli://pay?to=',
-    qrImageUrl: import.meta.env.VITE_ZINLI_QR_URL || '/zinli-qr.png',
-  },
-  {
-    id: 'pago_movil',
-    name: 'Pago Móvil (Venezuela)',
-    currency: 'VES',
-    badge: 'Banco de Venezuela',
-    accountLabel: 'Teléfono · Cédula · Banco',
-    accountValue:
-      import.meta.env.VITE_PAGO_MOVIL_INFO ||
-      '0412-0496690 | V-23493744 | Banco de Venezuela (0102)',
-    extraInstructions:
-      'Calcula el monto en Bolívares a la tasa BCV del día y adjunta los últimos dígitos de referencia + captura del Pago Móvil.',
-    qrPrefix: 'pagomovil://pay?data=',
-  },
-].filter(Boolean);
+export function resolveDirectPaymentMethods(economyConfig = null) {
+  const defaultBinanceId = import.meta.env.VITE_BINANCE_PAY_ID || '';
+  const defaultZinliEmail = import.meta.env.VITE_ZINLI_EMAIL || 'jhonaraujo2009@gmail.com';
+  const defaultPagoMovil =
+    import.meta.env.VITE_PAGO_MOVIL_INFO ||
+    '0412-0496690 | V-23493744 | Banco de Venezuela (0102)';
+
+  const liveChannels = economyConfig?.paymentChannels || {};
+  const binanceId = String(liveChannels.binancePayId ?? defaultBinanceId).trim();
+  const enableBinance =
+    liveChannels.enableBinancePay !== undefined
+      ? Boolean(liveChannels.enableBinancePay && binanceId)
+      : Boolean(binanceId);
+  const enableZinli = liveChannels.enableZinli !== undefined ? Boolean(liveChannels.enableZinli) : true;
+  const zinliEmail = String(liveChannels.zinliEmail ?? defaultZinliEmail).trim() || defaultZinliEmail;
+  const enablePagoMovil =
+    liveChannels.enablePagoMovil !== undefined ? Boolean(liveChannels.enablePagoMovil) : true;
+  const pagoMovilInfo =
+    String(liveChannels.pagoMovilInfo ?? defaultPagoMovil).trim() || defaultPagoMovil;
+
+  return [
+    enableBinance && binanceId
+      ? {
+          id: 'binance_pay',
+          name: 'Binance Pay (USDT)',
+          currency: 'USDT',
+          badge: 'Instantáneo Global',
+          accountLabel: 'Binance Pay ID / Correo',
+          accountValue: binanceId,
+          extraInstructions:
+            'Envía exactamente el monto equivalente en USDT (1 USDT = 1 USD) sin comisiones de red usando Binance Pay.',
+          qrPrefix: 'binance://pay?id=',
+        }
+      : null,
+    enableZinli
+      ? {
+          id: 'zinli',
+          name: 'Zinli (USD)',
+          currency: 'USD',
+          badge: 'USD Directo',
+          accountLabel: 'Correo registrado en Zinli',
+          accountValue: zinliEmail,
+          extraInstructions:
+            'Abre tu app Zinli, toca Enviar dinero en USD a este correo (o escanea el QR oficial) y adjunta tu captura con el número de referencia.',
+          qrPrefix: 'zinli://pay?to=',
+          qrImageUrl: import.meta.env.VITE_ZINLI_QR_URL || '/zinli-qr.png',
+        }
+      : null,
+    enablePagoMovil
+      ? {
+          id: 'pago_movil',
+          name: 'Pago Móvil (Venezuela)',
+          currency: 'VES',
+          badge: 'Banco de Venezuela',
+          accountLabel: 'Teléfono · Cédula · Banco',
+          accountValue: pagoMovilInfo,
+          extraInstructions:
+            'Calcula el monto en Bolívares a la tasa BCV del día y adjunta los últimos dígitos de referencia + captura del Pago Móvil.',
+          qrPrefix: 'pagomovil://pay?data=',
+        }
+      : null,
+  ].filter(Boolean);
+}
+
+export const DIRECT_PAYMENT_METHODS = resolveDirectPaymentMethods();
 
 export const WITHDRAWAL_PAYOUT_METHODS = [
   { id: 'binance_pay', name: 'Binance Pay (USDT)', placeholder: 'Tu Binance Pay ID o correo de Binance' },
@@ -163,30 +187,153 @@ export const WITHDRAWAL_PAYOUT_METHODS = [
   { id: 'pago_movil', name: 'Pago Móvil (Local)', placeholder: 'Banco + Teléfono + Cédula/Documento' },
 ];
 
-export const CHECKOUT_CONFIG = {
-  lemonSqueezyBaseUrl: import.meta.env.VITE_LEMONSQUEEZY_CHECKOUT_BASE || '',
-};
-
 export const ENABLE_DEMO_PAYMENTS = import.meta.env.VITE_ENABLE_DEMO_PAYMENTS === 'true';
 
 /**
- * Configuración del sistema de Publicidad Recompensada (Rewarded Ads) vs. Monedas:
- * - provider: 'adsense_h5' | 'monetag' | 'adsterra' | 'custom_url' | 'preview'
- * - Permite desbloquear Likes y enviar mensajes gratis viendo publicidad, generando ingresos a la plataforma.
+ * Configuración base del sistema de Publicidad Recompensada (Rewarded Ads) vs. Monedas:
+ * El Super Admin puede anular estos valores en tiempo real desde appConfig/economy.
  */
 export const AD_REWARD_CONFIG = {
   provider: import.meta.env.VITE_AD_PROVIDER || 'monetag',
-  adDurationSeconds: Math.max(5, Number(import.meta.env.VITE_AD_DURATION_SECONDS || 8)),
+  adDurationSeconds: Math.max(5, Number(import.meta.env.VITE_AD_DURATION_SECONDS || 12)),
   adsenseClient: import.meta.env.VITE_ADSENSE_CLIENT || '',
   monetagZoneId: import.meta.env.VITE_MONETAG_ZONE_ID || '311878',
   monetagScriptSrc: import.meta.env.VITE_MONETAG_SCRIPT_SRC || 'https://quge5.com/88/tag.min.js',
   monetagDirectLink: import.meta.env.VITE_MONETAG_DIRECT_LINK || 'https://uplcm.com/4/12295528',
   adsterraDirectLink: import.meta.env.VITE_ADSTERRA_DIRECT_LINK || '',
   customSponsorUrl: import.meta.env.VITE_CUSTOM_SPONSOR_URL || '',
+  unlockMode: 'hybrid',
+  enableCoinCharges: true,
+  enableRewardedAds: true,
   unlockLikeCoins: 10,
   unlockAllLikesCoins: 30,
   unlockLikeChatCoins: 10,
+  estimatedAdCpmUSD: 5,
 };
+
+export const ACCESS_MODE_OPTIONS = [
+  {
+    id: 'free',
+    label: 'Modo Libre (Gratis)',
+    shortLabel: 'Libre',
+    description: 'Sin cobrar monedas ni mostrar anuncios al chatear o ver Likes. Ideal para atraer y retener público nuevo.',
+    enableCoinCharges: false,
+    enableRewardedAds: false,
+  },
+  {
+    id: 'ads_only',
+    label: 'Solo Anuncios',
+    shortLabel: 'Solo Ads',
+    description: 'Gratis para tus usuarios sin gastar monedas: desbloquean viendo 1 anuncio Monetag.',
+    enableCoinCharges: false,
+    enableRewardedAds: true,
+  },
+  {
+    id: 'coins_only',
+    label: 'Solo Monedas',
+    shortLabel: 'Solo Monedas',
+    description: 'Desactiva anuncios; para chatear sin Match o descubrir Likes deben usar monedas.',
+    enableCoinCharges: true,
+    enableRewardedAds: false,
+  },
+  {
+    id: 'hybrid',
+    label: 'Monedas o Anuncio',
+    shortLabel: 'Híbrido',
+    description: 'Cada usuario elige: esperar 1 anuncio gratis o pagar con monedas al instante.',
+    enableCoinCharges: true,
+    enableRewardedAds: true,
+  },
+];
+
+export function deriveUnlockMode(enableCoins, enableAds) {
+  if (!enableCoins && !enableAds) return 'free';
+  if (!enableCoins && enableAds) return 'ads_only';
+  if (enableCoins && !enableAds) return 'coins_only';
+  return 'hybrid';
+}
+
+export function resolveAccessPolicy(economyConfig = null) {
+  const hasExplicitMode = ['free', 'ads_only', 'coins_only', 'hybrid'].includes(
+    economyConfig?.unlockMode
+  );
+
+  let enableCoinCharges;
+  let enableRewardedAds;
+  if (
+    typeof economyConfig?.enableCoinCharges === 'boolean' ||
+    typeof economyConfig?.enableRewardedAds === 'boolean'
+  ) {
+    enableCoinCharges =
+      typeof economyConfig?.enableCoinCharges === 'boolean'
+        ? economyConfig.enableCoinCharges
+        : true;
+    enableRewardedAds =
+      typeof economyConfig?.enableRewardedAds === 'boolean'
+        ? economyConfig.enableRewardedAds
+        : true;
+  } else if (hasExplicitMode) {
+    enableCoinCharges =
+      economyConfig.unlockMode === 'coins_only' || economyConfig.unlockMode === 'hybrid';
+    enableRewardedAds =
+      economyConfig.unlockMode === 'ads_only' || economyConfig.unlockMode === 'hybrid';
+  } else {
+    enableCoinCharges = AD_REWARD_CONFIG.enableCoinCharges;
+    enableRewardedAds = AD_REWARD_CONFIG.enableRewardedAds;
+  }
+
+  const unlockMode = hasExplicitMode
+    ? economyConfig.unlockMode
+    : deriveUnlockMode(enableCoinCharges, enableRewardedAds);
+
+  const effectiveCoins = unlockMode === 'coins_only' || unlockMode === 'hybrid';
+  const effectiveAds = unlockMode === 'ads_only' || unlockMode === 'hybrid';
+
+  const adDurationSeconds = Math.max(
+    5,
+    Math.min(
+      60,
+      Math.floor(Number(economyConfig?.adDurationSeconds ?? AD_REWARD_CONFIG.adDurationSeconds ?? 12))
+    )
+  );
+  const monetagDirectLink = String(
+    economyConfig?.monetagDirectLink ?? AD_REWARD_CONFIG.monetagDirectLink ?? ''
+  ).trim();
+  const unlockLikeCoins = Math.max(
+    1,
+    Math.floor(Number(economyConfig?.unlockLikeCoins ?? AD_REWARD_CONFIG.unlockLikeCoins ?? 10))
+  );
+  const unlockAllLikesCoins = Math.max(
+    1,
+    Math.floor(
+      Number(economyConfig?.unlockAllLikesCoins ?? AD_REWARD_CONFIG.unlockAllLikesCoins ?? 30)
+    )
+  );
+  const unlockLikeChatCoins = Math.max(
+    1,
+    Math.floor(
+      Number(economyConfig?.unlockLikeChatCoins ?? AD_REWARD_CONFIG.unlockLikeChatCoins ?? 10)
+    )
+  );
+  const estimatedAdCpmUSD = Math.max(
+    0.1,
+    Number(economyConfig?.estimatedAdCpmUSD ?? AD_REWARD_CONFIG.estimatedAdCpmUSD ?? 5)
+  );
+
+  return {
+    unlockMode,
+    isFreeMode: unlockMode === 'free',
+    enableCoinCharges: effectiveCoins,
+    enableRewardedAds: effectiveAds,
+    adDurationSeconds,
+    monetagDirectLink,
+    unlockLikeCoins,
+    unlockAllLikesCoins,
+    unlockLikeChatCoins,
+    estimatedAdCpmUSD,
+    estimatedRevenuePerAdUSD: Number(Math.max(0.0005, estimatedAdCpmUSD / 1000).toFixed(4)),
+  };
+}
 
 export const LOOKING_FOR_OPTIONS = [
   'Nada serio',

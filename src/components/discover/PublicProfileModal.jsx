@@ -21,7 +21,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { REPORT_REASONS } from '../../config/constants';
+import { REPORT_REASONS, resolveAccessPolicy } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
 import { sendVirtualGift } from '../../services/chatService';
 import { checkConnectionStatus, sendLike } from '../../services/discoveryService';
@@ -52,6 +52,7 @@ import GiftPickerModal from '../chat/GiftPickerModal';
 export default function PublicProfileModal({
   targetUser,
   currentUser,
+  userUnlocks = null,
   onClose,
   onStartChat,
   onOpenCoinStore,
@@ -59,6 +60,7 @@ export default function PublicProfileModal({
   onError,
 }) {
   const { economyConfig } = useAuth();
+  const policy = resolveAccessPolicy(economyConfig);
   const [liveTarget, setLiveTarget] = useState(targetUser);
   const [photoIdx, setPhotoIdx] = useState(0);
   const [status, setStatus] = useState({ iLiked: false, isMatched: false, matchId: null, matchData: null });
@@ -103,6 +105,12 @@ export default function PublicProfileModal({
       liveTarget.requireGiftToChat &&
       !isGiftChatUnlocked(status.matchData, currentUser?.uid, liveTarget)
   );
+  const isChatFreeOrUnlocked = Boolean(
+    !needsGiftForChat &&
+      (policy.isFreeMode ||
+        status.isMatched ||
+        (userUnlocks?.chatUnlockedUserIds || []).includes(targetId))
+  );
 
   const orderedPhotos = getOrderedPhotos(liveTarget, currentUser?.uid, {
     respectSmart: true,
@@ -136,7 +144,12 @@ export default function PublicProfileModal({
         targetUser: liveTarget,
         likedPhotoUrl: photos[photoIdx] || photos[0] || '',
       });
-      setStatus({ iLiked: true, isMatched: res.matched, matchId: res.matchId });
+      setStatus((prev) => ({
+        ...prev,
+        iLiked: true,
+        isMatched: res.matched,
+        matchId: res.matchId,
+      }));
       if (res.matched) {
         onSuccess?.(`🎉 ¡Es un Match con ${liveTarget.name}! Ya pueden chatear.`);
       } else {
@@ -540,8 +553,10 @@ export default function PublicProfileModal({
                 ? 'Abriendo chat privado...'
                 : needsGiftForChat
                 ? `Enviar Regalo y Chatear con ${liveTarget.name}`
+                : isChatFreeOrUnlocked
+                ? `Enviar Mensaje a ${liveTarget.name}`
                 : `Enviar Mensaje Privado a ${liveTarget.name}`}
-              <Lock className="w-3.5 h-3.5 opacity-70" />
+              {!isChatFreeOrUnlocked && <Lock className="w-3.5 h-3.5 opacity-70" />}
             </button>
 
             <div className="grid grid-cols-2 gap-2">

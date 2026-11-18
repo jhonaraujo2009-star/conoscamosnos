@@ -28,14 +28,26 @@ service cloud.firestore {
     }
 
     function isValidPackageCoins(amount) {
-      return amount in [100, 550, 1200, 3000];
+      return amount is int && amount >= 10 && amount <= 100000;
     }
 
     function isValidPackagePrice(coins, amountUSD) {
-      return (coins == 100 && amountUSD == 1.99)
-        || (coins == 550 && amountUSD == 7.99)
-        || (coins == 1200 && amountUSD == 14.99)
-        || (coins == 3000 && amountUSD == 29.99);
+      return isValidPackageCoins(coins)
+        && amountUSD is number
+        && amountUSD >= 0.5
+        && amountUSD <= 10000;
+    }
+
+    function economyMinWithdraw() {
+      return exists(/databases/$(database)/documents/appConfig/economy)
+        ? get(/databases/$(database)/documents/appConfig/economy).data.get('minWithdrawalDiamonds', 500)
+        : 500;
+    }
+
+    function economyNetRate() {
+      return exists(/databases/$(database)/documents/appConfig/economy)
+        ? get(/databases/$(database)/documents/appConfig/economy).data.get('diamondToNetUSDRate', 0.006)
+        : 0.006;
     }
 
     function isValidGiftValue(amount) {
@@ -233,10 +245,10 @@ service cloud.firestore {
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.status == 'pending'
         && request.resource.data.amountDiamonds is int
-        && request.resource.data.amountDiamonds >= 500
+        && request.resource.data.amountDiamonds >= economyMinWithdraw()
         && request.resource.data.netPayoutUSD is number
         && request.resource.data.netPayoutUSD > 0
-        && request.resource.data.netPayoutUSD <= (request.resource.data.amountDiamonds * 0.006 + 0.01);
+        && request.resource.data.netPayoutUSD <= (request.resource.data.amountDiamonds * economyNetRate() + 0.02);
       allow update: if isAdmin();
       allow delete: if false;
     }

@@ -9,7 +9,8 @@ import {
   Tv,
   X,
 } from 'lucide-react';
-import { AD_REWARD_CONFIG } from '../../config/constants';
+import { resolveAccessPolicy } from '../../config/constants';
+import { useAuth } from '../../contexts/AuthContext';
 import { openIsolatedAdViewer, subscribeAdViewerSession } from '../../services/monetagLoader';
 import { getPrimaryPhoto, triggerHaptic } from '../../utils/formatters';
 
@@ -43,12 +44,16 @@ export default function RewardedAdModal({
   targetName = 'esta persona',
   targetUser = null,
   adSession = null, // { mode, token, opened, url, startedAt, windowRef }
-  coinCost = AD_REWARD_CONFIG.unlockLikeCoins,
+  coinCost,
   onClose,
   onRewardEarned,
   onUseCoinsInstead,
 }) {
-  const duration = Math.max(5, Number(AD_REWARD_CONFIG.adDurationSeconds || 8));
+  const { economyConfig } = useAuth();
+  const policy = resolveAccessPolicy(economyConfig);
+  const duration = policy.adDurationSeconds;
+  const resolvedCoinCost =
+    coinCost ?? (purpose === 'unlock_chat' ? policy.unlockLikeChatCoins : policy.unlockLikeCoins);
   const [session, setSession] = useState(adSession);
   const [secondsLeft, setSecondsLeft] = useState(duration);
   const [adState, setAdState] = useState('waiting_open'); // 'waiting_open' | 'blocked' | 'watching' | 'aborted' | 'completed'
@@ -225,6 +230,7 @@ export default function RewardedAdModal({
       purpose,
       targetName: firstName,
       duration,
+      directLink: policy.monetagDirectLink,
     });
     startedAtRef.current = nextSession.startedAt || Date.now();
     setSession(nextSession);
@@ -270,7 +276,7 @@ export default function RewardedAdModal({
       label: rewardReady
         ? `Tiempo completado (${duration}s)`
         : adState === 'aborted'
-        ? 'Cerrado antes de completar los 8s'
+        ? `Cerrado antes de completar los ${duration}s`
         : `Viendo patrocinador (${secondsLeft}s)`,
       done: rewardReady,
       active: adState === 'watching',
@@ -441,12 +447,12 @@ export default function RewardedAdModal({
 
                 <p className="text-xs text-zinc-600 leading-relaxed max-w-[300px] mx-auto">
                   {rewardReady
-                    ? 'Ya cumpliste los 8 segundos verificados. Si todavía tienes abierta la pestaña del anuncio, ya puedes cerrarla y entrar.'
+                    ? `Ya cumpliste los ${duration} segundos verificados. Si todavía tienes abierta la pestaña del anuncio, ya puedes cerrarla y entrar.`
                     : adState === 'aborted'
                     ? `Debes mantener abierta la pestaña del anuncio durante ${duration}s para desbloquear gratis.`
                     : adState === 'blocked'
-                    ? 'Tu navegador bloqueó la pestaña automática. Ábrela con el botón verde de abajo para contar los 8 segundos.'
-                    : 'Mantén abierta la pestaña del anuncio; cuando terminen los 8s verás ✅ ¡Listo! en el título de esta pestaña y podrás cerrarlo.'}
+                    ? `Tu navegador bloqueó la pestaña automática. Ábrela con el botón verde de abajo para contar los ${duration} segundos.`
+                    : `Mantén abierta la pestaña del anuncio; cuando terminen los ${duration}s verás ✅ ¡Listo! en el título de esta pestaña y podrás cerrarlo.`}
                 </p>
               </div>
             </div>
@@ -519,14 +525,14 @@ export default function RewardedAdModal({
               </button>
             )}
 
-            {!rewardReady && onUseCoinsInstead && (
+            {!rewardReady && policy.enableCoinCharges && onUseCoinsInstead && (
               <button
                 type="button"
                 onClick={onUseCoinsInstead}
                 className="w-full py-3 rounded-full bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 text-xs font-extrabold flex items-center justify-center gap-1.5 transition"
               >
                 <Coins className="w-3.5 h-3.5 text-amber-600" />
-                Omitir espera y usar {coinCost} monedas al instante
+                Omitir espera y usar {resolvedCoinCost} monedas al instante
               </button>
             )}
           </div>

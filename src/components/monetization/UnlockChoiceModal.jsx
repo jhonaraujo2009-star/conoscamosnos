@@ -11,14 +11,14 @@ import {
   Sparkles,
   X,
 } from 'lucide-react';
-import { AD_REWARD_CONFIG } from '../../config/constants';
+import { AD_REWARD_CONFIG, resolveAccessPolicy } from '../../config/constants';
+import { useAuth } from '../../contexts/AuthContext';
 import { openIsolatedAdViewer } from '../../services/monetagLoader';
 import { getDisplayAge, getPrimaryPhoto, isProfileVerified } from '../../utils/formatters';
 
 /**
- * Modal luminoso (Light Luxury Pearl & Rose-Gold) para elegir entre:
- * 1) Ver 1 anuncio gratuito en pestaña aislada (~8s)
- * 2) Desbloquear al instante con monedas
+ * Modal luminoso (Light Luxury Pearl & Rose-Gold) para elegir cómo desbloquear
+ * según la política global configurada por el Super Admin (Anuncio / Monedas / Híbrido).
  */
 export default function UnlockChoiceModal({
   isOpen,
@@ -26,29 +26,37 @@ export default function UnlockChoiceModal({
   targetUser,
   alreadyLikedMe = false,
   userCoins = 0,
-  coinCost = AD_REWARD_CONFIG.unlockLikeChatCoins,
+  coinCost,
   busyCoins = false,
   lockedLikesCount = 0,
-  unlockAllCost = 0,
+  unlockAllCost,
   onClose,
   onWatchAd,
   onUnlockWithCoins,
   onUnlockAllLikes,
 }) {
+  const { economyConfig } = useAuth();
   if (!isOpen || !targetUser) return null;
 
+  const policy = resolveAccessPolicy(economyConfig);
   const verified = isProfileVerified(targetUser);
   const visibleAge = getDisplayAge(targetUser);
   const firstName = (targetUser.name || 'este perfil').split(' ')[0];
   const isRevealLike = mode === 'reveal_like';
-  const duration = AD_REWARD_CONFIG.adDurationSeconds;
-  const hasEnoughCoins = Number(userCoins) >= Number(coinCost);
+  const duration = policy.adDurationSeconds;
+  const resolvedCoinCost =
+    coinCost ?? (isRevealLike ? policy.unlockLikeCoins : policy.unlockLikeChatCoins);
+  const resolvedAllCost = unlockAllCost ?? policy.unlockAllLikesCoins;
+  const hasEnoughCoins = Number(userCoins) >= Number(resolvedCoinCost);
+  const showAdOption = policy.enableRewardedAds;
+  const showCoinOption = policy.enableCoinCharges;
 
   const handleChooseFreeAd = () => {
     const session = openIsolatedAdViewer({
       purpose: mode,
       targetName: firstName,
       duration,
+      directLink: policy.monetagDirectLink,
     });
     onWatchAd?.(session);
   };
@@ -124,7 +132,11 @@ export default function UnlockChoiceModal({
 
               <p className="text-[11px] font-medium text-zinc-500 leading-snug mt-0.5 truncate">
                 {isRevealLike
-                  ? 'Elige desbloquear gratis con 1 anuncio o al instante'
+                  ? showAdOption && showCoinOption
+                    ? 'Elige desbloquear gratis con 1 anuncio o al instante'
+                    : showAdOption
+                    ? `Desbloquea gratis viendo 1 anuncio (${duration}s)`
+                    : 'Desbloquea este perfil al instante con tus monedas'
                   : alreadyLikedMe
                   ? 'Ya te dio Like · Abre su chat privado sin esperar'
                   : `${targetUser.country?.flag || '🌎'} ${targetUser.city || targetUser.country?.name || 'Comunidad VIP'} · Aún sin Match mutuo`}
@@ -135,74 +147,84 @@ export default function UnlockChoiceModal({
 
         {/* Opciones Claras de Alto Contraste */}
         <div className="p-5 space-y-3 bg-[#FAF7F9]">
-          <div className="px-3.5 py-2.5 rounded-2xl bg-white border border-zinc-200/80 flex items-start gap-2.5 text-[11px] text-zinc-600 leading-relaxed shadow-card">
-            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-            <span>
-              Al tocar <strong className="text-zinc-900">Ver 1 anuncio gratis</strong> se abrirá la página del patrocinador ({duration}s). Cuando veas{' '}
-              <strong className="text-emerald-700">✅ ¡Listo!</strong> en la pestaña de la app, ya puedes cerrar el anuncio y entrar. Nunca verás anuncios navegando en la app.
-            </span>
-          </div>
-
-          {/* Opción 1: Gratis con 1 Anuncio */}
-          <button
-            type="button"
-            onClick={handleChooseFreeAd}
-            className="group w-full p-4 rounded-[24px] bg-white border-2 border-emerald-300 hover:border-emerald-500 text-left transition active:scale-[0.99] shadow-card"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3.5 min-w-0">
-                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform">
-                  <Play className="w-5 h-5 fill-white ml-0.5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <p className="font-display text-sm font-black text-zinc-900">
-                      {isRevealLike ? 'Revelar perfil gratis' : 'Ver 1 anuncio y chatear'}
-                    </p>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[9.5px] font-black uppercase">
-                      $0 · {duration}s
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-zinc-500 mt-0.5">
-                    Abre el anuncio {duration}s en nueva pestaña sin gastar monedas
-                  </p>
-                </div>
-              </div>
-              <ArrowRight className="w-4 h-4 text-emerald-600 shrink-0 group-hover:translate-x-0.5 transition-transform" />
-            </div>
-          </button>
-
-          {/* Opción 2: Con Monedas al Instante */}
-          <button
-            type="button"
-            disabled={busyCoins}
-            onClick={onUnlockWithCoins}
-            className="group w-full p-4 rounded-[24px] bg-white border border-amber-200 hover:border-[#FF2E54]/60 text-left transition active:scale-[0.99] disabled:opacity-50 shadow-card"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3.5 min-w-0">
-                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-300 via-amber-400 to-[#FF2E54] text-white flex items-center justify-center shrink-0 shadow-md shadow-amber-500/20 group-hover:scale-105 transition-transform">
-                  <Coins className="w-5 h-5 stroke-[2.3]" />
-                </div>
-                <div className="min-w-0">
-                  <p className="font-display text-sm font-black text-zinc-900">
-                    {busyCoins ? 'Desbloqueando al instante...' : 'Pase directo (Sin anuncios)'}
-                  </p>
-                  <p className="text-[11px] text-zinc-500 mt-0.5">
-                    {hasEnoughCoins
-                      ? `Tu saldo: ${userCoins} 🪙 · Entrada inmediata`
-                      : `Tienes ${userCoins} 🪙 · Toca para recargar ${coinCost} 🪙`}
-                  </p>
-                </div>
-              </div>
-
-              <span className="px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-black shrink-0 tabular-nums">
-                {coinCost} 🪙
+          {showAdOption && (
+            <div className="px-3.5 py-2.5 rounded-2xl bg-white border border-zinc-200/80 flex items-start gap-2.5 text-[11px] text-zinc-600 leading-relaxed shadow-card">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <span>
+                Al tocar <strong className="text-zinc-900">Ver 1 anuncio gratis</strong> se abrirá la página del patrocinador ({duration}s). Cuando veas{' '}
+                <strong className="text-emerald-700">✅ ¡Listo!</strong> en la pestaña de la app, ya puedes cerrar el anuncio y entrar. Nunca verás anuncios navegando en la app.
               </span>
             </div>
-          </button>
+          )}
 
-          {isRevealLike && lockedLikesCount >= 2 && onUnlockAllLikes && (
+          {/* Opción 1: Gratis con 1 Anuncio */}
+          {showAdOption && (
+            <button
+              type="button"
+              onClick={handleChooseFreeAd}
+              className="group w-full p-4 rounded-[24px] bg-white border-2 border-emerald-300 hover:border-emerald-500 text-left transition active:scale-[0.99] shadow-card"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform">
+                    <Play className="w-5 h-5 fill-white ml-0.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="font-display text-sm font-black text-zinc-900">
+                        {isRevealLike ? 'Revelar perfil gratis' : 'Ver 1 anuncio y chatear'}
+                      </p>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[9.5px] font-black uppercase">
+                        $0 · {duration}s
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-500 mt-0.5">
+                      Abre el anuncio {duration}s en nueva pestaña sin gastar monedas
+                    </p>
+                  </div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-emerald-600 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+              </div>
+            </button>
+          )}
+
+          {/* Opción 2: Con Monedas al Instante */}
+          {showCoinOption && (
+            <button
+              type="button"
+              disabled={busyCoins}
+              onClick={onUnlockWithCoins}
+              className="group w-full p-4 rounded-[24px] bg-white border border-amber-200 hover:border-[#FF2E54]/60 text-left transition active:scale-[0.99] disabled:opacity-50 shadow-card"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-300 via-amber-400 to-[#FF2E54] text-white flex items-center justify-center shrink-0 shadow-md shadow-amber-500/20 group-hover:scale-105 transition-transform">
+                    <Coins className="w-5 h-5 stroke-[2.3]" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-display text-sm font-black text-zinc-900">
+                      {busyCoins
+                        ? 'Desbloqueando al instante...'
+                        : showAdOption
+                        ? 'Pase directo (Sin anuncios)'
+                        : 'Desbloquear al instante'}
+                    </p>
+                    <p className="text-[11px] text-zinc-500 mt-0.5">
+                      {hasEnoughCoins
+                        ? `Tu saldo: ${userCoins} 🪙 · Entrada inmediata`
+                        : `Tienes ${userCoins} 🪙 · Toca para recargar ${resolvedCoinCost} 🪙`}
+                    </p>
+                  </div>
+                </div>
+
+                <span className="px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-black shrink-0 tabular-nums">
+                  {resolvedCoinCost} 🪙
+                </span>
+              </div>
+            </button>
+          )}
+
+          {showCoinOption && isRevealLike && lockedLikesCount >= 2 && onUnlockAllLikes && (
             <button
               type="button"
               disabled={busyCoins}
@@ -210,7 +232,7 @@ export default function UnlockChoiceModal({
               className="w-full py-3.5 px-4 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white text-xs font-black hover:brightness-105 transition flex items-center justify-center gap-1.5 shadow-md disabled:opacity-50"
             >
               <Crown className="w-3.5 h-3.5" />
-              Revelar TODOS los {lockedLikesCount} Likes por {unlockAllCost} 🪙
+              Revelar TODOS los {lockedLikesCount} Likes por {resolvedAllCost} 🪙
             </button>
           )}
         </div>

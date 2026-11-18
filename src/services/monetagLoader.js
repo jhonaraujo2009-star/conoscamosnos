@@ -19,6 +19,7 @@ export function openIsolatedAdViewer({
   purpose = 'reveal_like',
   targetName = 'esta persona',
   duration = AD_REWARD_CONFIG.adDurationSeconds,
+  directLink: customDirectLink,
 } = {}) {
   const token = createAdSessionToken();
   const startedAt = Date.now();
@@ -27,16 +28,19 @@ export function openIsolatedAdViewer({
     return { mode: 'direct_link', token, opened: false, url: '', startedAt, windowRef: null };
   }
 
-  const directLink = String(
-    AD_REWARD_CONFIG.monetagDirectLink ||
-      AD_REWARD_CONFIG.adsterraDirectLink ||
-      AD_REWARD_CONFIG.customSponsorUrl ||
-      ''
-  ).trim();
+  const resolvedDirect =
+    customDirectLink !== undefined
+      ? String(customDirectLink || '').trim()
+      : String(
+          AD_REWARD_CONFIG.monetagDirectLink ||
+            AD_REWARD_CONFIG.adsterraDirectLink ||
+            AD_REWARD_CONFIG.customSponsorUrl ||
+            ''
+        ).trim();
 
-  if (/^https?:\/\//i.test(directLink)) {
+  if (/^https?:\/\//i.test(resolvedDirect)) {
     try {
-      const adWin = window.open(directLink, '_blank');
+      const adWin = window.open(resolvedDirect, '_blank');
       const opened = Boolean(adWin && !adWin.closed);
       if (opened && typeof adWin.focus === 'function') {
         adWin.focus();
@@ -45,7 +49,7 @@ export function openIsolatedAdViewer({
         mode: 'direct_link',
         token,
         opened,
-        url: directLink,
+        url: resolvedDirect,
         startedAt,
         windowRef: adWin || null,
       };
@@ -54,7 +58,7 @@ export function openIsolatedAdViewer({
         mode: 'direct_link',
         token,
         opened: false,
-        url: directLink,
+        url: resolvedDirect,
         startedAt,
         windowRef: null,
       };

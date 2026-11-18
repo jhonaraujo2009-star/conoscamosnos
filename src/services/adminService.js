@@ -10,17 +10,34 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { COIN_PACKAGES, ECONOMY_CONFIG } from '../config/constants';
+import {
+  AD_REWARD_CONFIG,
+  COIN_PACKAGES,
+  ECONOMY_CONFIG,
+  deriveUnlockMode,
+  resolveAccessPolicy,
+} from '../config/constants';
 import { toMillis } from '../utils/formatters';
 
 export const DEFAULT_LIVE_ECONOMY = {
   ...ECONOMY_CONFIG,
   coinPackages: COIN_PACKAGES,
+  ...resolveAccessPolicy(AD_REWARD_CONFIG),
+  paymentChannels: {
+    enableZinli: true,
+    zinliEmail: import.meta.env.VITE_ZINLI_EMAIL || 'jhonaraujo2009@gmail.com',
+    enablePagoMovil: true,
+    pagoMovilInfo:
+      import.meta.env.VITE_PAGO_MOVIL_INFO ||
+      '0412-0496690 | V-23493744 | Banco de Venezuela (0102)',
+    enableBinancePay: Boolean(import.meta.env.VITE_BINANCE_PAY_ID),
+    binancePayId: import.meta.env.VITE_BINANCE_PAY_ID || '',
+  },
 };
 
 /**
- * Escucha la configuración económica en vivo (appConfig/economy).
- * Permite al Super Admin ajustar el precio de los diamantes y paquetes en tiempo real.
+ * Escucha la configuración económica y política de acceso global en vivo (appConfig/economy).
+ * Permite al Super Admin habilitar/inhabilitar cobros, anuncios, duración y precios en tiempo real.
  */
 export function subscribeEconomyConfig(callback) {
   if (!db) {
@@ -54,10 +71,17 @@ export function subscribeEconomyConfig(callback) {
         Array.isArray(data.coinPackages) && data.coinPackages.length > 0
           ? data.coinPackages
           : COIN_PACKAGES;
+      const accessPolicy = resolveAccessPolicy(data);
+      const paymentChannels = {
+        ...DEFAULT_LIVE_ECONOMY.paymentChannels,
+        ...(data.paymentChannels || {}),
+      };
 
       callback({
         ...ECONOMY_CONFIG,
         ...data,
+        ...accessPolicy,
+        paymentChannels,
         baseDiamondValueUSD,
         creatorShareRatio,
         platformFeeRatio,
@@ -68,6 +92,75 @@ export function subscribeEconomyConfig(callback) {
     },
     () => callback(DEFAULT_LIVE_ECONOMY)
   );
+}
+
+/**
+ * Super Admin: actualiza el modo global de monetización (Libre / Solo Ads / Solo Monedas / Híbrido),
+ * duración de anuncios, enlace Direct Link de Monetag, tarifas de desbloqueo y canales de pago directo.
+ */
+export async function updatePlatformAccessConfig({
+  adminId,
+  unlockMode,
+  enableCoinCharges,
+  enableRewardedAds,
+  adDurationSeconds = 12,
+  monetagDirectLink = AD_REWARD_CONFIG.monetagDirectLink,
+  unlockLikeCoins = 10,
+  unlockAllLikesCoins = 30,
+  unlockLikeChatCoins = 10,
+  estimatedAdCpmUSD = 5,
+  paymentChannels = null,
+}) {
+  if (!adminId) throw new Error('Sesión de Super Admin inválida.');
+
+  const resolvedMode = ['free', 'ads_only', 'coins_only', 'hybrid'].includes(unlockMode)
+    ? unlockMode
+    : deriveUnlockMode(Boolean(enableCoinCharges), Boolean(enableRewardedAds));
+
+  const coinsActive = resolvedMode === 'coins_only' || resolvedMode === 'hybrid';
+  const adsActive = resolvedMode === 'ads_only' || resolvedMode === 'hybrid';
+
+  const cleanDuration = Math.floor(Number(adDurationSeconds));
+  if (!Number.isFinite(cleanDuration) || cleanDuration < 5 || cleanDuration > 60) {
+    throw new Error('La duración del anuncio debe estar entre 5 y 60 segundos.');
+  }
+
+  const cleanDirectLink = String(monetagDirectLink || '').trim();
+  if (cleanDirectLink && !/^https?:\/\//i.test(cleanDirectLink)) {
+    throw new Error('El Direct Link de Monetag debe comenzar con https:// o http://');
+  }
+
+  const cleanLikeCoins = Math.max(1, Math.floor(Number(unlockLikeCoins || 10)));
+  const cleanAllLikesCoins = Math.max(1, Math.floor(Number(unlockAllLikesCoins || 30)));
+  const cleanChatCoins = Math.max(1, Math.floor(Number(unlockLikeChatCoins || 10)));
+  const cleanCpm = Math.max(0.1, Number(Number(estimatedAdCpmUSD || 5).toFixed(2)));
+
+  const payload = {
+    unlockMode: resolvedMode,
+    enableCoinCharges: coinsActive,
+    enableRewardedAds: adsActive,
+    adDurationSeconds: cleanDuration,
+    monetagDirectLink: cleanDirectLink,
+    unlockLikeCoins: cleanLikeCoins,
+    unlockAllLikesCoins: cleanAllLikesCoins,
+    unlockLikeChatCoins: cleanChatCoins,
+    estimatedAdCpmUSD: cleanCpm,
+    updatedBy: adminId,
+    updatedAt: serverTimestamp(),
+  };
+
+  if (paymentChannels && typeof paymentChannels === 'object') {
+    payload.paymentChannels = {
+      enableZinli: Boolean(paymentChannels.enableZinli),
+      zinliEmail: String(paymentChannels.zinliEmail || '').trim(),
+      enablePagoMovil: Boolean(paymentChannels.enablePagoMovil),
+      pagoMovilInfo: String(paymentChannels.pagoMovilInfo || '').trim(),
+      enableBinancePay: Boolean(paymentChannels.enableBinancePay),
+      binancePayId: String(paymentChannels.binancePayId || '').trim(),
+    };
+  }
+
+  await setDoc(doc(db, 'appConfig', 'economy'), payload, { merge: true });
 }
 
 /**

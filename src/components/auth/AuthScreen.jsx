@@ -178,7 +178,7 @@ export default function AuthScreen() {
                 Convierte los regalos y diamantes que recibas en dinero real
               </p>
               <p className="text-[11px] text-rose-100/80 leading-relaxed">
-                Monetiza tu perfil de forma opcional y cobra tus ganancias directo a <strong>Binance Pay</strong> o <strong>Zinli (USD)</strong>.
+                Monetiza tu perfil de forma opcional y cobra tus ganancias directo a <strong>Binance Pay</strong>, <strong>Zinli (USD)</strong> o <strong>Pago Móvil</strong>.
               </p>
             </div>
           </div>

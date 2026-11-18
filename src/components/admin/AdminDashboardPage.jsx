@@ -12,13 +12,16 @@ import {
   Settings,
   X,
 } from 'lucide-react';
+import { resolveAccessPolicy } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
 import { subscribeAllAdImpressions } from '../../services/adRewardService';
 import {
+  DEFAULT_LIVE_ECONOMY,
   setUserSuspensionStatus,
   setUserVerificationBadge,
   subscribeAllUsersForAdmin,
   updateEconomyConfig,
+  updatePlatformAccessConfig,
 } from '../../services/adminService';
 import { logoutUser } from '../../services/authService';
 import {
@@ -45,12 +48,13 @@ const NAV_TABS = [
   { id: 'reports', label: 'Seguridad', icon: Flag },
   { id: 'verification', label: 'Check Azul', icon: BadgeCheck },
   { id: 'treasury', label: 'Tesorería', icon: DollarSign },
-  { id: 'settings', label: 'Economía', icon: Settings },
+  { id: 'settings', label: 'Economía y Acceso', icon: Settings },
 ];
 
 export default function AdminDashboardPage({ onSuccess, onError }) {
   const navigate = useNavigate();
   const { userProfile, economyConfig } = useAuth();
+  const livePolicy = useMemo(() => resolveAccessPolicy(economyConfig), [economyConfig]);
 
   const [activeTab, setActiveTab] = useState('overview');
   const [dateFilter, setDateFilter] = useState('month'); // 'day' | 'week' | 'month' | 'all'
@@ -78,11 +82,24 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
   const [packagesDraft, setPackagesDraft] = useState(economyConfig?.coinPackages || []);
   const [savingConfig, setSavingConfig] = useState(false);
 
+  const [accessDraft, setAccessDraft] = useState(() => resolveAccessPolicy(economyConfig));
+  const [savingAccess, setSavingAccess] = useState(false);
+
+  const [channelsDraft, setChannelsDraft] = useState(
+    () => economyConfig?.paymentChannels || DEFAULT_LIVE_ECONOMY.paymentChannels
+  );
+  const [savingChannels, setSavingChannels] = useState(false);
+
   useEffect(() => {
     setBaseDiamondPrice(String(economyConfig?.baseDiamondValueUSD ?? 0.01));
     setCreatorSharePct(String(Math.round((economyConfig?.creatorShareRatio ?? 0.6) * 100)));
     setMinWithdrawDiamonds(String(economyConfig?.minWithdrawalDiamonds ?? 500));
     setPackagesDraft(economyConfig?.coinPackages || []);
+    setAccessDraft(resolveAccessPolicy(economyConfig));
+    setChannelsDraft({
+      ...DEFAULT_LIVE_ECONOMY.paymentChannels,
+      ...(economyConfig?.paymentChannels || {}),
+    });
   }, [economyConfig]);
 
   useEffect(() => {
@@ -127,10 +144,16 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
         ? startOfMonth
         : 0;
 
-    const newUsersCount = users.filter((u) => {
+    const inRange = (item, ...tsFields) => {
       if (rangeStartMs === 0) return true;
-      return toMillis(u.createdAt) >= rangeStartMs;
-    }).length;
+      for (const field of tsFields) {
+        const ms = toMillis(item?.[field]);
+        if (ms > 0) return ms >= rangeStartMs;
+      }
+      return false;
+    };
+
+    const newUsersCount = users.filter((u) => inRange(u, 'createdAt')).length;
 
     const activeNowCount = users.filter((u) => isUserActuallyOnline(u, { bypassPrivacy: true })).length;
     const active24hCount = users.filter((u) => {
@@ -138,20 +161,34 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
       return ms > 0 && now - ms <= 24 * 60 * 60 * 1000;
     }).length;
 
-    const manualApprovedUSD = paymentRequests
-      .filter((r) => r.status === 'approved')
-      .reduce((acc, r) => acc + Number(r.amountUSD || 0), 0);
-    const gatewayCompletedUSD = paymentTxs
-      .filter((t) => t.status === 'completed')
-      .reduce((acc, t) => acc + Number(t.amountUSD || 0), 0);
-    const adEstRevenueUSD = adImpressions.reduce(
+    const approvedReqsInRange = paymentRequests.filter(
+      (r) => r.status === 'approved' && inRange(r, 'reviewedAt', 'createdAt')
+    );
+    const completedTxsInRange = paymentTxs.filter(
+      (t) => t.status === 'completed' && inRange(t, 'createdAt')
+    );
+    const adsInRange = adImpressions.filter((imp) => inRange(imp, 'createdAt'));
+    const paidWithdrawalsInRange = withdrawals.filter(
+      (w) => w.status === 'paid' && inRange(w, 'paidAt', 'createdAt')
+    );
+
+    const manualApprovedUSD = approvedReqsInRange.reduce(
+      (acc, r) => acc + Number(r.amountUSD || 0),
+      0
+    );
+    const gatewayCompletedUSD = completedTxsInRange.reduce(
+      (acc, t) => acc + Number(t.amountUSD || 0),
+      0
+    );
+    const adEstRevenueUSD = adsInRange.reduce(
       (acc, imp) => acc + Number(imp.estimatedRevenueUSD || 0),
       0
     );
     const totalRevenueUSD = manualApprovedUSD + gatewayCompletedUSD + adEstRevenueUSD;
-    const totalPaidOutUSD = withdrawals
-      .filter((w) => w.status === 'paid')
-      .reduce((acc, w) => acc + Number(w.netPayoutUSD || 0), 0);
+    const totalPaidOutUSD = paidWithdrawalsInRange.reduce(
+      (acc, w) => acc + Number(w.netPayoutUSD || 0),
+      0
+    );
     const netBalanceUSD = totalRevenueUSD - totalPaidOutUSD;
 
     const countryMap = {};
@@ -166,11 +203,11 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
     });
     const countries = Object.values(countryMap).sort((a, b) => b.count - a.count);
 
-    const adUserIds = new Set(adImpressions.map((a) => a.userId).filter(Boolean));
+    const adUserIds = new Set(adsInRange.map((a) => a.userId).filter(Boolean));
     const payingUserIds = new Set(
       [
-        ...paymentRequests.filter((r) => r.status === 'approved').map((r) => r.userId),
-        ...paymentTxs.filter((t) => t.status === 'completed').map((t) => t.userId),
+        ...approvedReqsInRange.map((r) => r.userId),
+        ...completedTxsInRange.map((t) => t.userId),
       ].filter(Boolean)
     );
 
@@ -204,7 +241,7 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
     const pendingWithdrawalsUSD = withdrawals
       .filter((w) => w.status === 'pending')
       .reduce((acc, w) => acc + Number(w.netPayoutUSD || 0), 0);
-    const paidWithdrawalsCount = withdrawals.filter((w) => w.status === 'paid').length;
+    const paidWithdrawalsCount = paidWithdrawalsInRange.length;
 
     return {
       totalUsers,
@@ -219,7 +256,7 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
       netBalanceUSD,
       countries,
       adUsersCount,
-      adImpressionsTotal: adImpressions.length,
+      adImpressionsTotal: adsInRange.length,
       payingUsersCount,
       adConversionPct,
       paidConversionPct,
@@ -377,6 +414,50 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
     }
   };
 
+  const persistPlatformPolicy = async (channels = null) => {
+    await updatePlatformAccessConfig({
+      adminId: userProfile.uid,
+      unlockMode: accessDraft.unlockMode,
+      enableCoinCharges: accessDraft.enableCoinCharges,
+      enableRewardedAds: accessDraft.enableRewardedAds,
+      adDurationSeconds: Number(accessDraft.adDurationSeconds),
+      monetagDirectLink: accessDraft.monetagDirectLink,
+      unlockLikeCoins: Number(accessDraft.unlockLikeCoins),
+      unlockAllLikesCoins: Number(accessDraft.unlockAllLikesCoins),
+      unlockLikeChatCoins: Number(accessDraft.unlockLikeChatCoins),
+      estimatedAdCpmUSD: Number(accessDraft.estimatedAdCpmUSD),
+      paymentChannels: channels,
+    });
+  };
+
+  const handleSaveAccessConfig = async (e) => {
+    e.preventDefault();
+    if (savingAccess) return;
+    setSavingAccess(true);
+    try {
+      await persistPlatformPolicy();
+      onSuccess?.('✅ Política global de cobros y anuncios aplicada en tiempo real.');
+    } catch (err) {
+      onError?.(err.message || 'No se pudo guardar la política global.');
+    } finally {
+      setSavingAccess(false);
+    }
+  };
+
+  const handleSaveChannelsConfig = async (e) => {
+    e.preventDefault();
+    if (savingChannels) return;
+    setSavingChannels(true);
+    try {
+      await persistPlatformPolicy(channelsDraft);
+      onSuccess?.('💳 Canales de cobro directo actualizados en tiempo real.');
+    } catch (err) {
+      onError?.(err.message || 'No se pudieron guardar los canales de cobro.');
+    } finally {
+      setSavingChannels(false);
+    }
+  };
+
   const webhookEndpointUrl =
     typeof window !== 'undefined'
       ? `${window.location.origin}/api/webhooks/payments`
@@ -491,6 +572,7 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
         {activeTab === 'overview' && (
           <AdminOverviewTab
             metrics={metrics}
+            accessPolicy={livePolicy}
             dateFilter={dateFilter}
             onDateFilterChange={setDateFilter}
             onNavigateTab={setActiveTab}
@@ -551,6 +633,14 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
             onPackagesDraftChange={setPackagesDraft}
             savingConfig={savingConfig}
             onSaveEconomyConfig={handleSaveEconomyConfig}
+            accessDraft={accessDraft}
+            onAccessDraftChange={setAccessDraft}
+            savingAccess={savingAccess}
+            onSaveAccessConfig={handleSaveAccessConfig}
+            channelsDraft={channelsDraft}
+            onChannelsDraftChange={setChannelsDraft}
+            savingChannels={savingChannels}
+            onSaveChannelsConfig={handleSaveChannelsConfig}
             webhookEndpointUrl={webhookEndpointUrl}
             copiedKey={copiedKey}
             onCopyWebhook={() => handleCopyText('webhook_url', webhookEndpointUrl, 'Endpoint IPN')}
