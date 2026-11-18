@@ -1,4 +1,4 @@
-import { BadgeCheck, Coins, Crown, Gem, Gift, Lock, Sparkles, X } from 'lucide-react';
+import { BadgeCheck, Crown, Gem, Gift, Lock, Sparkles, X } from 'lucide-react';
 import { ECONOMY_CONFIG, VIRTUAL_GIFTS } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
 import { calculateGiftEconomics, formatUSD, getPrimaryPhoto, isProfileVerified } from '../../utils/formatters';
@@ -6,7 +6,7 @@ import { calculateGiftEconomics, formatUSD, getPrimaryPhoto, isProfileVerified }
 export default function GiftGateChatModal({
   isOpen,
   targetUser,
-  userCoins = 0,
+  userDiamonds = 0,
   sendingGiftId = null,
   onClose,
   onSelectGift,
@@ -56,7 +56,7 @@ export default function GiftGateChatModal({
                 )}
               </h3>
               <p className="text-[11px] text-rose-100/80 leading-snug mt-0.5">
-                {firstName} solo recibe chats nuevos si le envías cualquier regalo virtual.
+                {firstName} solo recibe chats nuevos si le envías un regalo con Diamantes (💎).
               </p>
             </div>
           </div>
@@ -64,12 +64,12 @@ export default function GiftGateChatModal({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto no-scrollbar p-5 space-y-4 bg-[#FAF7F9]">
-          <div className="flex items-center justify-between px-4 py-3 rounded-2xl bg-white border border-amber-200/80 shadow-card">
+          <div className="flex items-center justify-between px-4 py-3 rounded-2xl bg-white border border-sky-200/80 shadow-card">
             <div className="min-w-0">
-              <p className="text-[11px] font-bold text-zinc-500">Tu saldo disponible</p>
-              <p className="text-sm font-black text-amber-700 flex items-center gap-1">
-                <Coins className="w-4 h-4 text-amber-500" />
-                {userCoins} monedas
+              <p className="text-[11px] font-bold text-zinc-500">Tus Diamantes disponibles</p>
+              <p className="text-sm font-black text-sky-700 flex items-center gap-1">
+                <Gem className="w-4 h-4 text-sky-500" />
+                {userDiamonds} 💎
               </p>
             </div>
             <button
@@ -80,20 +80,20 @@ export default function GiftGateChatModal({
               }}
               className="px-3.5 py-2 rounded-full bg-zinc-900 text-white text-xs font-extrabold hover:bg-zinc-800 shadow-sm transition shrink-0"
             >
-              + Recargar
+              + Comprar 💎
             </button>
           </div>
 
           <div className="px-3.5 py-2.5 rounded-2xl bg-sky-50 border border-sky-200/80 text-[11px] text-sky-900 font-medium flex items-start gap-2">
             <Gem className="w-4 h-4 text-sky-500 shrink-0 mt-0.5" />
             <span>
-              Al enviar <strong>cualquier regalo</strong> (desde 🌹 10 monedas), desbloqueas su chat privado al instante y {firstName} recibe <strong>{liveEconomy.diamondsPerCoin} 💎 por moneda</strong> (${liveEconomy.diamondToNetUSDRate.toFixed(3)} USD/💎 retirables).
+              Al enviar <strong>cualquier regalo</strong> (desde 🌹 10 💎), desbloqueas su chat privado al instante y {firstName} recibe <strong>1 💎 retirable</strong> por cada diamante (${liveEconomy.diamondToNetUSDRate.toFixed(3)} USD/💎).
             </span>
           </div>
 
           <div className="grid grid-cols-2 gap-2.5">
             {VIRTUAL_GIFTS.map((gift) => {
-              const canAfford = userCoins >= gift.price;
+              const canAfford = userDiamonds >= gift.price;
               const busy = sendingGiftId === gift.id;
               const eco = calculateGiftEconomics(gift.price, liveEconomy);
               return (
@@ -130,12 +130,12 @@ export default function GiftGateChatModal({
                   <div
                     className={`mt-2.5 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-extrabold border ${
                       canAfford
-                        ? 'bg-white border-amber-200 text-amber-800 shadow-sm'
+                        ? 'bg-white border-sky-200 text-sky-800 shadow-sm'
                         : 'bg-rose-50 border-rose-200 text-[#FF2E54]'
                     }`}
                   >
-                    <Gift className="w-3.5 h-3.5 text-amber-500" />
-                    {busy ? 'Desbloqueando...' : `${gift.price} 🪙`}
+                    <Gem className="w-3.5 h-3.5 text-sky-500" />
+                    {busy ? 'Desbloqueando...' : `${gift.price} 💎`}
                   </div>
                 </button>
               );

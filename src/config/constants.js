@@ -1,37 +1,45 @@
-export const COIN_PACKAGES = [
+export const DIAMOND_PACKAGES = [
   {
     id: 'pack_100',
+    diamonds: 100,
     coins: 100,
     priceUSD: 1.99,
     label: 'Inicio',
     badge: null,
-    bonusText: 'Ideal para regalos y likes VIP',
+    bonusText: 'Para regalar 💎 o cambiar a monedas',
   },
   {
     id: 'pack_550',
+    diamonds: 550,
     coins: 550,
     priceUSD: 7.99,
     label: 'Popular',
     badge: '+10% Bonus',
-    bonusText: 'Incluye 50 monedas extra',
+    bonusText: 'Regalos VIP y desbloqueos directos',
   },
   {
     id: 'pack_1200',
+    diamonds: 1200,
     coins: 1200,
     priceUSD: 14.99,
     label: 'VIP Pro',
     badge: 'Más Vendido',
-    bonusText: 'Ahorra 25% por moneda',
+    bonusText: 'Ahorra 25% por cada diamante',
   },
   {
     id: 'pack_3000',
+    diamonds: 3000,
     coins: 3000,
     priceUSD: 29.99,
     label: 'Elite Global',
     badge: 'Mejor Valor',
-    bonusText: 'Máximo poder en regalos y Boosts',
+    bonusText: 'Máximo poder en regalos, chats y Boost',
   },
 ];
+
+export const COIN_PACKAGES = DIAMOND_PACKAGES;
+
+export const DIAMOND_TO_COIN_PRESETS = [10, 25, 50, 100, 250];
 
 export const BOOST_PLANS = [
   {
@@ -108,11 +116,12 @@ export const VIRTUAL_GIFTS = [
  */
 export const ECONOMY_CONFIG = {
   diamondsPerCoin: 1,
+  coinsPerDiamond: 2, // Tasa sugerida: 1 💎 comprado = 2 🪙 para chatear/desbloquear
   baseDiamondValueUSD: 0.01,
   creatorShareRatio: 0.6,
   platformFeeRatio: 0.4,
-  diamondToNetUSDRate: 0.006, // $0.006 USD netos retirables por cada diamante
-  minWithdrawalDiamonds: 500, // 500 diamantes = $3.00 USD netos mínimos
+  diamondToNetUSDRate: 0.006, // $0.006 USD netos retirables por cada diamante ganado
+  minWithdrawalDiamonds: 500, // 500 diamantes ganados = $3.00 USD netos mínimos
 };
 
 export function resolveDirectPaymentMethods(economyConfig = null) {
@@ -319,6 +328,10 @@ export function resolveAccessPolicy(economyConfig = null) {
     0.1,
     Number(economyConfig?.estimatedAdCpmUSD ?? AD_REWARD_CONFIG.estimatedAdCpmUSD ?? 5)
   );
+  const coinsPerDiamond = Math.max(
+    1,
+    Math.min(100, Math.floor(Number(economyConfig?.coinsPerDiamond ?? ECONOMY_CONFIG.coinsPerDiamond ?? 2)))
+  );
 
   return {
     unlockMode,
@@ -330,6 +343,7 @@ export function resolveAccessPolicy(economyConfig = null) {
     unlockLikeCoins,
     unlockAllLikesCoins,
     unlockLikeChatCoins,
+    coinsPerDiamond,
     estimatedAdCpmUSD,
     estimatedRevenuePerAdUSD: Number(Math.max(0.0005, estimatedAdCpmUSD / 1000).toFixed(4)),
   };

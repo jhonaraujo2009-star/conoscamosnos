@@ -1367,7 +1367,7 @@ export default function DiscoverSwipe({
         isOpen={giftPickerOpen}
         onClose={() => setGiftPickerOpen(false)}
         recipientName={topCard?.name}
-        userCoins={currentUser?.coins || 0}
+        userDiamonds={currentUser?.diamonds || 0}
         sendingGiftId={sendingGiftId}
         onSelectGift={handleSendGift}
         onOpenCoinStore={() => {

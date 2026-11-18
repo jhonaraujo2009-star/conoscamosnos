@@ -2,14 +2,22 @@ import { Check, Copy } from 'lucide-react';
 
 const ACCENT_TOP_LINE = {
   none: '',
-  crimson: 'from-transparent via-[#FF2E54]/70 to-transparent',
-  amber: 'from-transparent via-amber-400/70 to-transparent',
-  emerald: 'from-transparent via-emerald-400/70 to-transparent',
-  sky: 'from-transparent via-sky-400/70 to-transparent',
+  crimson: 'from-rose-300 via-[#FF2E54] to-amber-300',
+  amber: 'from-amber-300 via-orange-300 to-rose-300',
+  emerald: 'from-emerald-300 via-teal-300 to-sky-300',
+  sky: 'from-sky-300 via-indigo-300 to-rose-300',
+};
+
+const ACCENT_SURFACE = {
+  none: 'bg-white/95 border-zinc-200/80',
+  crimson: 'bg-gradient-to-br from-white via-white to-rose-50/80 border-rose-200/85',
+  amber: 'bg-gradient-to-br from-white via-white to-amber-50/80 border-amber-200/85',
+  emerald: 'bg-gradient-to-br from-white via-white to-emerald-50/80 border-emerald-200/85',
+  sky: 'bg-gradient-to-br from-white via-white to-sky-50/80 border-sky-200/85',
 };
 
 /**
- * Superficie ejecutiva Obsidian Velvet con sutil borde perlado y línea de acento superior opcional.
+ * Tarjeta editorial pastel luminosa con borde suave y acento superior opcional.
  */
 export function AdminSectionCard({
   accent = 'none',
@@ -17,13 +25,14 @@ export function AdminSectionCard({
   children,
 }) {
   const topGlow = ACCENT_TOP_LINE[accent] || '';
+  const surface = ACCENT_SURFACE[accent] || ACCENT_SURFACE.none;
   return (
     <section
-      className={`relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#16101F]/95 via-[#110C18]/95 to-[#0C0912]/95 border border-white/[0.08] shadow-[0_18px_42px_-20px_rgba(0,0,0,0.85)] ${className}`}
+      className={`relative overflow-hidden rounded-[26px] border shadow-[0_14px_34px_-18px_rgba(15,23,42,0.14)] ${surface} ${className}`}
     >
       {topGlow && (
         <div
-          className={`pointer-events-none absolute inset-x-6 top-0 h-[1.5px] bg-gradient-to-r ${topGlow}`}
+          className={`pointer-events-none absolute inset-x-6 top-0 h-[3px] rounded-b-full bg-gradient-to-r ${topGlow}`}
         />
       )}
       {children}
@@ -42,30 +51,30 @@ export function AdminCopyButton({ copyKey, copiedKey, onCopy, label = 'Copiar' }
       onClick={onCopy}
       className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-extrabold inline-flex items-center gap-1 shrink-0 transition ${
         isCopied
-          ? 'bg-emerald-500/20 border-emerald-400/40 text-emerald-300'
-          : 'bg-white/[0.06] hover:bg-white/[0.12] border-white/10 text-zinc-200 hover:text-white'
+          ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+          : 'bg-zinc-100 hover:bg-zinc-200/80 border-zinc-200 text-zinc-700 hover:text-zinc-900'
       }`}
     >
-      {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+      {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
       <span>{isCopied ? 'Copiado' : label}</span>
     </button>
   );
 }
 
 /**
- * Estado vacío editorial unificado para pestañas del panel Super Admin.
+ * Estado vacío editorial claro unificado para pestañas del panel Super Admin.
  */
 export function AdminEmptyState({ icon: Icon, title, description }) {
   return (
     <AdminSectionCard className="p-10 text-center space-y-2.5">
       {Icon && (
-        <div className="w-12 h-12 mx-auto rounded-2xl bg-white/[0.05] border border-white/10 text-zinc-400 flex items-center justify-center">
+        <div className="w-12 h-12 mx-auto rounded-2xl bg-rose-50 border border-rose-200/70 text-[#FF2E54] flex items-center justify-center">
           <Icon className="w-6 h-6" />
         </div>
       )}
-      <p className="font-display text-sm font-black text-white">{title}</p>
+      <p className="font-display text-sm font-black text-zinc-900">{title}</p>
       {description && (
-        <p className="text-xs text-zinc-400 max-w-xs mx-auto leading-relaxed">{description}</p>
+        <p className="text-xs text-zinc-500 max-w-xs mx-auto leading-relaxed">{description}</p>
       )}
     </AdminSectionCard>
   );

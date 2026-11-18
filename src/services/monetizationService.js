@@ -17,7 +17,7 @@ import { toMillis } from '../utils/formatters';
  * Solicita al backend seguro (/api/payments/create-invoice) una factura oficial de NowPayments
  * asociada al uid autenticado y al paquete elegido, para acreditación automática vía Webhook.
  */
-export async function createNowPaymentsCheckout({ pkg, creditTarget = 'coins' }) {
+export async function createNowPaymentsCheckout({ pkg, creditTarget = 'diamonds' }) {
   const currentUser = auth?.currentUser;
   if (!currentUser) {
     throw new Error('Debes iniciar sesión para realizar una recarga.');
@@ -43,9 +43,17 @@ export async function createNowPaymentsCheckout({ pkg, creditTarget = 'coins' })
   return data;
 }
 
-export async function simulateAutoPaymentConfirmation({ userId, userName, pkg, provider = 'nowpayments' }) {
+export async function simulateAutoPaymentConfirmation({
+  userId,
+  userName,
+  pkg,
+  provider = 'nowpayments',
+  creditTarget = 'diamonds',
+}) {
   const userRef = doc(db, 'users', userId);
   const txRef = doc(collection(db, 'paymentTransactions'));
+  const units = Math.floor(Number(pkg.diamonds ?? pkg.coins ?? 0));
+  const field = creditTarget === 'coins' ? 'coins' : 'diamonds';
 
   await runTransaction(db, async (transaction) => {
     const userSnap = await transaction.get(userRef);
@@ -53,9 +61,9 @@ export async function simulateAutoPaymentConfirmation({ userId, userName, pkg, p
       throw new Error('Usuario no encontrado.');
     }
 
-    const currentCoins = Number(userSnap.data().coins || 0);
+    const currentBalance = Number(userSnap.data()[field] || 0);
     transaction.update(userRef, {
-      coins: currentCoins + pkg.coins,
+      [field]: currentBalance + units,
       updatedAt: serverTimestamp(),
     });
 
@@ -65,15 +73,17 @@ export async function simulateAutoPaymentConfirmation({ userId, userName, pkg, p
       provider,
       packageId: pkg.id,
       amountUSD: pkg.priceUSD,
-      coinsCredited: pkg.coins,
-      customData: { userId, packageId: pkg.id },
+      creditField: field,
+      coinsCredited: units,
+      diamondsCredited: field === 'diamonds' ? units : 0,
+      customData: { userId, packageId: pkg.id, creditTarget: field },
       source: 'simulator',
       status: 'completed',
       createdAt: serverTimestamp(),
     });
   });
 
-  return { txId: txRef.id, coinsAdded: pkg.coins };
+  return { txId: txRef.id, coinsAdded: units, diamondsAdded: units, creditField: field };
 }
 
 export async function submitManualPaymentRequest({
@@ -82,6 +92,7 @@ export async function submitManualPaymentRequest({
   method,
   referenceNumber,
   proofUrl,
+  creditTarget = 'diamonds',
 }) {
   if (!referenceNumber?.trim()) {
     throw new Error('Ingresa el número de referencia del pago.');
@@ -89,6 +100,9 @@ export async function submitManualPaymentRequest({
   if (!proofUrl) {
     throw new Error('Debes subir la captura del comprobante a Cloudinary.');
   }
+
+  const units = Math.floor(Number(pkg.diamonds ?? pkg.coins ?? 0));
+  const target = creditTarget === 'coins' ? 'coins' : 'diamonds';
 
   const docRef = await addDoc(collection(db, 'paymentRequests'), {
     userId: user.uid,
@@ -102,7 +116,9 @@ export async function submitManualPaymentRequest({
     methodName: method.name,
     currency: method.currency,
     amountUSD: pkg.priceUSD,
-    coinsToCredit: pkg.coins,
+    creditTarget: target,
+    diamondsToCredit: units,
+    coinsToCredit: units,
     referenceNumber: referenceNumber.trim(),
     proofUrl,
     status: 'pending',
@@ -174,11 +190,12 @@ export async function approvePaymentRequest({ requestId, adminId }) {
       throw new Error('El usuario destinatario no existe.');
     }
 
-    const currentCoins = Number(userSnap.data().coins || 0);
-    const coinsToCredit = Number(reqData.coinsToCredit || 0);
+    const targetField = reqData.creditTarget === 'coins' ? 'coins' : 'diamonds';
+    const currentBalance = Number(userSnap.data()[targetField] || 0);
+    const unitsToCredit = Number(reqData.diamondsToCredit || reqData.coinsToCredit || 0);
 
     transaction.update(userRef, {
-      coins: currentCoins + coinsToCredit,
+      [targetField]: currentBalance + unitsToCredit,
       updatedAt: serverTimestamp(),
     });
 

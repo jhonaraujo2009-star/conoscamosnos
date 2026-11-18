@@ -14,7 +14,7 @@ const DEFAULT_PACKAGES = [
 export async function createNowPaymentsInvoice({
   authHeader = '',
   packageId,
-  creditTarget = 'coins',
+  creditTarget = 'diamonds',
   origin = '',
 }) {
   const apiKey = process.env.NOWPAYMENTS_API_KEY;
@@ -73,15 +73,18 @@ export async function createNowPaymentsInvoice({
     };
   }
 
-  const safeTarget = creditTarget === 'diamonds' ? 'diamonds' : 'coins';
+  const safeTarget = creditTarget === 'coins' ? 'coins' : 'diamonds';
   const cleanOrigin = String(origin || process.env.APP_PUBLIC_URL || 'https://conoscamosnos.vercel.app').replace(/\/$/, '');
   const orderId = `uid:${uid}|pkg:${pkg.id}|target:${safeTarget}`;
+  const packageUnits = Number(pkg.diamonds ?? pkg.coins ?? 0);
 
   const nowPaymentsPayload = {
     price_amount: Number(pkg.priceUSD),
     price_currency: 'usd',
     order_id: orderId,
-    order_description: `Conoscamosnos - ${pkg.coins} Monedas (${pkg.label || pkg.id})`,
+    order_description: `Conoscamosnos - ${packageUnits} ${
+      safeTarget === 'diamonds' ? 'Diamantes' : 'Monedas'
+    } (${pkg.label || pkg.id})`,
     ipn_callback_url: `${cleanOrigin}/api/webhooks/payments`,
     success_url: `${cleanOrigin}/app?payment=success`,
     cancel_url: `${cleanOrigin}/app?payment=cancel`,
@@ -123,7 +126,8 @@ export async function createNowPaymentsInvoice({
       invoiceUrl: data.invoice_url,
       orderId,
       amountUSD: pkg.priceUSD,
-      coins: pkg.coins,
+      coins: packageUnits,
+      diamonds: packageUnits,
     },
   };
 }

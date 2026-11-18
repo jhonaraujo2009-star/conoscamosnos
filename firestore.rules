@@ -50,6 +50,12 @@ service cloud.firestore {
         : 0.006;
     }
 
+    function economyCoinsPerDiamond() {
+      return exists(/databases/$(database)/documents/appConfig/economy)
+        ? get(/databases/$(database)/documents/appConfig/economy).data.get('coinsPerDiamond', 2)
+        : 2;
+    }
+
     function isValidGiftValue(amount) {
       return amount in [10, 25, 50, 150, 500];
     }
@@ -74,6 +80,7 @@ service cloud.firestore {
           || (isSuperAdminEmail() && request.resource.data.role == 'SUPER_ADMIN')
         )
         && request.resource.data.coins == 0
+        && request.resource.data.get('diamonds', 0) == 0
         && request.resource.data.earningsDiamonds == 0
         && request.resource.data.get('pendingWithdrawalDiamonds', 0) == 0
         && request.resource.data.get('totalWithdrawnUSD', 0) == 0
@@ -118,20 +125,35 @@ service cloud.firestore {
               )
               && request.resource.data.coins <= resource.data.coins
               && request.resource.data.coins >= 0
+              && request.resource.data.get('diamonds', 0) <= resource.data.get('diamonds', 0)
+              && request.resource.data.get('diamonds', 0) >= 0
               && (
                 boostFieldsUnchanged()
                 || isValidBoostCost(resource.data.coins - request.resource.data.coins)
               )
             )
             || (
-              // Canje atómico 1:1 de diamantes ganados por regalos -> monedas internas
+              // Canje atómico de diamantes comprados (diamonds) -> monedas internas (solo chat/desbloqueo)
               boostFieldsUnchanged()
+              && request.resource.data.earningsDiamonds == resource.data.earningsDiamonds
+              && request.resource.data.get('pendingWithdrawalDiamonds', 0) == resource.data.get('pendingWithdrawalDiamonds', 0)
+              && request.resource.data.get('diamonds', 0) < resource.data.get('diamonds', 0)
+              && request.resource.data.get('diamonds', 0) >= 0
+              && request.resource.data.coins > resource.data.coins
+              && (request.resource.data.coins - resource.data.coins)
+                 <= (resource.data.get('diamonds', 0) - request.resource.data.get('diamonds', 0)) * economyCoinsPerDiamond()
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['diamonds', 'coins', 'updatedAt'])
+            )
+            || (
+              // Canje atómico de diamantes ganados por regalos -> monedas internas
+              boostFieldsUnchanged()
+              && request.resource.data.get('diamonds', 0) == resource.data.get('diamonds', 0)
               && request.resource.data.earningsDiamonds < resource.data.earningsDiamonds
               && request.resource.data.earningsDiamonds >= 0
               && request.resource.data.get('pendingWithdrawalDiamonds', 0) == resource.data.get('pendingWithdrawalDiamonds', 0)
               && request.resource.data.coins > resource.data.coins
               && (request.resource.data.coins - resource.data.coins)
-                 == (resource.data.earningsDiamonds - request.resource.data.earningsDiamonds)
+                 <= (resource.data.earningsDiamonds - request.resource.data.earningsDiamonds) * economyCoinsPerDiamond()
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['earningsDiamonds', 'coins', 'updatedAt'])
             )
           )
@@ -146,15 +168,15 @@ service cloud.firestore {
           && existsAfter(/databases/$(database)/documents/likes/$(request.auth.uid + '_' + userId))
         )
         || (
-          // Otro usuario enviando un Regalo: exige descuento atómico exacto de monedas en la cuenta del emisor
+          // Otro usuario enviando un Regalo: exige descuento atómico exacto en Diamantes comprados del emisor
           isSignedIn()
           && request.auth.uid != userId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['giftsReceivedCount', 'earningsDiamonds', 'giftCounts', 'updatedAt'])
           && request.resource.data.giftsReceivedCount == resource.data.get('giftsReceivedCount', 0) + 1
           && request.resource.data.giftCounts is map
           && isValidGiftValue(request.resource.data.earningsDiamonds - resource.data.get('earningsDiamonds', 0))
-          && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('coins', 0)
-             == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('coins', 0)
+          && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('diamonds', 0)
+             == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('diamonds', 0)
                 - (request.resource.data.earningsDiamonds - resource.data.get('earningsDiamonds', 0))
         );
 
@@ -220,8 +242,8 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.status == 'pending'
-        && isValidPackageCoins(request.resource.data.coinsToCredit)
-        && isValidPackagePrice(request.resource.data.coinsToCredit, request.resource.data.amountUSD);
+        && isValidPackageCoins(request.resource.data.get('diamondsToCredit', request.resource.data.get('coinsToCredit', 0)))
+        && isValidPackagePrice(request.resource.data.get('diamondsToCredit', request.resource.data.get('coinsToCredit', 0)), request.resource.data.amountUSD);
       allow update: if isAdmin();
       allow delete: if false;
     }
@@ -232,7 +254,7 @@ service cloud.firestore {
         resource.data.userId == request.auth.uid || isAdmin()
       );
       allow create: if isAdmin()
-        && isValidPackageCoins(request.resource.data.coinsCredited);
+        && isValidPackageCoins(request.resource.data.get('diamondsCredited', request.resource.data.get('coinsCredited', 0)));
       allow update, delete: if false;
     }
 

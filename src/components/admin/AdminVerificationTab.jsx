@@ -39,21 +39,21 @@ export default function AdminVerificationTab({
       <AdminSectionCard accent="sky" className="p-4 sm:p-5 space-y-3.5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="font-display text-lg font-black text-white flex items-center gap-2">
-              <BadgeCheck className="w-5 h-5 text-sky-400 fill-sky-400 stroke-[#110C18]" />
+            <h2 className="font-display text-lg font-black text-zinc-900 flex items-center gap-2">
+              <BadgeCheck className="w-5 h-5 text-sky-500 fill-sky-500 stroke-white" />
               Identidad Verificada (Check Azul)
             </h2>
-            <p className="text-xs text-zinc-400 mt-0.5">
+            <p className="text-xs text-zinc-500 mt-0.5">
               Revisa fotos reales y biografía antes de conceder o revocar la insignia azul.
             </p>
           </div>
-          <span className="px-3 py-1 rounded-full bg-sky-500/15 border border-sky-400/30 text-sky-200 text-xs font-extrabold tabular-nums">
+          <span className="px-3 py-1 rounded-full bg-sky-50 border border-sky-200 text-sky-700 text-xs font-extrabold tabular-nums">
             {filteredUsers.length} perfiles
           </span>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-white/[0.08]">
-          <div className="inline-flex p-1 rounded-xl bg-white/[0.04] border border-white/10 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-sky-100">
+          <div className="inline-flex p-1 rounded-xl bg-zinc-100 border border-zinc-200/80 text-xs">
             {[
               { id: 'all', label: 'Todos' },
               { id: 'pending', label: `Solicitudes (${pendingVerificationsCount})` },
@@ -65,8 +65,8 @@ export default function AdminVerificationTab({
                 onClick={() => setFilter(f.id)}
                 className={`px-3 py-1.5 rounded-lg font-extrabold transition ${
                   filter === f.id
-                    ? 'bg-sky-500 text-white shadow'
-                    : 'text-zinc-400 hover:text-white'
+                    ? 'bg-sky-500 text-white shadow-sm'
+                    : 'text-zinc-600 hover:text-zinc-900'
                 }`}
               >
                 {f.label}
@@ -81,7 +81,7 @@ export default function AdminVerificationTab({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar nombre, correo o ciudad..."
-              className="w-full pl-8 pr-3 py-2 rounded-xl bg-white/[0.05] border border-white/10 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-sky-400"
+              className="w-full pl-8 pr-3 py-2 rounded-xl bg-zinc-50 border border-zinc-200 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:bg-white focus:border-sky-400"
             />
           </div>
         </div>
@@ -112,22 +112,22 @@ export default function AdminVerificationTab({
                     <img
                       src={getPrimaryPhoto(u, 180)}
                       alt={u.name}
-                      className="w-14 h-14 rounded-2xl object-cover bg-zinc-800 border border-white/10 shrink-0"
+                      className="w-14 h-14 rounded-2xl object-cover bg-zinc-100 border border-zinc-200 shrink-0"
                     />
                     <div className="min-w-0">
-                      <p className="text-sm font-black text-white flex items-center gap-1.5">
+                      <p className="text-sm font-black text-zinc-900 flex items-center gap-1.5">
                         <span className="truncate">
                           {u.name}
                           {u.age ? `, ${u.age}` : ''}
                         </span>
                         {verified && (
-                          <BadgeCheck className="w-4 h-4 text-sky-400 fill-sky-400 stroke-[#110C18] shrink-0" />
+                          <BadgeCheck className="w-4 h-4 text-sky-500 fill-sky-500 stroke-white shrink-0" />
                         )}
                       </p>
-                      <p className="text-[11px] text-zinc-400 truncate">{u.email}</p>
-                      <p className="text-[11px] text-zinc-300 mt-0.5 truncate">
+                      <p className="text-[11px] text-zinc-500 truncate">{u.email}</p>
+                      <p className="text-[11px] text-zinc-600 mt-0.5 truncate">
                         {u.country?.flag || '🌎'} {u.city || u.country?.name || 'Global'} ·{' '}
-                        <span className="inline-flex items-center gap-1 text-zinc-400">
+                        <span className="inline-flex items-center gap-1 text-zinc-500">
                           <Camera className="w-3 h-3" /> {photosCount} fotos
                         </span>
                       </p>
@@ -135,35 +135,35 @@ export default function AdminVerificationTab({
                   </div>
 
                   {verified ? (
-                    <span className="px-2.5 py-1 rounded-full bg-sky-500/20 border border-sky-400/35 text-sky-300 text-[10px] font-black uppercase shrink-0">
+                    <span className="px-2.5 py-1 rounded-full bg-sky-50 border border-sky-200 text-sky-700 text-[10px] font-black uppercase shrink-0">
                       Verificado
                     </span>
                   ) : isPending ? (
-                    <span className="px-2.5 py-1 rounded-full bg-amber-400/20 border border-amber-300/40 text-amber-200 text-[10px] font-black uppercase shrink-0">
+                    <span className="px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-black uppercase shrink-0">
                       Pendiente
                     </span>
                   ) : (
-                    <span className="px-2.5 py-1 rounded-full bg-white/[0.05] text-zinc-400 text-[10px] font-bold uppercase shrink-0">
+                    <span className="px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-600 text-[10px] font-bold uppercase shrink-0">
                       Estándar
                     </span>
                   )}
                 </div>
 
                 {u.bio && (
-                  <p className="text-[11px] text-zinc-300 bg-black/30 border border-white/[0.06] rounded-xl px-3 py-2 line-clamp-2">
+                  <p className="text-[11px] text-zinc-600 bg-zinc-50 border border-zinc-200/70 rounded-xl px-3 py-2 line-clamp-2">
                     “{u.bio}”
                   </p>
                 )}
 
-                <div className="flex justify-end pt-1 border-t border-white/[0.07]">
+                <div className="flex justify-end pt-2 border-t border-zinc-100">
                   <button
                     type="button"
                     disabled={busy}
                     onClick={() => onToggleBlueCheck(u)}
                     className={`px-4 py-2 rounded-xl text-xs font-black inline-flex items-center gap-1.5 disabled:opacity-50 transition ${
                       verified
-                        ? 'bg-white/[0.07] hover:bg-rose-500/20 border border-white/10 text-zinc-200 hover:text-rose-200'
-                        : 'bg-gradient-to-r from-sky-400 to-indigo-500 text-zinc-950 hover:brightness-110 shadow-md shadow-sky-500/20'
+                        ? 'bg-zinc-100 hover:bg-rose-50 border border-zinc-200 text-zinc-700 hover:text-rose-700 hover:border-rose-200'
+                        : 'bg-gradient-to-r from-sky-500 to-indigo-500 text-white hover:brightness-105 shadow-sm'
                     }`}
                   >
                     <BadgeCheck className="w-4 h-4" />

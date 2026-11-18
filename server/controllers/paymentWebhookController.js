@@ -57,7 +57,12 @@ function normalizePaymentEvent(payload) {
     isSettled: settled,
     userId: payload.user_id || meta.userId,
     packageId: payload.package_id || meta.packageId,
-    creditTarget: payload.credit_target === 'diamonds' ? 'diamonds' : meta.creditTarget,
+    creditTarget:
+      payload.credit_target === 'coins'
+        ? 'coins'
+        : payload.credit_target === 'diamonds' || meta.creditTarget === 'diamonds'
+        ? 'diamonds'
+        : 'diamonds',
     amountUSD,
     currency: String(payload.price_currency || payload.pay_currency || 'USD').toUpperCase(),
   };
@@ -134,7 +139,7 @@ export async function processVerifiedPaymentWebhook({ payload }) {
           `Monto pagado (${event.amountUSD} USD) es inferior al precio del paquete ${matchedPkg.id} (${matchedPkg.priceUSD} USD).`
         );
       }
-      unitsToCredit = Math.floor(Number(matchedPkg.coins || 0));
+      unitsToCredit = Math.floor(Number(matchedPkg.diamonds ?? matchedPkg.coins ?? 0));
     } else if (event.amountUSD > 0 && baseDiamondValueUSD > 0) {
       // Cálculo dinámico basado en el precio oficial de diamantes configurado por el Super Admin
       unitsToCredit = Math.max(1, Math.floor(event.amountUSD / baseDiamondValueUSD));
@@ -145,7 +150,8 @@ export async function processVerifiedPaymentWebhook({ payload }) {
     }
 
     const userData = userSnap.data() || {};
-    const creditField = event.creditTarget === 'diamonds' ? 'earningsDiamonds' : 'coins';
+    // Los diamantes comprados van a `diamonds` (regalar/cambiar a monedas), nunca directo a ganancias retirables
+    const creditField = event.creditTarget === 'coins' ? 'coins' : 'diamonds';
     const currentBalance = Number(userData[creditField] || 0);
 
     transaction.update(userRef, {

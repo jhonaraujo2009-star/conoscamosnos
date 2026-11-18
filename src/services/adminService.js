@@ -171,11 +171,13 @@ export async function updateEconomyConfig({
   baseDiamondValueUSD,
   creatorShareRatio = 0.6,
   minWithdrawalDiamonds = 500,
+  coinsPerDiamond = 2,
   coinPackages = COIN_PACKAGES,
 }) {
   const cleanBase = Number(baseDiamondValueUSD);
   const cleanShare = Number(creatorShareRatio);
   const cleanMin = Math.floor(Number(minWithdrawalDiamonds));
+  const cleanExchangeRate = Math.floor(Number(coinsPerDiamond));
 
   if (!Number.isFinite(cleanBase) || cleanBase <= 0 || cleanBase > 5) {
     throw new Error('El precio base por diamante debe ser mayor a $0 y menor o igual a $5.00 USD.');
@@ -186,25 +188,53 @@ export async function updateEconomyConfig({
   if (!Number.isFinite(cleanMin) || cleanMin < 100) {
     throw new Error('El retiro mínimo debe ser al menos 100 diamantes.');
   }
+  if (!Number.isFinite(cleanExchangeRate) || cleanExchangeRate < 1 || cleanExchangeRate > 100) {
+    throw new Error('La tasa de intercambio debe estar entre 1 y 100 monedas por diamante.');
+  }
 
   const sanitizedPackages = (Array.isArray(coinPackages) ? coinPackages : COIN_PACKAGES).map(
-    (pkg) => ({
-      ...pkg,
-      coins: Math.max(10, Math.floor(Number(pkg.coins || 0))),
-      priceUSD: Number(Math.max(0.5, Number(pkg.priceUSD || 0)).toFixed(2)),
-    })
+    (pkg) => {
+      const units = Math.max(10, Math.floor(Number(pkg.diamonds ?? pkg.coins ?? 0)));
+      return {
+        ...pkg,
+        diamonds: units,
+        coins: units,
+        priceUSD: Number(Math.max(0.5, Number(pkg.priceUSD || 0)).toFixed(2)),
+      };
+    }
   );
 
   await setDoc(
     doc(db, 'appConfig', 'economy'),
     {
       diamondsPerCoin: 1,
+      coinsPerDiamond: cleanExchangeRate,
       baseDiamondValueUSD: Number(cleanBase.toFixed(4)),
       creatorShareRatio: Number(cleanShare.toFixed(2)),
       platformFeeRatio: Number((1 - cleanShare).toFixed(2)),
       diamondToNetUSDRate: Number((cleanBase * cleanShare).toFixed(4)),
       minWithdrawalDiamonds: cleanMin,
       coinPackages: sanitizedPackages,
+      updatedBy: adminId,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+/**
+ * Super Admin: actualiza la tasa sugerida e editable de intercambio Diamantes comprados -> Monedas.
+ */
+export async function updateExchangeConfig({ adminId, coinsPerDiamond = 2 }) {
+  if (!adminId) throw new Error('Sesión de Super Admin inválida.');
+  const cleanRate = Math.floor(Number(coinsPerDiamond));
+  if (!Number.isFinite(cleanRate) || cleanRate < 1 || cleanRate > 100) {
+    throw new Error('La tasa de intercambio debe estar entre 1 y 100 monedas por diamante.');
+  }
+  await setDoc(
+    doc(db, 'appConfig', 'economy'),
+    {
+      coinsPerDiamond: cleanRate,
       updatedBy: adminId,
       updatedAt: serverTimestamp(),
     },

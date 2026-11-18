@@ -43,21 +43,21 @@ export default function AdminReportsTab({
       <AdminSectionCard accent="crimson" className="p-4 sm:p-5 space-y-3.5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="font-display text-lg font-black text-white flex items-center gap-2">
+            <h2 className="font-display text-lg font-black text-zinc-900 flex items-center gap-2">
               <ShieldAlert className="w-5 h-5 text-[#FF2E54]" />
               Moderación y Seguridad
             </h2>
-            <p className="text-xs text-zinc-400 mt-0.5">
+            <p className="text-xs text-zinc-500 mt-0.5">
               Suspender bloquea la cuenta al instante y la retira de Swipe y Explorar.
             </p>
           </div>
-          <span className="px-3 py-1 rounded-full bg-rose-500/15 border border-rose-400/30 text-rose-200 text-xs font-extrabold tabular-nums">
+          <span className="px-3 py-1 rounded-full bg-rose-50 border border-rose-200 text-[#FF2E54] text-xs font-extrabold tabular-nums">
             {openCount} abiertos · {reports.length} total
           </span>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-white/[0.08]">
-          <div className="inline-flex p-1 rounded-xl bg-white/[0.04] border border-white/10 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-rose-100">
+          <div className="inline-flex p-1 rounded-xl bg-zinc-100 border border-zinc-200/80 text-xs">
             {STATUS_FILTERS.map((f) => (
               <button
                 key={f.id}
@@ -65,8 +65,8 @@ export default function AdminReportsTab({
                 onClick={() => setStatusFilter(f.id)}
                 className={`px-3 py-1.5 rounded-lg font-extrabold transition ${
                   statusFilter === f.id
-                    ? 'bg-gradient-to-r from-[#FF2E54] to-rose-500 text-white shadow'
-                    : 'text-zinc-400 hover:text-white'
+                    ? 'bg-gradient-to-r from-[#FF2E54] to-rose-500 text-white shadow-sm'
+                    : 'text-zinc-600 hover:text-zinc-900'
                 }`}
               >
                 {f.label}
@@ -81,7 +81,7 @@ export default function AdminReportsTab({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar denunciado, motivo o autor..."
-              className="w-full pl-8 pr-3 py-2 rounded-xl bg-white/[0.05] border border-white/10 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF2E54]"
+              className="w-full pl-8 pr-3 py-2 rounded-xl bg-zinc-50 border border-zinc-200 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:bg-white focus:border-[#FF2E54]"
             />
           </div>
         </div>
@@ -117,25 +117,25 @@ export default function AdminReportsTab({
                       <img
                         src={avatar}
                         alt={rep.reportedUserName || 'Perfil'}
-                        className="w-12 h-12 rounded-2xl object-cover bg-zinc-800 border border-white/10 shrink-0"
+                        className="w-12 h-12 rounded-2xl object-cover bg-zinc-100 border border-zinc-200 shrink-0"
                       />
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className="text-sm font-black text-white truncate">
+                          <p className="text-sm font-black text-zinc-900 truncate">
                             {rep.reportedUserName || target?.name || rep.reportedUserId}
                           </p>
                           <span
                             className={`px-2 py-0.5 rounded-full text-[9.5px] font-black uppercase border ${
                               isBanned
-                                ? 'bg-rose-500/20 border-rose-400/35 text-rose-300'
-                                : 'bg-emerald-500/15 border-emerald-400/25 text-emerald-300'
+                                ? 'bg-rose-50 border-rose-200 text-rose-700'
+                                : 'bg-emerald-50 border-emerald-200 text-emerald-700'
                             }`}
                           >
                             {isBanned ? 'Suspendido' : 'Activo'}
                           </span>
                         </div>
-                        <p className="text-[11px] text-zinc-400 truncate mt-0.5">
-                          Reportado por <strong className="text-zinc-200">{rep.reporterName || 'Usuario'}</strong> ·{' '}
+                        <p className="text-[11px] text-zinc-500 truncate mt-0.5">
+                          Reportado por <strong className="text-zinc-800">{rep.reporterName || 'Usuario'}</strong> ·{' '}
                           {formatGiftDate(rep.createdAt)}
                         </p>
                       </div>
@@ -144,8 +144,8 @@ export default function AdminReportsTab({
                     <span
                       className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase shrink-0 border ${
                         isOpen
-                          ? 'bg-amber-400/15 border-amber-300/30 text-amber-200'
-                          : 'bg-white/[0.06] border-white/10 text-zinc-300'
+                          ? 'bg-amber-50 border-amber-200 text-amber-800'
+                          : 'bg-zinc-100 border-zinc-200 text-zinc-600'
                       }`}
                     >
                       {rep.status === 'resolved'
@@ -156,28 +156,28 @@ export default function AdminReportsTab({
                     </span>
                   </div>
 
-                  <div className="p-3 rounded-2xl bg-black/35 border border-white/[0.07] space-y-1">
-                    <p className="text-xs font-extrabold text-rose-300 flex items-center gap-1.5">
+                  <div className="p-3 rounded-2xl bg-rose-50/70 border border-rose-200/70 space-y-1">
+                    <p className="text-xs font-extrabold text-rose-700 flex items-center gap-1.5">
                       <Flag className="w-3.5 h-3.5 shrink-0" />
                       {rep.reason}
                     </p>
                     {rep.details && (
-                      <p className="text-[11px] text-zinc-300 leading-relaxed pl-5">
+                      <p className="text-[11px] text-zinc-700 leading-relaxed pl-5">
                         “{rep.details}”
                       </p>
                     )}
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-end gap-2 pt-1 border-t border-white/[0.07]">
+                <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-zinc-100">
                   {isOpen && (
                     <button
                       type="button"
                       disabled={busy}
                       onClick={() => onUpdateStatus(rep, 'dismissed')}
-                      className="px-3.5 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-zinc-200 text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-50 transition"
+                      className="px-3.5 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-700 text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-50 transition"
                     >
-                      <CheckCircle2 className="w-3.5 h-3.5 text-zinc-400" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-zinc-500" />
                       Descartar
                     </button>
                   )}
@@ -197,8 +197,8 @@ export default function AdminReportsTab({
                       }
                       className={`px-4 py-2 rounded-xl text-xs font-black inline-flex items-center gap-1.5 disabled:opacity-50 transition ${
                         isBanned
-                          ? 'bg-emerald-500/20 border border-emerald-400/35 text-emerald-300 hover:bg-emerald-500/30'
-                          : 'bg-gradient-to-r from-[#FF2E54] to-rose-500 text-white shadow-md shadow-[#FF2E54]/20 hover:brightness-110'
+                          ? 'bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+                          : 'bg-gradient-to-r from-[#FF2E54] to-rose-500 text-white shadow-sm hover:brightness-110'
                       }`}
                     >
                       {isBanned ? (

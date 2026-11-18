@@ -13,7 +13,11 @@ import {
   RefreshCw,
   XCircle,
 } from 'lucide-react';
-import { ECONOMY_CONFIG, WITHDRAWAL_PAYOUT_METHODS } from '../../config/constants';
+import {
+  ECONOMY_CONFIG,
+  WITHDRAWAL_PAYOUT_METHODS,
+  resolveAccessPolicy,
+} from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
 import { subscribeUserPayoutAccount } from '../../services/userService';
 import {
@@ -30,6 +34,7 @@ const MIN_SWAP_DIAMONDS = 10;
 export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, onSuccess, onError }) {
   const { economyConfig } = useAuth();
   const liveEconomy = economyConfig || ECONOMY_CONFIG;
+  const coinsPerDiamond = resolveAccessPolicy(liveEconomy).coinsPerDiamond;
   const availableDiamonds = Number(userProfile?.earningsDiamonds || 0);
   const currentCoins = Number(userProfile?.coins || 0);
   const pendingDiamonds = Number(userProfile?.pendingWithdrawalDiamonds || 0);
@@ -126,7 +131,9 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
         userId: userProfile.uid,
         amountDiamonds: swapAmount,
       });
-      onSuccess?.(`🪙 Canjeaste ${res.converted} 💎 por ${res.converted} Monedas internas.`);
+      onSuccess?.(
+        `🪙 Canjeaste ${res.convertedDiamonds || swapAmount} 💎 por +${res.coinsAdded || res.converted} Monedas internas.`
+      );
     } catch (err) {
       onError?.(err.message || 'No se pudo completar el canje a monedas.');
     } finally {
@@ -225,8 +232,7 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
                 Pay, Zinli o Pago Móvil.
               </p>
               <p className="text-zinc-500">
-                Tus <strong>{currentCoins} monedas compradas</strong> solo sirven para regalar;
-                únicamente tus <strong>diamantes recibidos</strong> son retirables o canjeables 1:1 a monedas.
+                Tus <strong>{currentCoins} monedas</strong> sirven para desbloquear chats, ver Likes y Boost VIP; únicamente tus <strong>diamantes ganados por regalos</strong> son retirables en USD o canjeables a monedas (1 💎 = {coinsPerDiamond} 🪙).
               </p>
             </div>
           )}
@@ -416,20 +422,20 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-black text-zinc-900 flex items-center gap-1.5">
                   <Coins className="w-4 h-4 text-amber-500" />
-                  Canjear Diamantes por Monedas (1:1)
+                  Canjear Ganancias por Monedas
                 </h4>
-                <span className="text-[11px] font-bold text-zinc-400">
-                  Mín: {MIN_SWAP_DIAMONDS} 💎
+                <span className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                  1 💎 = {coinsPerDiamond} 🪙
                 </span>
               </div>
 
               <p className="text-[11px] text-zinc-500 leading-relaxed">
-                Usa tus diamantes recibidos para activar Boost VIP, revelar Likes o enviar regalos sin esperar al mínimo en dólares. Conversión irreversible (no retirable en efectivo).
+                Usa tus diamantes ganados para desbloquear chats, enviar mensajes, revelar Likes o activar Boost VIP. Conversión irreversible (no retirable en efectivo).
               </p>
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs text-zinc-600 font-bold">Diamantes a canjear</label>
+                  <label className="text-xs text-zinc-600 font-bold">Diamantes ganados a canjear (mín. {MIN_SWAP_DIAMONDS} 💎)</label>
                   {canSwap && (
                     <div className="flex items-center gap-1.5">
                       <button
@@ -462,7 +468,7 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
 
               <div className="p-3 rounded-2xl bg-amber-50/75 border border-amber-200/80 text-xs flex items-center justify-between font-black text-amber-900">
                 <span>Recibirás al instante:</span>
-                <span>+{Math.max(0, Math.floor(Number(swapAmount || 0)))} 🪙</span>
+                <span>+{Math.max(0, Math.floor(Number(swapAmount || 0)) * coinsPerDiamond)} 🪙</span>
               </div>
 
               <button

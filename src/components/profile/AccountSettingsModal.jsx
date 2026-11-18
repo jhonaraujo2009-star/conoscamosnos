@@ -259,12 +259,34 @@ export default function AccountSettingsModal({
             </div>
           </section>
 
-          {/* 2. Billetera Privada: Monedas + Diamantes + Boost */}
+          {/* 2. Billetera Privada: Diamantes + Monedas + Ganancias + Boost */}
           <section className="space-y-2">
             <p className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 px-1">
-              Mis Monedas, Diamantes y Ganancias
+              Mis Diamantes, Monedas y Ganancias
             </p>
             <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenCoinStore?.();
+                }}
+                className="p-4 rounded-3xl bg-white border border-sky-200/80 shadow-card text-left hover:border-sky-400 transition"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-sky-700 flex items-center gap-1.5">
+                    <Gem className="w-4 h-4 text-sky-500" /> Diamantes
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-zinc-400" />
+                </div>
+                <p className="font-display text-2xl font-black text-zinc-900 mt-1.5">
+                  {userProfile.diamonds || 0} 💎
+                </p>
+                <p className="text-[10px] font-bold text-zinc-500 mt-0.5">
+                  Para regalar y cambiar → Tienda
+                </p>
+              </button>
+
               <button
                 type="button"
                 onClick={() => {
@@ -280,35 +302,32 @@ export default function AccountSettingsModal({
                   <ChevronRight className="w-4 h-4 text-zinc-400" />
                 </div>
                 <p className="font-display text-2xl font-black text-zinc-900 mt-1.5">
-                  {userProfile.coins || 0}
+                  {userProfile.coins || 0} 🪙
                 </p>
                 <p className="text-[10px] font-bold text-zinc-500 mt-0.5">
-                  Para regalar o Boost → Recargar
-                </p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onOpenWithdrawals?.();
-                }}
-                className="p-4 rounded-3xl bg-white border border-sky-200/80 shadow-card text-left hover:border-sky-400 transition"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold text-sky-700 flex items-center gap-1.5">
-                    <Gem className="w-4 h-4 text-sky-500" /> Diamantes
-                  </span>
-                  <ChevronRight className="w-4 h-4 text-zinc-400" />
-                </div>
-                <p className="font-display text-2xl font-black text-zinc-900 mt-1.5">
-                  {diamonds} 💎
-                </p>
-                <p className="text-[10px] font-extrabold text-emerald-600 mt-0.5">
-                  ≈ {formatUSD(netPayoutUSD)} · Vender / Retirar
+                  Para chats y Likes → Cambiar 💎
                 </p>
               </button>
             </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenWithdrawals?.();
+              }}
+              className="w-full p-4 rounded-3xl bg-white border border-emerald-200/80 shadow-card flex items-center justify-between text-left hover:border-emerald-400 transition"
+            >
+              <div>
+                <span className="text-xs font-extrabold text-emerald-700 flex items-center gap-1.5">
+                  <Gem className="w-4 h-4 text-emerald-500" /> Ganancias por Regalos ({diamonds} 💎)
+                </span>
+                <p className="text-[11px] font-extrabold text-emerald-600 mt-0.5">
+                  ≈ {formatUSD(netPayoutUSD)} USD retirables en Binance, Zinli o Pago Móvil
+                </p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-emerald-600 shrink-0" />
+            </button>
 
             <button
               type="button"

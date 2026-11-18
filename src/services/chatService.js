@@ -137,10 +137,10 @@ export async function sendImageMessage({ matchId, senderId, imageUrl }) {
 }
 
 /**
- * Transacción atómica de regalo virtual:
- * - Verifica saldo del emisor
- * - Descuenta monedas al emisor
- * - Suma +1 a giftsReceivedCount y acredita diamantes (earningsDiamonds) al receptor
+ * Transacción atómica de regalo virtual usando Diamantes comprados (sender.diamonds):
+ * - Verifica saldo en Diamantes del emisor (los regalos se envían con 💎, no con monedas)
+ * - Descuenta Diamantes comprados al emisor
+ * - Suma +1 a giftsReceivedCount y acredita earningsDiamonds retirables en $ USD al receptor
  * - Registra giftTransactions
  * - Crea o actualiza la sala de chat privada 1-a-1 e inserta el mensaje especial type: 'gift'
  */
@@ -164,8 +164,7 @@ export async function sendVirtualGift({
   const giftTxRef = doc(collection(db, 'giftTransactions'));
   const messageRef = doc(collection(db, 'matches', resolvedMatchId, 'messages'));
 
-  const perCoin = Number(economyConfig?.diamondsPerCoin ?? ECONOMY_CONFIG.diamondsPerCoin);
-  const diamondsToCredit = Math.max(1, Math.floor(gift.price * perCoin));
+  const diamondsToCredit = Math.max(1, Math.floor(Number(gift.price || 0)));
   const nowMs = Date.now();
 
   await runTransaction(db, async (transaction) => {
@@ -189,9 +188,9 @@ export async function sendVirtualGift({
       throw new Error('No puedes enviar regalos a este perfil porque existe un bloqueo activo.');
     }
 
-    const senderCoins = Number(senderData.coins || 0);
-    if (senderCoins < gift.price) {
-      throw new Error(`No tienes suficientes monedas. Necesitas ${gift.price} monedas para enviar ${gift.name}.`);
+    const senderDiamonds = Number(senderData.diamonds || 0);
+    if (senderDiamonds < gift.price) {
+      throw new Error(`No tienes suficientes diamantes. Necesitas ${gift.price} 💎 para enviar ${gift.name}.`);
     }
 
     const receiverGiftsCount = Number(receiverData.giftsReceivedCount || 0);
@@ -203,7 +202,7 @@ export async function sendVirtualGift({
     prevGiftCounts[gift.id] = Number(prevGiftCounts[gift.id] || 0) + 1;
 
     transaction.update(senderRef, {
-      coins: senderCoins - gift.price,
+      diamonds: senderDiamonds - gift.price,
       updatedAt: serverTimestamp(),
     });
 
@@ -223,6 +222,7 @@ export async function sendVirtualGift({
       giftName: gift.name,
       giftIcon: gift.icon,
       coinsCost: gift.price,
+      diamondsCost: gift.price,
       diamondsCredited: diamondsToCredit,
       matchId: resolvedMatchId,
       createdAt: serverTimestamp(),
@@ -252,7 +252,7 @@ export async function sendVirtualGift({
       transaction.update(matchRef, {
         participantProfiles,
         giftUnlockedBy: nextGiftUnlocked,
-        lastMessage: `${gift.icon} Envió ${gift.name} (${gift.price} monedas)`,
+        lastMessage: `${gift.icon} Envió ${gift.name} (${gift.price} 💎)`,
         lastSenderId: senderId,
         lastMessageAt: serverTimestamp(),
         lastMessageClientMs: nowMs,
@@ -265,7 +265,7 @@ export async function sendVirtualGift({
         participantProfiles,
         isVipDirect: false,
         giftUnlockedBy: { [senderId]: true },
-        lastMessage: `${gift.icon} Envió ${gift.name} (${gift.price} monedas)`,
+        lastMessage: `${gift.icon} Envió ${gift.name} (${gift.price} 💎)`,
         lastSenderId: senderId,
         lastMessageAt: serverTimestamp(),
         lastMessageClientMs: nowMs,

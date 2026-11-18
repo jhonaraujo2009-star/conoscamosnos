@@ -684,7 +684,7 @@ function UserAppView({ onSuccess, onError }) {
       <GiftGateChatModal
         isOpen={Boolean(giftGateTarget)}
         targetUser={giftGateTarget}
-        userCoins={userProfile?.coins || 0}
+        userDiamonds={userProfile?.diamonds || 0}
         sendingGiftId={sendingGateGiftId}
         onClose={() => setGiftGateTarget(null)}
         onSelectGift={handleSendGiftToUnlockChat}

@@ -50,6 +50,7 @@ export async function ensureUserDocument(firebaseUser, extra = {}) {
       isOnline: true,
       lastSeen: serverTimestamp(),
       coins: 0,
+      diamonds: 0,
       earningsDiamonds: 0,
       pendingWithdrawalDiamonds: 0,
       totalWithdrawnUSD: 0,

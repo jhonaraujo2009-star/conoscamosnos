@@ -1,4 +1,4 @@
-import { Coins, Gem, Gift, Sparkles } from 'lucide-react';
+import { Gem, Gift, Sparkles } from 'lucide-react';
 import { ECONOMY_CONFIG, VIRTUAL_GIFTS } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
 import { calculateGiftEconomics, formatUSD } from '../../utils/formatters';
@@ -8,7 +8,7 @@ export default function GiftPickerModal({
   isOpen,
   onClose,
   recipientName,
-  userCoins = 0,
+  userDiamonds = 0,
   sendingGiftId = null,
   onSelectGift,
   onOpenCoinStore,
@@ -22,20 +22,20 @@ export default function GiftPickerModal({
       <div className="w-full max-w-md max-h-[92dvh] bg-[#FAF7F9] rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-2xl animate-sheet-up">
         <LuxuryModalHeader
           icon={Gift}
-          eyebrow="Regalos VIP"
+          eyebrow="Regalos con Diamantes"
           title={`Enviar regalo a ${recipientName || 'este perfil'}`}
-          subtitle="Tu regalo acredita Diamantes reales retirables en USD"
+          subtitle="Los regalos se envían con Diamantes (💎) y generan $ USD reales"
           onClose={onClose}
         />
 
         <div className="p-5 overflow-y-auto no-scrollbar">
 
-        <div className="flex items-center justify-between px-4 py-3 rounded-2xl bg-amber-50 border border-amber-200/80 mb-2.5">
-          <span className="text-xs font-bold text-amber-900">Tu saldo disponible</span>
+        <div className="flex items-center justify-between px-4 py-3 rounded-2xl bg-sky-50 border border-sky-200/80 mb-2.5">
+          <span className="text-xs font-bold text-sky-900">Tus Diamantes disponibles</span>
           <div className="flex items-center gap-3">
-            <span className="text-sm font-extrabold text-amber-800 flex items-center gap-1">
-              <Coins className="w-4 h-4 text-amber-500" />
-              {userCoins}
+            <span className="text-sm font-extrabold text-sky-800 flex items-center gap-1">
+              <Gem className="w-4 h-4 text-sky-500" />
+              {userDiamonds} 💎
             </span>
             <button
               type="button"
@@ -45,22 +45,22 @@ export default function GiftPickerModal({
               }}
               className="px-3 py-1 rounded-full bg-zinc-900 text-white text-[11px] font-extrabold shadow-sm hover:bg-zinc-800"
             >
-              + Recargar
+              + Comprar 💎
             </button>
           </div>
         </div>
 
-        <div className="px-3.5 py-2 rounded-2xl bg-sky-50 border border-sky-200/80 text-[11px] text-sky-900 font-medium mb-4 flex items-center gap-2">
+        <div className="px-3.5 py-2 rounded-2xl bg-white border border-sky-200/80 text-[11px] text-sky-900 font-medium mb-4 flex items-center gap-2">
           <Gem className="w-4 h-4 text-sky-500 shrink-0" />
           <span>
-            <strong>Regla clara:</strong> cada <strong>1 moneda</strong> regalada entrega{' '}
-            <strong>{liveEconomy.diamondsPerCoin} 💎</strong> (${liveEconomy.diamondToNetUSDRate.toFixed(3)} USD netos retirables en USD para quien recibe).
+            <strong>Regla clara:</strong> cada <strong>1 💎 regalado</strong> entrega{' '}
+            <strong>1 💎 retirable</strong> (${liveEconomy.diamondToNetUSDRate.toFixed(3)} USD netos en dinero real para quien recibe).
           </span>
         </div>
 
         <div className="grid grid-cols-2 gap-2.5">
           {VIRTUAL_GIFTS.map((gift) => {
-            const canAfford = userCoins >= gift.price;
+            const canAfford = userDiamonds >= gift.price;
             const busy = sendingGiftId === gift.id;
             const eco = calculateGiftEconomics(gift.price, liveEconomy);
             return (
@@ -89,7 +89,7 @@ export default function GiftPickerModal({
                     </p>
                     <p className="text-[11px] text-zinc-600 leading-tight">{gift.tagline}</p>
                     <p className="text-[10px] font-bold text-sky-700 mt-1">
-                      Entrega +{eco.diamonds} 💎 ({formatUSD(eco.netPayoutUSD)} retirables)
+                      Suma +{eco.diamonds} 💎 ({formatUSD(eco.netPayoutUSD)} retirables)
                     </p>
                   </div>
                 </div>
@@ -97,12 +97,12 @@ export default function GiftPickerModal({
                 <div
                   className={`mt-2.5 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-extrabold border ${
                     canAfford
-                      ? 'bg-white border-amber-200 text-amber-800 shadow-sm'
+                      ? 'bg-white border-sky-200 text-sky-800 shadow-sm'
                       : 'bg-rose-50 border-rose-200 text-[#FF2E54]'
                   }`}
                 >
-                  <Coins className="w-3.5 h-3.5 text-amber-500" />
-                  {busy ? 'Enviando...' : `${gift.price}`}
+                  <Gem className="w-3.5 h-3.5 text-sky-500" />
+                  {busy ? 'Enviando...' : `${gift.price} 💎`}
                 </div>
               </button>
             );

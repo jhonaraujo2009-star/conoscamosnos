@@ -21,6 +21,7 @@ import {
   setUserVerificationBadge,
   subscribeAllUsersForAdmin,
   updateEconomyConfig,
+  updateExchangeConfig,
   updatePlatformAccessConfig,
 } from '../../services/adminService';
 import { logoutUser } from '../../services/authService';
@@ -79,8 +80,12 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
   const [minWithdrawDiamonds, setMinWithdrawDiamonds] = useState(
     String(economyConfig?.minWithdrawalDiamonds ?? 500)
   );
+  const [coinsPerDiamond, setCoinsPerDiamond] = useState(
+    String(economyConfig?.coinsPerDiamond ?? 2)
+  );
   const [packagesDraft, setPackagesDraft] = useState(economyConfig?.coinPackages || []);
   const [savingConfig, setSavingConfig] = useState(false);
+  const [savingExchange, setSavingExchange] = useState(false);
 
   const [accessDraft, setAccessDraft] = useState(() => resolveAccessPolicy(economyConfig));
   const [savingAccess, setSavingAccess] = useState(false);
@@ -94,6 +99,7 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
     setBaseDiamondPrice(String(economyConfig?.baseDiamondValueUSD ?? 0.01));
     setCreatorSharePct(String(Math.round((economyConfig?.creatorShareRatio ?? 0.6) * 100)));
     setMinWithdrawDiamonds(String(economyConfig?.minWithdrawalDiamonds ?? 500));
+    setCoinsPerDiamond(String(economyConfig?.coinsPerDiamond ?? 2));
     setPackagesDraft(economyConfig?.coinPackages || []);
     setAccessDraft(resolveAccessPolicy(economyConfig));
     setChannelsDraft({
@@ -334,7 +340,9 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
     setBusyId(req.id);
     try {
       await approvePaymentRequest({ requestId: req.id, adminId: userProfile.uid });
-      onSuccess?.(`✅ Aprobado: +${req.coinsToCredit} monedas a ${req.userName}.`);
+      const units = req.diamondsToCredit || req.coinsToCredit || 0;
+      const unitIcon = req.creditTarget === 'coins' ? '🪙' : '💎';
+      onSuccess?.(`✅ Aprobado: +${units} ${unitIcon} a ${req.userName}.`);
     } catch (err) {
       onError?.(err.message || 'No se pudo aprobar la recarga.');
     } finally {
@@ -404,6 +412,7 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
         baseDiamondValueUSD: Number(baseDiamondPrice),
         creatorShareRatio: Number(creatorSharePct) / 100,
         minWithdrawalDiamonds: Number(minWithdrawDiamonds),
+        coinsPerDiamond: Number(coinsPerDiamond),
         coinPackages: packagesDraft,
       });
       onSuccess?.('💎 Configuración económica actualizada en tiempo real.');
@@ -411,6 +420,23 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
       onError?.(err.message || 'No se pudo guardar la configuración económica.');
     } finally {
       setSavingConfig(false);
+    }
+  };
+
+  const handleSaveExchangeConfig = async (e) => {
+    e.preventDefault();
+    if (savingExchange) return;
+    setSavingExchange(true);
+    try {
+      await updateExchangeConfig({
+        adminId: userProfile.uid,
+        coinsPerDiamond: Number(coinsPerDiamond),
+      });
+      onSuccess?.(`🔄 Tasa actualizada: 1 💎 = ${Math.floor(Number(coinsPerDiamond))} 🪙 en toda la app.`);
+    } catch (err) {
+      onError?.(err.message || 'No se pudo guardar la tasa de intercambio.');
+    } finally {
+      setSavingExchange(false);
     }
   };
 
@@ -479,30 +505,30 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
 
   return (
     <div
-      className="h-[100dvh] w-screen overflow-y-auto bg-[#08060C] text-zinc-100"
+      className="h-[100dvh] w-screen overflow-y-auto bg-[#FAF7FB] text-zinc-900"
       style={{
         backgroundImage:
-          'radial-gradient(at 15% 0%, rgba(255,46,84,0.12) 0px, transparent 50%), radial-gradient(at 88% 4%, rgba(251,191,36,0.09) 0px, transparent 45%)',
+          'radial-gradient(at 12% 0%, rgba(255,46,84,0.10) 0px, transparent 50%), radial-gradient(at 88% 4%, rgba(56,189,248,0.11) 0px, transparent 48%), radial-gradient(at 50% 95%, rgba(251,191,36,0.08) 0px, transparent 50%)',
       }}
     >
-      {/* Cabecera Ejecutiva Obsidian Velvet */}
-      <header className="sticky top-0 z-30 border-b border-white/[0.08] bg-[#0B0811]/90 backdrop-blur-xl">
+      {/* Cabecera Pastel Luminosa */}
+      <header className="sticky top-0 z-30 border-b border-rose-100 bg-white/90 backdrop-blur-xl shadow-[0_8px_24px_-16px_rgba(15,23,42,0.12)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-300 via-[#FF2E54] to-rose-600 flex items-center justify-center shadow-lg shadow-[#FF2E54]/25 shrink-0">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-rose-400 via-[#FF2E54] to-amber-400 flex items-center justify-center shadow-md shadow-rose-200 shrink-0">
               <Crown className="w-5 h-5 text-white" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="font-display text-base sm:text-lg font-black tracking-tight text-white truncate">
+                <h1 className="font-display text-base sm:text-lg font-black tracking-tight text-zinc-900 truncate">
                   Conoscamosnos · Executive Suite
                 </h1>
-                <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[10px] font-extrabold">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-extrabold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   En vivo
                 </span>
               </div>
-              <p className="text-[11px] text-zinc-400 truncate">
+              <p className="text-[11px] text-zinc-500 truncate">
                 {userProfile?.name} · Super Admin
               </p>
             </div>
@@ -512,7 +538,7 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
             <button
               type="button"
               onClick={() => navigate('/app')}
-              className="px-4 py-2.5 rounded-full bg-gradient-to-r from-[#FF2E54] via-rose-500 to-amber-500 text-white text-xs sm:text-sm font-black shadow-lg shadow-[#FF2E54]/25 hover:brightness-110 active:scale-[0.98] transition flex items-center gap-2"
+              className="px-4 py-2.5 rounded-full bg-gradient-to-r from-[#FF2E54] via-rose-500 to-amber-500 text-white text-xs sm:text-sm font-black shadow-md shadow-rose-200 hover:brightness-105 active:scale-[0.98] transition flex items-center gap-2"
             >
               <Flame className="w-4 h-4 fill-white" />
               <span>Entrar a la App</span>
@@ -521,7 +547,7 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
             <button
               type="button"
               onClick={() => logoutUser(userProfile?.uid)}
-              className="p-2.5 rounded-full bg-white/[0.06] hover:bg-white/[0.14] border border-white/10 text-zinc-300 hover:text-white transition"
+              className="p-2.5 rounded-full bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-600 hover:text-zinc-900 transition"
               title="Cerrar sesión"
             >
               <LogOut className="w-4 h-4" />
@@ -550,14 +576,18 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
                 onClick={() => setActiveTab(tab.id)}
                 className={`px-3.5 py-2 rounded-2xl text-xs font-extrabold flex items-center gap-2 shrink-0 border transition ${
                   active
-                    ? 'bg-gradient-to-r from-white to-amber-50 text-zinc-950 border-white shadow-md'
-                    : 'bg-white/[0.04] text-zinc-300 border-white/[0.08] hover:bg-white/[0.1] hover:text-white'
+                    ? 'bg-gradient-to-r from-[#FF2E54] to-rose-500 text-white border-rose-500 shadow-sm'
+                    : 'bg-white text-zinc-700 border-zinc-200 hover:bg-rose-50 hover:text-zinc-900'
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
                 <span>{tab.label}</span>
                 {badge > 0 && (
-                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-[#FF2E54] text-white tabular-nums">
+                  <span
+                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-black tabular-nums ${
+                      active ? 'bg-white text-[#FF2E54]' : 'bg-[#FF2E54] text-white'
+                    }`}
+                  >
                     {badge}
                   </span>
                 )}
@@ -629,6 +659,10 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
             onCreatorSharePctChange={setCreatorSharePct}
             minWithdrawDiamonds={minWithdrawDiamonds}
             onMinWithdrawDiamondsChange={setMinWithdrawDiamonds}
+            coinsPerDiamond={coinsPerDiamond}
+            onCoinsPerDiamondChange={setCoinsPerDiamond}
+            savingExchange={savingExchange}
+            onSaveExchangeConfig={handleSaveExchangeConfig}
             packagesDraft={packagesDraft}
             onPackagesDraftChange={setPackagesDraft}
             savingConfig={savingConfig}

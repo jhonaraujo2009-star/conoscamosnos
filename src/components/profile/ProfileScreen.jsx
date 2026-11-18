@@ -284,6 +284,7 @@ export default function ProfileScreen({
   );
   const giftGateActive = Boolean(userProfile?.requireGiftToChat);
   const userCoins = Number(userProfile?.coins || 0);
+  const userPurchasedDiamonds = Number(userProfile?.diamonds || 0);
   const userDiamonds = Number(userProfile?.earningsDiamonds || 0);
   const { netPayoutUSD } = calculateWithdrawalBreakdown(userDiamonds, liveEconomy);
 
@@ -485,52 +486,77 @@ export default function ProfileScreen({
             </div>
           )}
 
-          {/* Accesos Rápidos de Billetera (Monedas & Diamantes) */}
+          {/* Accesos Rápidos de Billetera (Diamantes 💎, Monedas 🪙 y Ganancias) */}
           {isOwnerSession && (
-            <div className="relative grid grid-cols-2 gap-2.5 pt-2 border-t border-zinc-100">
-              <button
-                type="button"
-                onClick={onOpenCoinStore}
-                className="p-2.5 rounded-2xl bg-gradient-to-br from-amber-50/90 to-white border border-amber-200/75 text-left hover:border-amber-300 active:scale-[0.99] transition flex items-center justify-between gap-2"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
-                    <Coins className="w-4 h-4" />
+            <div className="relative space-y-2 pt-2 border-t border-zinc-100">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={onOpenCoinStore}
+                  className="p-2.5 rounded-2xl bg-gradient-to-br from-sky-50/90 to-white border border-sky-200/75 text-left hover:border-sky-300 active:scale-[0.99] transition flex items-center justify-between gap-2"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center shrink-0">
+                      <Gem className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-extrabold uppercase tracking-wider text-sky-700">
+                        Diamantes
+                      </p>
+                      <p className="font-display text-sm font-black text-zinc-900 tabular-nums leading-tight">
+                        {userPurchasedDiamonds} 💎
+                      </p>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-extrabold uppercase tracking-wider text-amber-700">
-                      Monedas
-                    </p>
-                    <p className="font-display text-sm font-black text-zinc-900 tabular-nums leading-tight">
-                      {userCoins}
-                    </p>
+                  <span className="px-2 py-0.5 rounded-full bg-white border border-sky-200 text-[9.5px] font-extrabold text-sky-700 shrink-0">
+                    Comprar
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onOpenCoinStore}
+                  className="p-2.5 rounded-2xl bg-gradient-to-br from-amber-50/90 to-white border border-amber-200/75 text-left hover:border-amber-300 active:scale-[0.99] transition flex items-center justify-between gap-2"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                      <Coins className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-extrabold uppercase tracking-wider text-amber-700">
+                        Monedas
+                      </p>
+                      <p className="font-display text-sm font-black text-zinc-900 tabular-nums leading-tight">
+                        {userCoins} 🪙
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <span className="px-2 py-0.5 rounded-full bg-white border border-amber-200 text-[9.5px] font-extrabold text-amber-800 shrink-0">
-                  Recargar
-                </span>
-              </button>
+                  <span className="px-2 py-0.5 rounded-full bg-white border border-amber-200 text-[9.5px] font-extrabold text-amber-800 shrink-0">
+                    Cambiar
+                  </span>
+                </button>
+              </div>
 
               <button
                 type="button"
                 onClick={onOpenWithdrawals}
-                className="p-2.5 rounded-2xl bg-gradient-to-br from-sky-50/85 to-emerald-50/40 border border-sky-200/75 text-left hover:border-sky-300 active:scale-[0.99] transition flex items-center justify-between gap-2"
+                className="w-full p-2.5 rounded-2xl bg-gradient-to-br from-emerald-50/80 via-white to-sky-50/60 border border-emerald-200/80 text-left hover:border-emerald-300 active:scale-[0.99] transition flex items-center justify-between gap-2"
               >
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="w-8 h-8 rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center shrink-0">
-                    <Gem className="w-4 h-4" />
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                    <Gift className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[10px] font-extrabold uppercase tracking-wider text-sky-700">
-                      Diamantes
+                    <p className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700">
+                      Ganancias por Regalos
                     </p>
                     <p className="font-display text-sm font-black text-zinc-900 tabular-nums leading-tight">
-                      {userDiamonds} <span className="text-emerald-600 text-[10px]">({formatUSD(netPayoutUSD)})</span>
+                      {userDiamonds} 💎 <span className="text-emerald-600 text-[10.5px]">(≈ {formatUSD(netPayoutUSD)})</span>
                     </p>
                   </div>
                 </div>
-                <span className="px-2 py-0.5 rounded-full bg-white border border-emerald-200 text-[9.5px] font-extrabold text-emerald-700 shrink-0">
-                  Retirar
+                <span className="px-2.5 py-1 rounded-full bg-white border border-emerald-200 text-[10px] font-extrabold text-emerald-700 shrink-0">
+                  Retirar USD →
                 </span>
               </button>
             </div>
@@ -856,7 +882,7 @@ export default function ProfileScreen({
                   </div>
 
                   <p className="text-[11px] text-zinc-600 leading-relaxed">
-                    Monetiza tu tiempo: quienes quieran iniciar un chat nuevo contigo deberán enviarte cualquier regalo virtual (desde 🌹 10 monedas = 10 💎 retirables).
+                    Monetiza tu tiempo: quienes quieran iniciar un chat nuevo contigo deberán enviarte cualquier regalo con Diamantes (desde 🌹 10 💎 retirables).
                   </p>
 
                   <div className="pt-0.5 flex items-center gap-2">

@@ -577,7 +577,7 @@ export default function ChatRoom({
                   Chat exclusivo con regalo
                 </p>
                 <p className="text-[11px] text-rose-100/80 truncate">
-                  Envía cualquier regalo (desde 10 🪙) para escribirle.
+                  Envía cualquier regalo (desde 10 💎) para escribirle.
                 </p>
               </div>
             </div>
@@ -670,7 +670,7 @@ export default function ChatRoom({
         isOpen={giftPickerOpen}
         onClose={() => setGiftPickerOpen(false)}
         recipientName={livePeer?.name}
-        userCoins={currentUser?.coins || 0}
+        userDiamonds={currentUser?.diamonds || 0}
         sendingGiftId={sendingGiftId}
         onSelectGift={handleSendGift}
         onOpenCoinStore={onOpenCoinStore}

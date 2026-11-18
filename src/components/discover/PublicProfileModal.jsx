@@ -591,7 +591,7 @@ export default function PublicProfileModal({
         isOpen={giftPickerOpen}
         onClose={() => setGiftPickerOpen(false)}
         recipientName={liveTarget.name}
-        userCoins={currentUser?.coins || 0}
+        userDiamonds={currentUser?.diamonds || 0}
         sendingGiftId={sendingGiftId}
         onSelectGift={handleSendGift}
         onOpenCoinStore={() => {
