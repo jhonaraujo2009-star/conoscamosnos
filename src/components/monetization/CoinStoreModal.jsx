@@ -1,43 +1,76 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowLeftRight,
+  BadgeCheck,
   Check,
   CheckCircle2,
   ChevronDown,
   Clock,
-  Coins,
   Copy,
-  Download,
+  Crown,
   ExternalLink,
   Gem,
+  Globe,
+  Heart,
   ImagePlus,
   Info,
   Loader2,
+  MessageCircle,
   QrCode,
+  RotateCcw,
   Sparkles,
+  Tv,
   Wallet,
   XCircle,
+  Zap,
 } from 'lucide-react';
 import {
   DIAMOND_PACKAGES,
-  DIAMOND_TO_COIN_PRESETS,
   ECONOMY_CONFIG,
   ENABLE_DEMO_PAYMENTS,
+  PRO_PLANS,
   resolveAccessPolicy,
   resolveDirectPaymentMethods,
 } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
 import { getUserCloudinaryFolder, uploadImageToCloudinary } from '../../services/cloudinaryService';
 import {
+  activateProWithDiamonds,
   createNowPaymentsCheckout,
   simulateAutoPaymentConfirmation,
   submitManualPaymentRequest,
   subscribeMyPaymentRequests,
 } from '../../services/monetizationService';
-import { convertPurchasedDiamondsToCoins } from '../../services/withdrawalService';
 import { buildQrMatrix } from '../../utils/qrGenerator';
-import { formatUSD } from '../../utils/formatters';
+import {
+  formatTimeRemaining,
+  formatUSD,
+  getSpendableDiamonds,
+  isProActive,
+} from '../../utils/formatters';
 import LuxuryModalHeader from '../layout/LuxuryModalHeader';
+
+const PRO_BENEFITS = [
+  {
+    icon: MessageCircle,
+    title: 'Mensajes directos ilimitados sin Match',
+    desc: 'Escríbele en privado a cualquier persona sin pagar diamantes por cada chat.',
+  },
+  {
+    icon: Heart,
+    title: 'Mira quién dio Like a tu perfil y qué foto le gustó',
+    desc: 'Toda tu pestaña Likes desbloqueada sin censura ni anuncios.',
+  },
+  {
+    icon: Globe,
+    title: 'Modo Pasaporte Global + Filtros VIP',
+    desc: 'Viaja a cualquier país específico y filtra por perfiles con Check Azul u Online.',
+  },
+  {
+    icon: Tv,
+    title: 'Cero Anuncios + Rewind Ilimitado + Insignia PRO',
+    desc: 'Navegación limpia sin esperas publicitarias, retrocede swipes y destaca con corona PRO.',
+  },
+];
 
 function DynamicQrCode({ payload }) {
   const matrix = useMemo(() => buildQrMatrix(payload, 21), [payload]);
@@ -57,7 +90,14 @@ function DynamicQrCode({ payload }) {
   );
 }
 
-export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess, onError }) {
+export default function CoinStoreModal({
+  isOpen,
+  initialSection = 'buy',
+  onClose,
+  userProfile,
+  onSuccess,
+  onError,
+}) {
   const { economyConfig, isSuperAdmin } = useAuth();
   const livePackages =
     Array.isArray(economyConfig?.coinPackages) && economyConfig.coinPackages.length > 0
@@ -65,7 +105,8 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
       : DIAMOND_PACKAGES;
   const liveEconomy = economyConfig || ECONOMY_CONFIG;
   const policy = resolveAccessPolicy(liveEconomy);
-  const coinsPerDiamond = policy.coinsPerDiamond;
+  const liveProPlans =
+    Array.isArray(policy.proPlans) && policy.proPlans.length > 0 ? policy.proPlans : PRO_PLANS;
 
   const liveDirectMethods = useMemo(
     () => resolveDirectPaymentMethods(economyConfig),
@@ -75,13 +116,21 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
     .map((m) => m.name.replace(/\s*\(.*\)$/, ''))
     .join(' / ');
 
-  const purchasedDiamonds = Number(userProfile?.diamonds || 0);
-  const currentCoins = Number(userProfile?.coins || 0);
+  const spendableDiamonds = getSpendableDiamonds(userProfile);
+  const proActive = isProActive(userProfile);
 
-  const [storeSection, setStoreSection] = useState('buy'); // 'buy' | 'swap'
+  const [storeSection, setStoreSection] = useState(initialSection === 'pro' ? 'pro' : 'buy'); // 'buy' | 'pro'
   const [selectedPkgId, setSelectedPkgId] = useState(livePackages[1]?.id || livePackages[0].id);
   const selectedPkg = livePackages.find((p) => p.id === selectedPkgId) || livePackages[0];
   const selectedPkgUnits = Number(selectedPkg.diamonds ?? selectedPkg.coins ?? 0);
+
+  const [selectedProId, setSelectedProId] = useState(
+    liveProPlans[1]?.id || liveProPlans[0]?.id || 'pro_monthly'
+  );
+  const selectedProPlan =
+    liveProPlans.find((p) => p.id === selectedProId) || liveProPlans[0] || PRO_PLANS[0];
+  const [proPayMode, setProPayMode] = useState('diamonds'); // 'diamonds' | 'gateway'
+  const [activatingProDiamonds, setActivatingProDiamonds] = useState(false);
 
   const [activeTab, setActiveTab] = useState('auto'); // 'auto' | 'direct'
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -100,8 +149,11 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
   const [myRequests, setMyRequests] = useState([]);
   const fileInputRef = useRef(null);
 
-  const [swapDiamonds, setSwapDiamonds] = useState(Math.max(10, Math.min(25, purchasedDiamonds || 10)));
-  const [swappingCoins, setSwappingCoins] = useState(false);
+  useEffect(() => {
+    if (isOpen) {
+      setStoreSection(initialSection === 'pro' ? 'pro' : 'buy');
+    }
+  }, [isOpen, initialSection]);
 
   useEffect(() => {
     if (liveDirectMethods.length > 0 && !liveDirectMethods.some((m) => m.id === selectedMethodId)) {
@@ -112,21 +164,29 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
 
   useEffect(() => {
     if (!isOpen || !userProfile?.uid) return;
-    setSwapDiamonds(purchasedDiamonds >= 10 ? Math.min(25, purchasedDiamonds) : Math.max(1, purchasedDiamonds || 10));
     const unsub = subscribeMyPaymentRequests(userProfile.uid, setMyRequests);
     return () => unsub();
   }, [isOpen, userProfile?.uid]);
 
   if (!isOpen) return null;
 
+  const isProGatewayCheckout = storeSection === 'pro' && proPayMode === 'gateway';
+  const activeCheckoutItem = isProGatewayCheckout ? selectedProPlan : selectedPkg;
+  const activeCreditTarget = isProGatewayCheckout ? 'pro' : 'diamonds';
+
   const handleNowPaymentsCheckout = async () => {
     if (creatingInvoice) return;
     setCreatingInvoice(true);
     try {
-      const res = await createNowPaymentsCheckout({ pkg: selectedPkg, creditTarget: 'diamonds' });
+      const res = await createNowPaymentsCheckout({
+        pkg: activeCheckoutItem,
+        creditTarget: activeCreditTarget,
+      });
       window.open(res.invoiceUrl, '_blank', 'noopener,noreferrer');
       onSuccess?.(
-        `⚡ Factura NowPayments abierta por ${formatUSD(selectedPkg.priceUSD)}. Tus +${selectedPkgUnits} 💎 se acreditarán automáticamente al confirmarse.`
+        isProGatewayCheckout
+          ? `👑 Factura NowPayments abierta por ${formatUSD(selectedProPlan.priceUSD)}. Tu membresía ${selectedProPlan.shortLabel} se activará al confirmarse.`
+          : `⚡ Factura NowPayments abierta por ${formatUSD(selectedPkg.priceUSD)}. Tus +${selectedPkgUnits} 💎 se acreditarán automáticamente.`
       );
     } catch (err) {
       onError?.(err.message || 'No se pudo abrir la pasarela NowPayments.');
@@ -141,15 +201,46 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
       const res = await simulateAutoPaymentConfirmation({
         userId: userProfile.uid,
         userName: userProfile.name,
-        pkg: selectedPkg,
+        pkg: activeCheckoutItem,
         provider,
-        creditTarget: 'diamonds',
+        creditTarget: activeCreditTarget,
       });
-      onSuccess?.(`✅ ¡Recarga acreditada! Se sumaron +${res.diamondsAdded} 💎 a tu billetera.`);
+      onSuccess?.(
+        isProGatewayCheckout
+          ? `👑 ¡Conoscamosnos PRO activado por ${res.proDaysAdded} días!`
+          : `✅ ¡Recarga acreditada! Se sumaron +${res.diamondsAdded} 💎 a tu billetera.`
+      );
     } catch (err) {
       onError?.(err.message || 'No se pudo simular el pago.');
     } finally {
       setSimulating(false);
+    }
+  };
+
+  const handleActivateProWithDiamonds = async () => {
+    if (!userProfile?.uid || activatingProDiamonds) return;
+    const cost = Number(selectedProPlan.priceDiamonds || 250);
+    if (spendableDiamonds < cost) {
+      onError?.(
+        `Necesitas ${cost} 💎 para activar ${selectedProPlan.shortLabel}. Recarga Diamantes o paga directo con pasarela.`
+      );
+      setProPayMode('gateway');
+      return;
+    }
+    setActivatingProDiamonds(true);
+    try {
+      await activateProWithDiamonds({
+        userId: userProfile.uid,
+        plan: selectedProPlan,
+      });
+      onSuccess?.(
+        `👑 ¡Felicidades! Ya eres miembro ${selectedProPlan.shortLabel} (${selectedProPlan.durationDays} días VIP sin límites).`
+      );
+      onClose?.();
+    } catch (err) {
+      onError?.(err.message || 'No se pudo activar Conoscamosnos PRO.');
+    } finally {
+      setActivatingProDiamonds(false);
     }
   };
 
@@ -189,15 +280,19 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
     try {
       await submitManualPaymentRequest({
         user: userProfile,
-        pkg: selectedPkg,
+        pkg: activeCheckoutItem,
         method: selectedMethod,
         referenceNumber,
         proofUrl,
-        creditTarget: 'diamonds',
+        creditTarget: activeCreditTarget,
       });
       setReferenceNumber('');
       setProofUrl('');
-      onSuccess?.('Solicitud enviada al equipo de auditoría. Recibirás tus Diamantes (💎) al aprobarse.');
+      onSuccess?.(
+        isProGatewayCheckout
+          ? `Solicitud enviada. Tu membresía ${selectedProPlan.shortLabel} se activará al aprobarse el comprobante.`
+          : 'Solicitud enviada al equipo de auditoría. Recibirás tus Diamantes (💎) al aprobarse.'
+      );
     } catch (err) {
       onError?.(err.message || 'Error al registrar la solicitud.');
     } finally {
@@ -205,607 +300,596 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
     }
   };
 
-  const handleSwapDiamondsToCoins = async (e) => {
-    e.preventDefault();
-    if (!userProfile?.uid || swappingCoins) return;
-    setSwappingCoins(true);
-    try {
-      const res = await convertPurchasedDiamondsToCoins({
-        userId: userProfile.uid,
-        amountDiamonds: swapDiamonds,
-      });
-      onSuccess?.(
-        `🪙 ¡Canje exitoso! Convertiste ${res.convertedDiamonds} 💎 en +${res.coinsAdded} Monedas para chats y mensajes.`
-      );
-    } catch (err) {
-      onError?.(err.message || 'No se pudo completar el intercambio.');
-    } finally {
-      setSwappingCoins(false);
-    }
-  };
+  const renderGatewayPaymentBlock = () => (
+    <div className="space-y-3.5">
+      {/* Selector de Canal: Automático vs Transferencia Directa */}
+      <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-zinc-200/70 border border-zinc-200">
+        <button
+          type="button"
+          onClick={() => setActiveTab('auto')}
+          className={`py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
+            activeTab === 'auto'
+              ? 'bg-white text-zinc-900 shadow-sm'
+              : 'text-zinc-600 hover:text-zinc-900'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5 text-sky-600" />
+          Automático (USDT)
+        </button>
 
-  const cleanSwapAmount = Math.max(0, Math.floor(Number(swapDiamonds || 0)));
-  const previewSwappedCoins = cleanSwapAmount * coinsPerDiamond;
-  const canSwap = purchasedDiamonds >= 1 && cleanSwapAmount >= 1 && cleanSwapAmount <= purchasedDiamonds;
+        <button
+          type="button"
+          onClick={() => setActiveTab('direct')}
+          className={`py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
+            activeTab === 'direct'
+              ? 'bg-white text-zinc-900 shadow-sm'
+              : 'text-zinc-600 hover:text-zinc-900'
+          }`}
+        >
+          <Wallet className="w-3.5 h-3.5 text-[#FF2E54]" />
+          {activeDirectNames || 'Transferencia'}
+        </button>
+      </div>
+
+      {activeTab === 'auto' ? (
+        <div className="rounded-[24px] p-4 bg-white border border-zinc-200/80 shadow-sm space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-xs font-black text-zinc-900">Pasarela Cripto NowPayments</p>
+              <p className="text-[11px] text-zinc-500">
+                Acreditación automática 24/7 vía Webhook IPN
+              </p>
+            </div>
+            <span className="px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-black">
+              Instantáneo
+            </span>
+          </div>
+
+          <div className="p-3 rounded-2xl bg-sky-50/70 border border-sky-200/80 flex items-center justify-between">
+            <div>
+              <p className="text-[10.5px] font-bold text-sky-800">
+                {isProGatewayCheckout
+                  ? selectedProPlan.title
+                  : `Paquete ${selectedPkg.label}`}
+              </p>
+              <p className="font-display text-lg font-black text-zinc-900 tabular-nums">
+                {isProGatewayCheckout
+                  ? `👑 ${selectedProPlan.durationDays} Días PRO`
+                  : `+${selectedPkgUnits} 💎`}
+              </p>
+            </div>
+            <span className="font-display text-xl font-black text-emerald-700 tabular-nums">
+              {formatUSD(activeCheckoutItem.priceUSD)}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            disabled={creatingInvoice}
+            onClick={handleNowPaymentsCheckout}
+            className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#FF2E54] via-rose-500 to-amber-500 text-white font-black text-xs sm:text-sm shadow-lg shadow-[#FF2E54]/20 hover:brightness-105 active:scale-[0.99] disabled:opacity-60 transition flex items-center justify-center gap-2"
+          >
+            {creatingInvoice ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Generando factura segura...
+              </>
+            ) : (
+              <>
+                <ExternalLink className="w-4 h-4" />
+                Pagar {formatUSD(activeCheckoutItem.priceUSD)} con NowPayments
+              </>
+            )}
+          </button>
+
+          {(ENABLE_DEMO_PAYMENTS || isSuperAdmin) && (
+            <button
+              type="button"
+              disabled={simulating}
+              onClick={() => handleSimulateWebhook('nowpayments')}
+              className="w-full py-2.5 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-[11px] font-extrabold transition"
+            >
+              {simulating
+                ? 'Simulando IPN...'
+                : isProGatewayCheckout
+                ? `⚡ Simular activación ${selectedProPlan.shortLabel} (Admin)`
+                : `⚡ Simular pago confirmado +${selectedPkgUnits} 💎 (Admin)`}
+            </button>
+          )}
+        </div>
+      ) : selectedMethod ? (
+        <form
+          onSubmit={handleSubmitDirect}
+          className="rounded-[24px] p-4 bg-white border border-zinc-200/80 shadow-sm space-y-3.5"
+        >
+          {/* Selector de método directo */}
+          <div className="flex flex-wrap gap-1.5">
+            {liveDirectMethods.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => {
+                  setSelectedMethodId(m.id);
+                  setQrOpen(Boolean(m.qrImageUrl));
+                }}
+                className={`px-3 py-1.5 rounded-full text-[11px] font-extrabold border transition ${
+                  selectedMethod.id === m.id
+                    ? 'bg-zinc-900 text-white border-zinc-900 shadow-sm'
+                    : 'bg-zinc-50 text-zinc-700 border-zinc-200 hover:bg-zinc-100'
+                }`}
+              >
+                {m.name}
+              </button>
+            ))}
+          </div>
+
+          <div className="p-3 rounded-2xl bg-zinc-50 border border-zinc-200/80 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-500">
+                {selectedMethod.accountLabel}
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-rose-50 border border-rose-200 text-[#FF2E54] text-[10px] font-black">
+                Monto: {formatUSD(activeCheckoutItem.priceUSD)}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-mono font-bold text-zinc-900 break-all">
+                {selectedMethod.accountValue}
+              </p>
+              <button
+                type="button"
+                onClick={handleCopyAccount}
+                className="px-2.5 py-1.5 rounded-xl bg-white border border-zinc-200 text-zinc-800 text-[11px] font-extrabold inline-flex items-center gap-1 shrink-0 hover:bg-zinc-100"
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600" /> Copiado
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" /> Copiar
+                  </>
+                )}
+              </button>
+            </div>
+
+            <p className="text-[11px] text-zinc-500 leading-relaxed">
+              {selectedMethod.extraInstructions}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setQrOpen((v) => !v)}
+              className="text-[11px] font-extrabold text-[#FF2E54] inline-flex items-center gap-1 pt-0.5"
+            >
+              <QrCode className="w-3.5 h-3.5" />
+              {qrOpen ? 'Ocultar código QR' : 'Mostrar código QR de pago'}
+            </button>
+
+            {qrOpen && (
+              <div className="pt-2 flex flex-col items-center justify-center gap-2">
+                {selectedMethod.qrImageUrl ? (
+                  <img
+                    src={selectedMethod.qrImageUrl}
+                    alt={`QR ${selectedMethod.name}`}
+                    className="w-40 h-40 object-contain rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm"
+                  />
+                ) : (
+                  <DynamicQrCode
+                    payload={`${selectedMethod.qrPrefix}${selectedMethod.accountValue}`}
+                  />
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2.5">
+            <div>
+              <label className="text-[11px] font-extrabold text-zinc-700 block mb-1">
+                Número de referencia / comprobante
+              </label>
+              <input
+                type="text"
+                required
+                value={referenceNumber}
+                onChange={(e) => setReferenceNumber(e.target.value)}
+                placeholder="Ej. últimos 6-8 dígitos o ID de transacción"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-semibold text-zinc-900 focus:outline-none focus:bg-white focus:border-[#FF2E54]"
+              />
+            </div>
+
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleUploadProof}
+                className="hidden"
+              />
+              <button
+                type="button"
+                disabled={uploadingProof}
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full py-2.5 px-3 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 hover:bg-zinc-100 text-xs font-bold text-zinc-700 flex items-center justify-center gap-2 transition"
+              >
+                {uploadingProof ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-[#FF2E54]" />
+                    Subiendo captura...
+                  </>
+                ) : proofUrl ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    Captura adjunta (Toca para cambiar)
+                  </>
+                ) : (
+                  <>
+                    <ImagePlus className="w-4 h-4 text-[#FF2E54]" />
+                    Subir captura del pago
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={submittingDirect || uploadingProof}
+            className="w-full py-3.5 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white font-black text-xs sm:text-sm shadow-md disabled:opacity-50 transition"
+          >
+            {submittingDirect
+              ? 'Enviando comprobante...'
+              : isProGatewayCheckout
+              ? `Notificar pago de ${selectedProPlan.shortLabel} (${formatUSD(selectedProPlan.priceUSD)})`
+              : `Notificar pago por +${selectedPkgUnits} 💎 (${formatUSD(selectedPkg.priceUSD)})`}
+          </button>
+        </form>
+      ) : null}
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="w-full max-w-md max-h-[92dvh] bg-[#FAF7F9] rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-2xl animate-sheet-up">
         <LuxuryModalHeader
-          icon={Gem}
-          iconClassName="bg-gradient-to-br from-sky-400 via-indigo-400 to-rose-400 text-white shadow-lg shadow-sky-500/20"
-          eyebrow="Billetera VIP"
-          title="Tienda de Diamantes y Monedas"
+          icon={storeSection === 'pro' ? Crown : Gem}
+          iconClassName={
+            storeSection === 'pro'
+              ? 'bg-gradient-to-br from-amber-400 via-[#FF2E54] to-rose-500 text-white shadow-lg shadow-rose-500/25'
+              : 'bg-gradient-to-br from-sky-400 via-indigo-400 to-rose-400 text-white shadow-lg shadow-sky-500/20'
+          }
+          eyebrow={proActive ? '👑 Miembro Conoscamosnos PRO' : 'Tienda Oficial VIP'}
+          title={storeSection === 'pro' ? 'Conoscamosnos PRO' : 'Tienda de Diamantes'}
           subtitle={
-            <span className="inline-flex items-center gap-2.5 flex-wrap">
+            <span className="inline-flex items-center gap-2 flex-wrap">
               <span>
-                Diamantes: <strong className="text-sky-300 tabular-nums">{purchasedDiamonds} 💎</strong>
+                Saldo disponible:{' '}
+                <strong className="text-sky-300 tabular-nums">{spendableDiamonds} 💎</strong>
               </span>
-              <span className="text-white/30">·</span>
-              <span>
-                Monedas: <strong className="text-amber-300 tabular-nums">{currentCoins} 🪙</strong>
-              </span>
+              {proActive && (
+                <>
+                  <span className="text-white/30">·</span>
+                  <span className="text-amber-300 font-extrabold">
+                    PRO ({formatTimeRemaining(userProfile.proExpiresAt)})
+                  </span>
+                </>
+              )}
             </span>
           }
           onClose={onClose}
-          closeLabel="Cerrar tienda"
         />
 
-        {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto no-scrollbar p-4 sm:p-5 space-y-4 bg-[#FAF7F9]">
-          {/* Switcher Superior: Comprar Diamantes vs Cambiar Diamantes a Monedas */}
+          {/* Selector Principal: Comprar Diamantes 💎 vs Conoscamosnos PRO 👑 */}
           <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-zinc-200/75 border border-zinc-200">
             <button
               type="button"
               onClick={() => setStoreSection('buy')}
               className={`py-2.5 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
                 storeSection === 'buy'
-                  ? 'bg-white text-sky-700 shadow-sm'
+                  ? 'bg-white text-zinc-900 shadow-sm'
                   : 'text-zinc-600 hover:text-zinc-900'
               }`}
             >
               <Gem className="w-3.5 h-3.5 text-sky-500" />
-              Comprar Diamantes 💎
+              Diamantes (💎)
             </button>
+
             <button
               type="button"
-              onClick={() => setStoreSection('swap')}
+              onClick={() => setStoreSection('pro')}
               className={`py-2.5 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
-                storeSection === 'swap'
-                  ? 'bg-white text-amber-700 shadow-sm'
-                  : 'text-zinc-600 hover:text-zinc-900'
+                storeSection === 'pro'
+                  ? 'bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white shadow-sm'
+                  : 'text-zinc-700 hover:text-zinc-900'
               }`}
             >
-              <ArrowLeftRight className="w-3.5 h-3.5 text-amber-500" />
-              Cambiar 💎 → 🪙
+              <Crown className="w-3.5 h-3.5 text-amber-400" />
+              Conoscamosnos PRO
             </button>
           </div>
 
-          {storeSection === 'swap' ? (
-            /* ==================== CAMBIAR DIAMANTES COMPRADOS -> MONEDAS ==================== */
-            <div className="space-y-4">
-              <div className="p-4 rounded-3xl bg-gradient-to-br from-sky-50 via-white to-amber-50/70 border border-sky-200/80 shadow-sm space-y-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-sky-700">
-                    Tasa oficial de intercambio
-                  </span>
-                  <span className="px-2.5 py-0.5 rounded-full bg-amber-100 border border-amber-200 text-amber-900 text-xs font-black">
-                    1 💎 = {coinsPerDiamond} 🪙
-                  </span>
+          {storeSection === 'buy' ? (
+            <>
+              {/* Explicación de Moneda Única en Diamantes */}
+              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-sky-50 via-white to-rose-50 border border-sky-200/80 flex items-center justify-between gap-2">
+                <div className="text-[11px] text-zinc-700 leading-snug">
+                  <strong className="text-zinc-900">Economía unificada en 💎:</strong> usa tus Diamantes para{' '}
+                  <strong className="text-[#FF2E54]">chatear directo ({policy.unlockLikeChatCoins} 💎)</strong>,{' '}
+                  <strong className="text-amber-700">ver Likes ({policy.unlockLikeCoins} 💎)</strong>, enviar{' '}
+                  <strong className="text-sky-700">Regalos</strong>, activar{' '}
+                  <strong className="text-purple-700">Boost VIP</strong> o hacerte{' '}
+                  <strong className="text-rose-700">PRO</strong>.
                 </div>
-                <p className="text-xs text-zinc-600 leading-relaxed">
-                  Los <strong className="text-sky-700">Diamantes (💎)</strong> comprados sirven para enviar regalos o cambiarlos aquí por{' '}
-                  <strong className="text-amber-700">Monedas (🪙)</strong>. Las monedas sirven exclusivamente para desbloquear chats, enviar mensajes sin Match, ver Likes y activar Boost VIP.
-                </p>
+                <button
+                  type="button"
+                  onClick={() => setRulesOpen((v) => !v)}
+                  className="px-2.5 py-1 rounded-full bg-white border border-zinc-200 text-zinc-700 text-[10.5px] font-extrabold inline-flex items-center gap-1 shrink-0"
+                >
+                  <Info className="w-3 h-3 text-sky-500" />
+                  Info
+                  <ChevronDown className={`w-3 h-3 transition ${rulesOpen ? 'rotate-180' : ''}`} />
+                </button>
               </div>
 
-              <form
-                onSubmit={handleSwapDiamondsToCoins}
-                className="p-4 rounded-3xl bg-white border border-zinc-200/85 shadow-sm space-y-3.5"
-              >
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-zinc-600">
-                    Disponibles para cambiar:{' '}
-                    <strong className="text-sky-700">{purchasedDiamonds} 💎</strong>
-                  </span>
-                  {purchasedDiamonds > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setSwapDiamonds(purchasedDiamonds)}
-                      className="px-2.5 py-0.5 rounded-full bg-sky-50 hover:bg-sky-100 border border-sky-200 text-[10.5px] font-extrabold text-sky-700"
-                    >
-                      Todo ({purchasedDiamonds} 💎)
-                    </button>
-                  )}
+              {rulesOpen && (
+                <div className="p-3.5 rounded-2xl bg-white border border-zinc-200/80 text-[11px] text-zinc-600 space-y-1.5 leading-relaxed">
+                  <p>
+                    • <strong>Una sola moneda simple (💎):</strong> ya no necesitas cambiar entre monedas y diamantes. Todo funciona directamente con tus Diamantes.
+                  </p>
+                  <p>
+                    • <strong>Regalos y Retiros Reales:</strong> cuando envías un regalo, la otra persona recibe el conteo en su perfil y suma <strong>Diamantes Ganados</strong> que puede retirar por dinero real en USD.
+                  </p>
                 </div>
+              )}
 
-                {/* Tabla rápida de equivalencias */}
-                <div className="grid grid-cols-3 gap-1.5">
-                  {DIAMOND_TO_COIN_PRESETS.slice(0, 3).map((amt) => (
+              {/* Paquetes de Diamantes */}
+              <div className="grid grid-cols-2 gap-2.5">
+                {livePackages.map((pkg) => {
+                  const units = Number(pkg.diamonds ?? pkg.coins ?? 0);
+                  const selected = selectedPkg.id === pkg.id;
+                  return (
                     <button
-                      key={amt}
+                      key={pkg.id}
                       type="button"
-                      onClick={() => setSwapDiamonds(amt)}
-                      className={`p-2 rounded-2xl border text-center transition ${
-                        Number(swapDiamonds) === amt
-                          ? 'bg-amber-50 border-amber-400 text-amber-900 shadow-sm'
-                          : 'bg-zinc-50 border-zinc-200 text-zinc-700 hover:border-zinc-300'
+                      onClick={() => setSelectedPkgId(pkg.id)}
+                      className={`relative p-3.5 rounded-[22px] border text-left transition ${
+                        selected
+                          ? 'bg-gradient-to-br from-sky-50 via-white to-rose-50 border-sky-400 shadow-md ring-2 ring-sky-200/80'
+                          : 'bg-white border-zinc-200/80 hover:border-sky-200'
                       }`}
                     >
-                      <p className="text-xs font-black text-sky-700">{amt} 💎</p>
-                      <p className="text-[10.5px] font-extrabold text-amber-700">
-                        = {amt * coinsPerDiamond} 🪙
-                      </p>
+                      {pkg.badge && (
+                        <span className="inline-block mb-1.5 px-2 py-0.5 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white text-[9.5px] font-black uppercase">
+                          {pkg.badge}
+                        </span>
+                      )}
+                      <div className="flex items-baseline justify-between gap-1">
+                        <p className="font-display text-lg font-black text-zinc-900 tabular-nums">
+                          {units} 💎
+                        </p>
+                        <span className="text-xs font-black text-emerald-700 tabular-nums">
+                          {formatUSD(pkg.priceUSD)}
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-extrabold text-zinc-700 mt-0.5">{pkg.label}</p>
+                      {pkg.bonusText && (
+                        <p className="text-[10px] text-zinc-500 mt-0.5 leading-tight line-clamp-2">
+                          {pkg.bonusText}
+                        </p>
+                      )}
                     </button>
-                  ))}
-                </div>
+                  );
+                })}
+              </div>
 
-                <div>
-                  <label className="text-xs font-bold text-zinc-700 block mb-1">
-                    Cantidad de Diamantes a convertir en Monedas
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max={Math.max(1, purchasedDiamonds)}
-                    value={swapDiamonds}
-                    onChange={(e) => setSwapDiamonds(Number(e.target.value))}
-                    disabled={purchasedDiamonds < 1}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-sm font-black text-zinc-900 focus:outline-none focus:bg-white focus:border-amber-500 disabled:opacity-50"
-                  />
+              {renderGatewayPaymentBlock()}
+            </>
+          ) : (
+            /* SECCIÓN 2: MEMBRESÍA CONOSCAMOSNOS PRO */
+            <div className="space-y-4">
+              {proActive && (
+                <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50 via-white to-amber-50 border border-emerald-200 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Crown className="w-4 h-4 text-amber-500 shrink-0" />
+                    <div>
+                      <p className="text-xs font-black text-emerald-900">
+                        Membresía Conoscamosnos PRO Activa
+                      </p>
+                      <p className="text-[10.5px] text-emerald-700">
+                        Si activas otro plan, los días se suman automáticamente a tu vigencia actual.
+                      </p>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10.5px] font-black shrink-0">
+                    {formatTimeRemaining(userProfile.proExpiresAt)}
+                  </span>
                 </div>
+              )}
 
-                <div className="p-3.5 rounded-2xl bg-amber-50/85 border border-amber-200 text-xs flex items-center justify-between font-black text-amber-950">
-                  <span>Recibirás al instante:</span>
-                  <span className="text-base text-amber-700 tabular-nums">
-                    +{previewSwappedCoins} 🪙
+              {/* Lista de Beneficios PRO */}
+              <div className="rounded-[24px] p-4 bg-gradient-to-br from-rose-50/90 via-white to-amber-50/80 border border-rose-200/80 shadow-sm space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10.5px] font-black uppercase tracking-wider text-[#FF2E54] flex items-center gap-1">
+                    <Crown className="w-3.5 h-3.5" /> Beneficios Conoscamosnos PRO
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[9.5px] font-black">
+                    Todo Ilimitado
                   </span>
                 </div>
 
-                {purchasedDiamonds < 1 ? (
-                  <button
-                    type="button"
-                    onClick={() => setStoreSection('buy')}
-                    className="w-full py-3.5 rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 text-white font-black text-sm shadow-md hover:brightness-105 transition flex items-center justify-center gap-2"
-                  >
-                    <Gem className="w-4 h-4" />
-                    Comprar Diamantes primero
-                  </button>
-                ) : (
-                  <button
-                    type="submit"
-                    disabled={!canSwap || swappingCoins}
-                    className="w-full py-3.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-sm shadow-md hover:brightness-105 disabled:opacity-40 transition flex items-center justify-center gap-2"
-                  >
-                    <Coins className="w-4 h-4" />
-                    {swappingCoins
-                      ? 'Convirtiendo...'
-                      : `Cambiar ${cleanSwapAmount} 💎 por +${previewSwappedCoins} 🪙`}
-                  </button>
-                )}
-              </form>
-            </div>
-          ) : (
-            /* ==================== COMPRAR DIAMANTES VIA PASARELAS ==================== */
-            <>
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-500">
-                    1. Elige tu paquete de Diamantes (💎)
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setRulesOpen((v) => !v)}
-                    className="inline-flex items-center gap-1 text-[11px] font-bold text-[#FF2E54] hover:underline"
-                  >
-                    <Info className="w-3.5 h-3.5" />
-                    Cómo funciona
-                    <ChevronDown
-                      className={`w-3.5 h-3.5 transition-transform ${rulesOpen ? 'rotate-180' : ''}`}
-                    />
-                  </button>
-                </div>
-
-                {rulesOpen && (
-                  <div className="p-3.5 rounded-2xl bg-white border border-rose-200/70 shadow-sm space-y-1.5 text-[11px] text-zinc-600 leading-relaxed">
-                    <p>
-                      <strong className="text-sky-700">• Diamantes (💎):</strong> se compran aquí y sirven para{' '}
-                      <strong>enviar regalos</strong> (el receptor acumula ganancias retirables en $ USD) o para{' '}
-                      <strong>cambiarlos a Monedas (1 💎 = {coinsPerDiamond} 🪙)</strong>.
-                    </p>
-                    <p>
-                      <strong className="text-amber-700">• Monedas (🪙):</strong> se usan exclusivamente para desbloquear chats, enviar mensajes sin Match, ver Likes y activar Boost VIP.
-                    </p>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-2.5">
-                  {livePackages.map((pkg) => {
-                    const active = selectedPkg.id === pkg.id;
-                    const units = Number(pkg.diamonds ?? pkg.coins ?? 0);
-                    const perDiamond = units > 0 ? (pkg.priceUSD / units).toFixed(3) : '0.000';
-                    const swapEquiv = units * coinsPerDiamond;
+                <div className="space-y-2">
+                  {PRO_BENEFITS.map((b, idx) => {
+                    const Icon = b.icon;
                     return (
-                      <button
-                        key={pkg.id}
-                        type="button"
-                        onClick={() => setSelectedPkgId(pkg.id)}
-                        className={`relative p-3.5 rounded-[22px] border text-left transition ${
-                          active
-                            ? 'bg-gradient-to-br from-[#F0F9FF] via-white to-[#FFF1F4] border-[#FF2E54] shadow-[0_10px_24px_-10px_rgba(255,46,84,0.3)] ring-1 ring-[#FF2E54]/30'
-                            : 'bg-white border-zinc-200/85 hover:border-sky-200 shadow-sm'
-                        }`}
-                      >
-                        {pkg.badge && (
-                          <span className="absolute -top-2 right-2.5 px-2 py-0.5 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-[9.5px] font-black text-white shadow">
-                            {pkg.badge}
-                          </span>
-                        )}
-                        <div className="flex items-center justify-between gap-1">
-                          <div className="flex items-center gap-1.5">
-                            <Gem className="w-4 h-4 text-sky-500" />
-                            <span className="font-display text-lg font-black text-zinc-900 tabular-nums">
-                              {units} 💎
-                            </span>
-                          </div>
-                          <span className="text-[10px] font-bold text-zinc-400">${perDiamond}/💎</span>
+                      <div key={idx} className="flex items-start gap-2.5">
+                        <div className="w-7 h-7 rounded-xl bg-white border border-rose-200/80 text-[#FF2E54] flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                          <Icon className="w-3.5 h-3.5" />
                         </div>
-                        <p className="text-[10.5px] text-zinc-500 mt-0.5 truncate">{pkg.bonusText}</p>
-                        <p className="text-[10px] font-bold text-amber-700 mt-1">
-                          Canjeable: {swapEquiv} 🪙
-                        </p>
-                        <p className="font-display text-base font-black text-emerald-600 mt-1.5 tabular-nums">
-                          {formatUSD(pkg.priceUSD)}
-                        </p>
-                      </button>
+                        <div className="min-w-0">
+                          <p className="text-xs font-extrabold text-zinc-900">{b.title}</p>
+                          <p className="text-[10.5px] text-zinc-600 leading-snug">{b.desc}</p>
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Selector de Método */}
-              <div className="space-y-2.5">
-                <p className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-500">
-                  2. Método de pago
-                </p>
-                <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-zinc-200/70 border border-zinc-200">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('auto')}
-                    className={`py-2.5 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
-                      activeTab === 'auto'
-                        ? 'bg-white text-zinc-900 shadow-sm'
-                        : 'text-zinc-600 hover:text-zinc-900'
-                    }`}
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-[#FF2E54]" />
-                    Pago Automático
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('direct')}
-                    className={`py-2.5 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
-                      activeTab === 'direct'
-                        ? 'bg-white text-zinc-900 shadow-sm'
-                        : 'text-zinc-600 hover:text-zinc-900'
-                    }`}
-                  >
-                    <Wallet className="w-3.5 h-3.5 text-emerald-600" />
-                    Transferencia Directa
-                  </button>
-                </div>
+              {/* Selección de Plan PRO (Semanal vs Mensual) */}
+              <div className="grid grid-cols-2 gap-2.5">
+                {liveProPlans.map((plan) => {
+                  const selected = selectedProPlan.id === plan.id;
+                  return (
+                    <button
+                      key={plan.id}
+                      type="button"
+                      onClick={() => setSelectedProId(plan.id)}
+                      className={`p-3.5 rounded-[22px] border text-left transition flex flex-col justify-between ${
+                        selected
+                          ? 'bg-gradient-to-br from-rose-50 via-white to-amber-50 border-[#FF2E54] shadow-md ring-2 ring-rose-200'
+                          : 'bg-white border-zinc-200 hover:border-rose-200'
+                      }`}
+                    >
+                      <div>
+                        {plan.badge && (
+                          <span className="inline-block mb-1.5 px-2 py-0.5 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white text-[9px] font-black uppercase">
+                            {plan.badge}
+                          </span>
+                        )}
+                        <p className="text-xs font-black text-zinc-900">
+                          {plan.shortLabel || plan.title}
+                        </p>
+                        <p className="text-[10.5px] text-zinc-500 mt-0.5">
+                          {plan.durationDays} días de acceso total
+                        </p>
+                      </div>
+
+                      <div className="mt-2.5 pt-2 border-t border-zinc-100 flex items-baseline justify-between gap-1">
+                        <span className="font-display text-sm font-black text-sky-700 tabular-nums">
+                          {plan.priceDiamonds} 💎
+                        </span>
+                        <span className="text-xs font-black text-emerald-700 tabular-nums">
+                          o {formatUSD(plan.priceUSD)}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
 
-              {/* TAB 1: Pago Automático (NowPayments) */}
-              {activeTab === 'auto' && (
-                <div className="space-y-3">
-                  <div className="p-4 rounded-3xl bg-white border border-zinc-200/85 shadow-sm space-y-3">
-                    <div className="flex items-center justify-between text-xs pb-2 border-b border-zinc-100">
-                      <span className="text-zinc-500 font-semibold">Resumen de orden:</span>
-                      <span className="font-black text-zinc-900">
-                        +{selectedPkgUnits} 💎 · {formatUSD(selectedPkg.priceUSD)}
-                      </span>
+              {/* Cómo activar PRO: Con Diamantes 💎 vs Pasarela Directa USD */}
+              <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-zinc-200/70 border border-zinc-200">
+                <button
+                  type="button"
+                  onClick={() => setProPayMode('diamonds')}
+                  className={`py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
+                    proPayMode === 'diamonds'
+                      ? 'bg-white text-zinc-900 shadow-sm'
+                      : 'text-zinc-600 hover:text-zinc-900'
+                  }`}
+                >
+                  <Gem className="w-3.5 h-3.5 text-sky-500" />
+                  Activar con 💎
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProPayMode('gateway')}
+                  className={`py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
+                    proPayMode === 'gateway'
+                      ? 'bg-white text-zinc-900 shadow-sm'
+                      : 'text-zinc-600 hover:text-zinc-900'
+                  }`}
+                >
+                  <Wallet className="w-3.5 h-3.5 text-emerald-600" />
+                  Pagar {formatUSD(selectedProPlan.priceUSD)}
+                </button>
+              </div>
+
+              {proPayMode === 'diamonds' ? (
+                <div className="rounded-[24px] p-4 bg-white border border-rose-200/80 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-black text-zinc-900">
+                        {selectedProPlan.title}
+                      </p>
+                      <p className="text-[11px] text-zinc-500">
+                        Tu saldo: <strong className="text-sky-700">{spendableDiamonds} 💎</strong>
+                      </p>
                     </div>
-
-                    {Number(selectedPkg.priceUSD) < 12 && (
-                      <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200/90 text-[11px] text-amber-900 space-y-1 leading-relaxed">
-                        <p className="font-extrabold flex items-center gap-1.5 text-amber-800">
-                          <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                          Mínimo de red en NowPayments
-                        </p>
-                        <p>
-                          Si pagas en <strong>USDT TRC20</strong> (TRON), NowPayments exige aprox.{' '}
-                          <strong>$11.50 USD</strong> mínimo por comisiones de red. Para paquetes menores a $12, usa{' '}
-                          <strong>USDT BEP20 (BSC) / Polygon</strong> en NowPayments o paga sin mínimo por{' '}
-                          <strong>{activeDirectNames || 'Transferencia Directa'}</strong>.
-                        </p>
-                      </div>
-                    )}
-
-                    <button
-                      type="button"
-                      disabled={creatingInvoice}
-                      onClick={handleNowPaymentsCheckout}
-                      className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-zinc-900 via-zinc-800 to-zinc-900 border border-emerald-400/35 text-white text-xs sm:text-sm font-black flex items-center justify-center gap-2 hover:brightness-110 shadow-lg disabled:opacity-50 transition"
-                    >
-                      {creatingInvoice ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-                          Creando factura segura...
-                        </>
-                      ) : (
-                        <>
-                          <Wallet className="w-4 h-4 text-emerald-400" />
-                          Comprar +{selectedPkgUnits} 💎 con NowPayments
-                          <ExternalLink className="w-3.5 h-3.5 text-emerald-300" />
-                        </>
-                      )}
-                    </button>
-
-                    <p className="text-[10.5px] text-center text-zinc-400 font-medium">
-                      🔒 Acreditación automática al instante en tu saldo de Diamantes cuando NowPayments confirma la red.
-                    </p>
+                    <span className="font-display text-lg font-black text-sky-700 tabular-nums">
+                      {selectedProPlan.priceDiamonds} 💎
+                    </span>
                   </div>
 
-                  {(isSuperAdmin || ENABLE_DEMO_PAYMENTS) && (
-                    <div className="p-4 rounded-3xl bg-amber-50/90 border border-amber-200 space-y-2.5">
-                      <div className="flex items-center gap-2 text-amber-800 text-xs font-extrabold">
-                        <Sparkles className="w-4 h-4 text-amber-600" />
-                        Recarga Instantánea Admin / Prueba
-                      </div>
-                      <button
-                        type="button"
-                        disabled={simulating}
-                        onClick={() => handleSimulateWebhook('nowpayments')}
-                        className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-white text-xs font-extrabold shadow-sm hover:brightness-105 disabled:opacity-50 transition"
-                      >
-                        {simulating ? 'Acreditando...' : `Simular Compra (+${selectedPkgUnits} 💎)`}
-                      </button>
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    disabled={activatingProDiamonds}
+                    onClick={handleActivateProWithDiamonds}
+                    className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#FF2E54] via-rose-500 to-amber-500 text-white font-black text-xs sm:text-sm shadow-lg shadow-rose-500/20 hover:brightness-105 active:scale-[0.99] disabled:opacity-50 transition flex items-center justify-center gap-2"
+                  >
+                    <Crown className="w-4 h-4" />
+                    {activatingProDiamonds
+                      ? 'Activando Conoscamosnos PRO...'
+                      : spendableDiamonds >= Number(selectedProPlan.priceDiamonds || 250)
+                      ? `Activar ${selectedProPlan.shortLabel} ahora (${selectedProPlan.priceDiamonds} 💎)`
+                      : `Necesitas ${selectedProPlan.priceDiamonds} 💎 · Toca para pagar en USD`}
+                  </button>
                 </div>
+              ) : (
+                renderGatewayPaymentBlock()
               )}
+            </div>
+          )}
 
-              {/* TAB 2: Transferencia Directa */}
-              {activeTab === 'direct' && (
-                <div className="space-y-3.5">
-                  {liveDirectMethods.length === 0 || !selectedMethod ? (
-                    <div className="p-6 rounded-3xl bg-white border border-zinc-200/85 text-center text-xs text-zinc-500">
-                      Los métodos de transferencia directa están pausados temporalmente. Usa Pago Automático o intenta más tarde.
-                    </div>
-                  ) : (
-                    <>
-                      <div
-                        className={`grid gap-2 ${
-                          liveDirectMethods.length <= 2
-                            ? 'grid-cols-2'
-                            : 'grid-cols-1 sm:grid-cols-3'
-                        }`}
-                      >
-                        {liveDirectMethods.map((method) => {
-                          const active = selectedMethod.id === method.id;
-                          return (
-                            <button
-                              key={method.id}
-                              type="button"
-                              onClick={() => {
-                                setSelectedMethodId(method.id);
-                                setQrOpen(Boolean(method.qrImageUrl));
-                                setCopied(false);
-                              }}
-                              className={`p-3 rounded-2xl border text-left transition ${
-                                active
-                                  ? 'bg-emerald-50 border-emerald-400 text-zinc-900 shadow-sm'
-                                  : 'bg-white border-zinc-200 text-zinc-600 hover:border-zinc-300'
-                              }`}
-                            >
-                              <p className="text-xs font-extrabold leading-tight">{method.name}</p>
-                              <span className="inline-block mt-1 px-2 py-0.5 rounded-full bg-emerald-100/90 text-[9.5px] font-bold text-emerald-800">
-                                {method.badge}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      <div className="p-4 rounded-3xl bg-white border border-zinc-200/85 shadow-sm space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-zinc-500 font-semibold">Monto exacto a enviar</span>
-                          <span className="font-display text-base font-black text-emerald-600">
-                            {formatUSD(selectedPkg.priceUSD)} ({selectedMethod.currency})
-                          </span>
-                        </div>
-
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[11px] font-bold text-zinc-600">
-                              {selectedMethod.accountLabel}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => setQrOpen((v) => !v)}
-                              className="inline-flex items-center gap-1 text-[11px] font-extrabold text-zinc-700 hover:text-zinc-900"
-                            >
-                              <QrCode className="w-3.5 h-3.5" />
-                              {qrOpen ? 'Ocultar QR' : 'Ver código QR'}
-                            </button>
-                          </div>
-                          <div className="flex items-center gap-2 p-2.5 rounded-2xl bg-zinc-50 border border-zinc-200">
-                            <span className="text-xs font-mono font-bold text-zinc-800 flex-1 break-all">
-                              {selectedMethod.accountValue}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={handleCopyAccount}
-                              className="px-3 py-1.5 rounded-xl bg-white border border-zinc-200 text-zinc-800 hover:bg-zinc-100 text-xs font-extrabold flex items-center gap-1 shrink-0 shadow-sm transition"
-                            >
-                              {copied ? (
-                                <Check className="w-3.5 h-3.5 text-emerald-600" />
-                              ) : (
-                                <Copy className="w-3.5 h-3.5" />
-                              )}
-                              {copied ? 'Copiado' : 'Copiar'}
-                            </button>
-                          </div>
-                        </div>
-
-                        {qrOpen && (
-                          <div className="flex flex-col items-center py-2.5 border-t border-zinc-100">
-                            {selectedMethod.qrImageUrl ? (
-                              <>
-                                <div className="p-2.5 bg-white rounded-2xl border border-zinc-200 shadow-sm">
-                                  <img
-                                    src={selectedMethod.qrImageUrl}
-                                    alt={`QR oficial de ${selectedMethod.name}`}
-                                    className="w-52 max-h-80 object-contain rounded-xl"
-                                  />
-                                </div>
-                                <a
-                                  href={selectedMethod.qrImageUrl}
-                                  download={`${selectedMethod.id}-qr.png`}
-                                  className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-[11px] font-bold transition"
-                                >
-                                  <Download className="w-3.5 h-3.5" />
-                                  Guardar imagen QR
-                                </a>
-                              </>
-                            ) : (
-                              <DynamicQrCode
-                                payload={`${selectedMethod.qrPrefix}${selectedMethod.accountValue}&amount=${selectedPkg.priceUSD}`}
-                              />
-                            )}
-                            <span className="text-[10px] font-semibold text-zinc-400 mt-1.5">
-                              {selectedMethod.qrImageUrl
-                                ? `QR oficial de ${selectedMethod.name}`
-                                : `QR de cobro para ${selectedMethod.name}`}
-                            </span>
-                          </div>
-                        )}
-
-                        <p className="text-[11px] text-zinc-500 leading-relaxed">
-                          {selectedMethod.extraInstructions}
+          {/* Historial de solicitudes de recarga del usuario */}
+          {myRequests.length > 0 && (
+            <div className="rounded-[24px] p-4 bg-white border border-zinc-200/80 shadow-sm space-y-2.5">
+              <p className="text-xs font-black text-zinc-900 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-amber-500" />
+                Tus comprobantes recientes
+              </p>
+              <div className="space-y-2 max-h-40 overflow-y-auto no-scrollbar">
+                {myRequests.slice(0, 5).map((r) => {
+                  const isProReq = r.creditTarget === 'pro';
+                  const units = r.diamondsToCredit || r.coinsToCredit || 0;
+                  return (
+                    <div
+                      key={r.id}
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-zinc-50 border border-zinc-200/70 text-xs"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-extrabold text-zinc-900 truncate">
+                          {isProReq
+                            ? `👑 ${r.packageLabel || 'Conoscamosnos PRO'}`
+                            : `+${units} 💎`}{' '}
+                          · {formatUSD(r.amountUSD)}
+                        </p>
+                        <p className="text-[10.5px] text-zinc-500 truncate">
+                          {r.methodName} · Ref: {r.referenceNumber}
                         </p>
                       </div>
-
-                      <form
-                        onSubmit={handleSubmitDirect}
-                        className="space-y-3 bg-white p-4 rounded-3xl border border-zinc-200/85 shadow-sm"
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
+                          r.status === 'approved'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : r.status === 'rejected'
+                            ? 'bg-rose-100 text-rose-800'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
                       >
-                        <div>
-                          <label className="text-xs font-bold text-zinc-700 block mb-1">
-                            Número de referencia / Hash
-                          </label>
-                          <input
-                            type="text"
-                            value={referenceNumber}
-                            onChange={(e) => setReferenceNumber(e.target.value)}
-                            placeholder="Ej. 849201 o TxID"
-                            required
-                            className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-sm text-zinc-900 focus:outline-none focus:bg-white focus:border-emerald-500"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="text-xs font-bold text-zinc-700 block mb-1">
-                            Captura del comprobante
-                          </label>
-                          {proofUrl ? (
-                            <div className="relative rounded-2xl overflow-hidden border border-emerald-300 bg-zinc-50">
-                              <img src={proofUrl} alt="Comprobante" className="w-full max-h-40 object-contain" />
-                              <button
-                                type="button"
-                                onClick={() => setProofUrl('')}
-                                className="absolute top-2 right-2 px-2.5 py-1 rounded-full bg-white/95 border border-rose-200 text-xs font-bold text-rose-600 shadow"
-                              >
-                                Cambiar
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={uploadingProof}
-                              onClick={() => fileInputRef.current?.click()}
-                              className="w-full py-4 rounded-2xl border-2 border-dashed border-zinc-300 hover:border-emerald-500 bg-zinc-50 text-zinc-600 text-xs font-bold flex items-center justify-center gap-2 transition"
-                            >
-                              {uploadingProof ? (
-                                <>
-                                  <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
-                                  Subiendo captura...
-                                </>
-                              ) : (
-                                <>
-                                  <ImagePlus className="w-4 h-4 text-emerald-600" />
-                                  Adjuntar captura de pantalla
-                                </>
-                              )}
-                            </button>
-                          )}
-                          <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept="image/*"
-                            onChange={handleUploadProof}
-                            className="hidden"
-                          />
-                        </div>
-
-                        <button
-                          type="submit"
-                          disabled={submittingDirect || uploadingProof}
-                          className="w-full py-3.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black text-sm shadow-md hover:brightness-105 disabled:opacity-50 transition"
-                        >
-                          {submittingDirect
-                            ? 'Enviando solicitud...'
-                            : `Enviar Comprobante (+${selectedPkgUnits} 💎)`}
-                        </button>
-                      </form>
-                    </>
-                  )}
-
-                  {myRequests.length > 0 && (
-                    <div className="space-y-2 pt-1">
-                      <p className="text-[11px] font-extrabold text-zinc-500 uppercase tracking-wider">
-                        Mis solicitudes recientes
-                      </p>
-                      {myRequests.slice(0, 4).map((req) => {
-                        const units = req.diamondsToCredit || req.coinsToCredit || 0;
-                        const icon = req.creditTarget === 'coins' ? '🪙' : '💎';
-                        return (
-                          <div
-                            key={req.id}
-                            className="p-3 rounded-2xl bg-white border border-zinc-200/80 flex items-center justify-between gap-2 text-xs shadow-sm"
-                          >
-                            <div>
-                              <p className="font-extrabold text-zinc-900">
-                                +{units} {icon} · {formatUSD(req.amountUSD)}
-                              </p>
-                              <p className="text-[11px] text-zinc-500">
-                                {req.methodName} · Ref: {req.referenceNumber}
-                              </p>
-                            </div>
-                            {req.status === 'pending' && (
-                              <span className="px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 font-bold flex items-center gap-1">
-                                <Clock className="w-3 h-3" /> Pendiente
-                              </span>
-                            )}
-                            {req.status === 'approved' && (
-                              <span className="px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold flex items-center gap-1">
-                                <CheckCircle2 className="w-3 h-3" /> Aprobado
-                              </span>
-                            )}
-                            {req.status === 'rejected' && (
-                              <span className="px-2.5 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-700 font-bold flex items-center gap-1">
-                                <XCircle className="w-3 h-3" /> Rechazado
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
+                        {r.status === 'approved'
+                          ? 'Aprobado'
+                          : r.status === 'rejected'
+                          ? 'Rechazado'
+                          : 'En revisión'}
+                      </span>
                     </div>
-                  )}
-                </div>
-              )}
-            </>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </div>
       </div>

@@ -3,6 +3,7 @@ import {
   ArrowUp,
   BadgeCheck,
   Camera,
+  Crown,
   Flame,
   Gift,
   Globe,
@@ -19,6 +20,7 @@ import {
   Zap,
 } from 'lucide-react';
 import {
+  COUNTRIES,
   getIntentionMood,
   INTERESTED_IN_OPTIONS,
   LOOKING_FOR_OPTIONS,
@@ -38,7 +40,9 @@ import {
   getOrderedPhotos,
   getPrimaryPhoto,
   getSharedInterests,
+  getSpendableDiamonds,
   isBoostActive,
+  isProActive,
   isProfileVerified,
   optimizeCloudinaryUrl,
   triggerHaptic,
@@ -136,15 +140,20 @@ export default function DiscoverSwipe({
   onOpenChat,
   onOpenBoost,
   onOpenCoinStore,
+  onOpenPro,
   onSuccess,
   onError,
 }) {
   const { economyConfig } = useAuth();
   const accessPolicy = useMemo(() => resolveAccessPolicy(economyConfig), [economyConfig]);
+  const proActive = isProActive(currentUser);
   const [localScope, setLocalScope] = useState('global');
   const [localIntention, setLocalIntention] = useState('Todos');
   const [localGenderPref, setLocalGenderPref] = useState(currentUser?.interestedIn || 'Todos');
   const [localAgeRange, setLocalAgeRange] = useState({ min: MIN_AGE, max: 99 });
+  const [passportCountryCode, setPassportCountryCode] = useState('');
+  const [onlyVerified, setOnlyVerified] = useState(false);
+  const [onlyOnline, setOnlyOnline] = useState(false);
 
   const scope = controlledScope ?? localScope;
   const setScope = onScopeChange ?? setLocalScope;
@@ -239,22 +248,36 @@ export default function DiscoverSwipe({
         let list = await fetchDiscoverProfiles({
           currentUser: user,
           scope,
+          passportCountryCode,
           lookingForFilter: intention,
           genderPreference,
           minAge: ageRange?.min ?? MIN_AGE,
           maxAge: ageRange?.max ?? 99,
+          onlyVerified,
+          onlyOnline,
           passedIds,
           includeAlreadyLiked: forceIncludeAll,
         });
 
-        if (list.length === 0 && !forceIncludeAll && intention === 'Todos' && passedIds.length === 0) {
+        if (
+          list.length === 0 &&
+          !forceIncludeAll &&
+          intention === 'Todos' &&
+          !passportCountryCode &&
+          !onlyVerified &&
+          !onlyOnline &&
+          passedIds.length === 0
+        ) {
           list = await fetchDiscoverProfiles({
             currentUser: user,
             scope,
+            passportCountryCode: '',
             lookingForFilter: intention,
             genderPreference,
             minAge: ageRange?.min ?? MIN_AGE,
             maxAge: ageRange?.max ?? 99,
+            onlyVerified: false,
+            onlyOnline: false,
             passedIds: [],
             includeAlreadyLiked: true,
           });
@@ -273,10 +296,13 @@ export default function DiscoverSwipe({
       currentUser?.country?.code,
       blockedKey,
       scope,
+      passportCountryCode,
       intention,
       genderPreference,
       ageRange?.min,
       ageRange?.max,
+      onlyVerified,
+      onlyOnline,
       onError,
     ]
   );
@@ -382,6 +408,7 @@ export default function DiscoverSwipe({
     busyRef.current = true;
     const target = topCard;
     const likedPhotoUrl = topCardPhotos[photoIdx] || topCardPhotos[0] || '';
+    const likedPhotoIndex = photoIdx;
     triggerHaptic(14);
 
     flyOutAndAdvance('right', target, async () => {
@@ -390,6 +417,7 @@ export default function DiscoverSwipe({
           currentUser: currentUserRef.current,
           targetUser: target,
           likedPhotoUrl,
+          likedPhotoIndex,
         });
         if (res.matched && !res.alreadyLiked) {
           triggerHaptic([18, 40, 24]);
@@ -571,6 +599,7 @@ export default function DiscoverSwipe({
   const activity = topCard ? formatSwipeActivity(topCard) : { label: '', activeNow: false };
   const verified = topCard ? isProfileVerified(topCard) : false;
   const boosted = topCard ? isBoostActive(topCard) : false;
+  const topCardIsPro = topCard ? isProActive(topCard) : false;
   const affinity = topCard ? calculateAffinityScore(currentUser, topCard) : null;
   const visibleAge = topCard ? getDisplayAge(topCard) : null;
   const distanceInfo = topCard
@@ -583,6 +612,9 @@ export default function DiscoverSwipe({
 
   const hasCustomFilters =
     scope !== 'global' ||
+    Boolean(passportCountryCode) ||
+    onlyVerified ||
+    onlyOnline ||
     genderPreference !== (currentUser?.interestedIn || 'Todos') ||
     ageRange?.min > MIN_AGE ||
     ageRange?.max < 99;
@@ -637,6 +669,20 @@ export default function DiscoverSwipe({
                   <rect x="3" y="5" width="11" height="15" rx="2.5" />
                   <path d="M17 7h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-9" />
                 </svg>
+              </button>
+
+              <button
+                type="button"
+                onClick={onOpenPro || onOpenCoinStore}
+                className={`h-9 px-3 rounded-full border text-xs font-extrabold flex items-center gap-1 hover:brightness-110 transition ${
+                  proActive
+                    ? 'bg-gradient-to-r from-[#FF2E54] to-amber-500 border-amber-300/60 text-white shadow'
+                    : 'bg-gradient-to-r from-rose-500/35 to-amber-500/35 border-amber-300/50 text-amber-200'
+                }`}
+                title="Conoscamosnos PRO"
+              >
+                <Crown className="w-3.5 h-3.5 text-amber-300" />
+                <span>PRO</span>
               </button>
 
               <button
@@ -715,6 +761,9 @@ export default function DiscoverSwipe({
                   type="button"
                   onClick={() => {
                     setScope('global');
+                    setPassportCountryCode('');
+                    setOnlyVerified(false);
+                    setOnlyOnline(false);
                     setIntention('Todos');
                     setGenderPreference(currentUser?.interestedIn || 'Todos');
                     setAgeRange({ min: MIN_AGE, max: 99 });
@@ -737,9 +786,12 @@ export default function DiscoverSwipe({
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              onClick={() => setScope('global')}
+              onClick={() => {
+                setPassportCountryCode('');
+                setScope('global');
+              }}
               className={`py-2 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
-                scope === 'global'
+                scope === 'global' && !passportCountryCode
                   ? 'bg-white text-black'
                   : 'bg-black/35 text-zinc-300 border border-white/10'
               }`}
@@ -748,15 +800,105 @@ export default function DiscoverSwipe({
             </button>
             <button
               type="button"
-              onClick={() => setScope('local')}
+              onClick={() => {
+                setPassportCountryCode('');
+                setScope('local');
+              }}
               className={`py-2 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
-                scope === 'local'
+                scope === 'local' && !passportCountryCode
                   ? 'bg-white text-black'
                   : 'bg-black/35 text-zinc-300 border border-white/10'
               }`}
             >
               <span>{currentUser?.country?.flag || '📍'}</span> Mi País ({currentUser?.country?.code})
             </button>
+          </div>
+
+          {/* Modo Pasaporte Global + Filtros Exclusivos Conoscamosnos PRO */}
+          <div className="p-2.5 rounded-2xl bg-gradient-to-r from-[#FF2E54]/15 via-black/40 to-amber-500/15 border border-amber-300/30 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-300 flex items-center gap-1">
+                <Crown className="w-3 h-3" /> Modo Pasaporte y Filtros PRO
+              </span>
+              {!proActive && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowFiltersModal(false);
+                    (onOpenPro || onOpenCoinStore)?.();
+                  }}
+                  className="px-2 py-0.5 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white text-[9.5px] font-black"
+                >
+                  Desbloquear PRO
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+              <select
+                value={passportCountryCode}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val && !proActive && !accessPolicy.isFreeMode) {
+                    onError?.('👑 Activa Conoscamosnos PRO para viajar a cualquier país con Modo Pasaporte.');
+                    setShowFiltersModal(false);
+                    (onOpenPro || onOpenCoinStore)?.();
+                    return;
+                  }
+                  setPassportCountryCode(val);
+                }}
+                className="px-2.5 py-1.5 rounded-xl bg-black/50 border border-white/15 text-[11px] font-bold text-white focus:outline-none"
+              >
+                <option value="">✈️ Pasaporte: Cualquier país</option>
+                {COUNTRIES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.flag} {c.name}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!proActive && !accessPolicy.isFreeMode) {
+                    onError?.('👑 Filtro exclusivo Conoscamosnos PRO: Ver solo perfiles con Check Azul.');
+                    setShowFiltersModal(false);
+                    (onOpenPro || onOpenCoinStore)?.();
+                    return;
+                  }
+                  setOnlyVerified((v) => !v);
+                }}
+                className={`py-1.5 px-2.5 rounded-xl text-[11px] font-bold border flex items-center justify-center gap-1 transition ${
+                  onlyVerified
+                    ? 'bg-sky-500 text-white border-sky-400'
+                    : 'bg-black/40 text-zinc-300 border-white/10 hover:text-white'
+                }`}
+              >
+                <BadgeCheck className="w-3.5 h-3.5 text-sky-400" />
+                Solo Check Azul
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!proActive && !accessPolicy.isFreeMode) {
+                    onError?.('👑 Filtro exclusivo Conoscamosnos PRO: Ver solo personas En Línea ahora.');
+                    setShowFiltersModal(false);
+                    (onOpenPro || onOpenCoinStore)?.();
+                    return;
+                  }
+                  setOnlyOnline((v) => !v);
+                }}
+                className={`py-1.5 px-2.5 rounded-xl text-[11px] font-bold border flex items-center justify-center gap-1 transition ${
+                  onlyOnline
+                    ? 'bg-emerald-500 text-white border-emerald-400'
+                    : 'bg-black/40 text-zinc-300 border-white/10 hover:text-white'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                Solo En Línea
+              </button>
+            </div>
           </div>
 
           {/* Filtro por preferencia (Mujeres / Hombres / Todos) */}
@@ -1006,6 +1148,12 @@ export default function DiscoverSwipe({
                     {boosted && (
                       <span className="px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 text-zinc-950 text-[11px] font-black flex items-center gap-1 shadow">
                         <Zap className="w-3 h-3 fill-zinc-950" /> VIP
+                      </span>
+                    )}
+
+                    {topCardIsPro && (
+                      <span className="px-2.5 py-1 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white text-[11px] font-black flex items-center gap-1 shadow">
+                        <Crown className="w-3 h-3" /> PRO
                       </span>
                     )}
 
@@ -1367,7 +1515,7 @@ export default function DiscoverSwipe({
         isOpen={giftPickerOpen}
         onClose={() => setGiftPickerOpen(false)}
         recipientName={topCard?.name}
-        userDiamonds={currentUser?.diamonds || 0}
+        userDiamonds={getSpendableDiamonds(currentUser)}
         sendingGiftId={sendingGiftId}
         onSelectGift={handleSendGift}
         onOpenCoinStore={() => {

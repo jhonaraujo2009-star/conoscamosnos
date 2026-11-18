@@ -12,7 +12,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { ECONOMY_CONFIG } from '../config/constants';
-import { buildMatchId, toMillis } from '../utils/formatters';
+import { buildMatchId, splitDiamondDeduction, toMillis } from '../utils/formatters';
 
 export function subscribeUserMatches(userId, callback, onError) {
   if (!userId) {
@@ -188,8 +188,8 @@ export async function sendVirtualGift({
       throw new Error('No puedes enviar regalos a este perfil porque existe un bloqueo activo.');
     }
 
-    const senderDiamonds = Number(senderData.diamonds || 0);
-    if (senderDiamonds < gift.price) {
+    const nextBalances = splitDiamondDeduction(senderData, gift.price);
+    if (!nextBalances) {
       throw new Error(`No tienes suficientes diamantes. Necesitas ${gift.price} 💎 para enviar ${gift.name}.`);
     }
 
@@ -202,7 +202,8 @@ export async function sendVirtualGift({
     prevGiftCounts[gift.id] = Number(prevGiftCounts[gift.id] || 0) + 1;
 
     transaction.update(senderRef, {
-      diamonds: senderDiamonds - gift.price,
+      diamonds: nextBalances.diamonds,
+      coins: nextBalances.coins,
       updatedAt: serverTimestamp(),
     });
 

@@ -6,7 +6,7 @@ export const DIAMOND_PACKAGES = [
     priceUSD: 1.99,
     label: 'Inicio',
     badge: null,
-    bonusText: 'Para regalar 💎 o cambiar a monedas',
+    bonusText: 'Para chats directos, Likes y regalos 💎',
   },
   {
     id: 'pack_550',
@@ -15,7 +15,7 @@ export const DIAMOND_PACKAGES = [
     priceUSD: 7.99,
     label: 'Popular',
     badge: '+10% Bonus',
-    bonusText: 'Regalos VIP y desbloqueos directos',
+    bonusText: 'Ideal para regalos, chats, Likes y Boost',
   },
   {
     id: 'pack_1200',
@@ -24,7 +24,7 @@ export const DIAMOND_PACKAGES = [
     priceUSD: 14.99,
     label: 'VIP Pro',
     badge: 'Más Vendido',
-    bonusText: 'Ahorra 25% por cada diamante',
+    bonusText: 'Ahorra 25% + alcanza para Conoscamosnos PRO',
   },
   {
     id: 'pack_3000',
@@ -33,11 +33,36 @@ export const DIAMOND_PACKAGES = [
     priceUSD: 29.99,
     label: 'Elite Global',
     badge: 'Mejor Valor',
-    bonusText: 'Máximo poder en regalos, chats y Boost',
+    bonusText: 'Máximo poder en regalos, PRO, chats y Boost',
   },
 ];
 
 export const COIN_PACKAGES = DIAMOND_PACKAGES;
+
+export const PRO_PLANS = [
+  {
+    id: 'pro_weekly',
+    title: 'Conoscamosnos PRO · 7 Días',
+    shortLabel: 'PRO Semanal',
+    durationDays: 7,
+    priceUSD: 4.99,
+    priceDiamonds: 250,
+    badge: 'Acceso Total',
+    subtitle:
+      '7 días con mensajes directos ilimitados sin Match, ver quién dio Like a tus fotos, Modo Pasaporte y Cero Anuncios.',
+  },
+  {
+    id: 'pro_monthly',
+    title: 'Conoscamosnos PRO · 30 Días',
+    shortLabel: 'PRO Mensual',
+    durationDays: 30,
+    priceUSD: 12.99,
+    priceDiamonds: 600,
+    badge: 'Más Popular · -35%',
+    subtitle:
+      '30 días VIP con chats ilimitados, todos tus Likes y fotos revelados, Pasaporte global, filtros Check Azul/Online e insignia PRO.',
+  },
+];
 
 export const DIAMOND_TO_COIN_PRESETS = [10, 25, 50, 100, 250];
 
@@ -45,18 +70,20 @@ export const BOOST_PLANS = [
   {
     id: 'boost_24h',
     durationHours: 24,
-    costCoins: 100,
+    costDiamonds: 50,
+    costCoins: 50,
     title: 'Boost Express 24h',
-    subtitle: 'Aparece en el Carrusel VIP de tu país durante 24 horas.',
+    subtitle: 'Aparece primero en el Carrusel VIP de tu país durante 24 horas.',
     badge: 'Rápido',
   },
   {
     id: 'boost_7d',
     durationHours: 24 * 7,
-    costCoins: 500,
+    costDiamonds: 200,
+    costCoins: 200,
     title: 'Boost VIP Semanal (7 días)',
     subtitle: '7 días continuos en Destacados VIP locales y globales.',
-    badge: 'Ahorras 28%',
+    badge: 'Ahorras 42%',
   },
 ];
 
@@ -199,7 +226,7 @@ export const WITHDRAWAL_PAYOUT_METHODS = [
 export const ENABLE_DEMO_PAYMENTS = import.meta.env.VITE_ENABLE_DEMO_PAYMENTS === 'true';
 
 /**
- * Configuración base del sistema de Publicidad Recompensada (Rewarded Ads) vs. Monedas:
+ * Configuración base del sistema de Publicidad Recompensada (Rewarded Ads) vs. Diamantes (💎):
  * El Super Admin puede anular estos valores en tiempo real desde appConfig/economy.
  */
 export const AD_REWARD_CONFIG = {
@@ -214,9 +241,9 @@ export const AD_REWARD_CONFIG = {
   unlockMode: 'hybrid',
   enableCoinCharges: true,
   enableRewardedAds: true,
-  unlockLikeCoins: 10,
-  unlockAllLikesCoins: 30,
-  unlockLikeChatCoins: 10,
+  unlockLikeCoins: 2,
+  unlockAllLikesCoins: 10,
+  unlockLikeChatCoins: 2,
   estimatedAdCpmUSD: 5,
 };
 
@@ -225,7 +252,7 @@ export const ACCESS_MODE_OPTIONS = [
     id: 'free',
     label: 'Modo Libre (Gratis)',
     shortLabel: 'Libre',
-    description: 'Sin cobrar monedas ni mostrar anuncios al chatear o ver Likes. Ideal para atraer y retener público nuevo.',
+    description: 'Sin cobrar diamantes ni mostrar anuncios al chatear o ver Likes. Ideal para atraer y retener público nuevo.',
     enableCoinCharges: false,
     enableRewardedAds: false,
   },
@@ -233,23 +260,23 @@ export const ACCESS_MODE_OPTIONS = [
     id: 'ads_only',
     label: 'Solo Anuncios',
     shortLabel: 'Solo Ads',
-    description: 'Gratis para tus usuarios sin gastar monedas: desbloquean viendo 1 anuncio Monetag.',
+    description: 'Gratis para tus usuarios sin gastar diamantes: desbloquean viendo 1 anuncio Monetag.',
     enableCoinCharges: false,
     enableRewardedAds: true,
   },
   {
     id: 'coins_only',
-    label: 'Solo Monedas',
-    shortLabel: 'Solo Monedas',
-    description: 'Desactiva anuncios; para chatear sin Match o descubrir Likes deben usar monedas.',
+    label: 'Solo Diamantes (💎)',
+    shortLabel: 'Solo 💎',
+    description: 'Desactiva anuncios; para chatear sin Match o descubrir Likes usan Diamantes o membresía PRO.',
     enableCoinCharges: true,
     enableRewardedAds: false,
   },
   {
     id: 'hybrid',
-    label: 'Monedas o Anuncio',
+    label: 'Diamantes (💎) o Anuncio',
     shortLabel: 'Híbrido',
-    description: 'Cada usuario elige: esperar 1 anuncio gratis o pagar con monedas al instante.',
+    description: 'Cada usuario elige: esperar 1 anuncio gratis, pagar con Diamantes al instante o hacerse PRO.',
     enableCoinCharges: true,
     enableRewardedAds: true,
   },
@@ -310,18 +337,18 @@ export function resolveAccessPolicy(economyConfig = null) {
   ).trim();
   const unlockLikeCoins = Math.max(
     1,
-    Math.floor(Number(economyConfig?.unlockLikeCoins ?? AD_REWARD_CONFIG.unlockLikeCoins ?? 10))
+    Math.floor(Number(economyConfig?.unlockLikeCoins ?? AD_REWARD_CONFIG.unlockLikeCoins ?? 2))
   );
   const unlockAllLikesCoins = Math.max(
     1,
     Math.floor(
-      Number(economyConfig?.unlockAllLikesCoins ?? AD_REWARD_CONFIG.unlockAllLikesCoins ?? 30)
+      Number(economyConfig?.unlockAllLikesCoins ?? AD_REWARD_CONFIG.unlockAllLikesCoins ?? 10)
     )
   );
   const unlockLikeChatCoins = Math.max(
     1,
     Math.floor(
-      Number(economyConfig?.unlockLikeChatCoins ?? AD_REWARD_CONFIG.unlockLikeChatCoins ?? 10)
+      Number(economyConfig?.unlockLikeChatCoins ?? AD_REWARD_CONFIG.unlockLikeChatCoins ?? 2)
     )
   );
   const estimatedAdCpmUSD = Math.max(
@@ -330,8 +357,12 @@ export function resolveAccessPolicy(economyConfig = null) {
   );
   const coinsPerDiamond = Math.max(
     1,
-    Math.min(100, Math.floor(Number(economyConfig?.coinsPerDiamond ?? ECONOMY_CONFIG.coinsPerDiamond ?? 2)))
+    Math.min(100, Math.floor(Number(economyConfig?.coinsPerDiamond ?? ECONOMY_CONFIG.coinsPerDiamond ?? 1)))
   );
+  const proPlans =
+    Array.isArray(economyConfig?.proPlans) && economyConfig.proPlans.length > 0
+      ? economyConfig.proPlans
+      : PRO_PLANS;
 
   return {
     unlockMode,
@@ -344,6 +375,7 @@ export function resolveAccessPolicy(economyConfig = null) {
     unlockAllLikesCoins,
     unlockLikeChatCoins,
     coinsPerDiamond,
+    proPlans,
     estimatedAdCpmUSD,
     estimatedRevenuePerAdUSD: Number(Math.max(0.0005, estimatedAdCpmUSD / 1000).toFixed(4)),
   };

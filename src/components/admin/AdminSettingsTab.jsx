@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
-  ArrowLeftRight,
   CheckCircle2,
-  Coins,
+  Crown,
   Gem,
   Save,
   ShieldCheck,
@@ -15,6 +14,7 @@ import {
 import {
   ACCESS_MODE_OPTIONS,
   AD_REWARD_CONFIG,
+  PRO_PLANS,
   VIRTUAL_GIFTS,
   deriveUnlockMode,
 } from '../../config/constants';
@@ -23,16 +23,9 @@ import { AdminCopyButton, AdminSectionCard } from './AdminPrimitives';
 const PRESET_ICONS = {
   free: Unlock,
   ads_only: Tv,
-  coins_only: Coins,
+  coins_only: Gem,
   hybrid: Sparkles,
 };
-
-const EXCHANGE_RATE_PRESETS = [
-  { rate: 1, title: '1:1 Conservador', hint: 'Mismo valor por unidad' },
-  { rate: 2, title: '1:2 Sugerido', hint: 'Balance óptimo retención / caja' },
-  { rate: 3, title: '1:3 Impulso', hint: 'Atractivo para chatear mucho' },
-  { rate: 5, title: '1:5 Promo', hint: 'Máxima conversión a chats' },
-];
 
 function AdminToggleSwitch({ label, description, checked, onToggle, accentClass = 'bg-emerald-500' }) {
   return (
@@ -67,10 +60,10 @@ export default function AdminSettingsTab({
   onCreatorSharePctChange,
   minWithdrawDiamonds,
   onMinWithdrawDiamondsChange,
-  coinsPerDiamond,
-  onCoinsPerDiamondChange,
-  savingExchange,
-  onSaveExchangeConfig,
+  proPlansDraft = PRO_PLANS,
+  onProPlansDraftChange,
+  savingProPlans,
+  onSaveProPlansConfig,
   packagesDraft,
   onPackagesDraftChange,
   savingConfig,
@@ -110,8 +103,10 @@ export default function AdminSettingsTab({
     (Number(baseDiamondPrice || 0) * (Number(creatorSharePct || 60) / 100)).toFixed(4)
   );
   const platformFeePct = Math.max(5, Math.min(90, 100 - Number(creatorSharePct || 60)));
-  const cleanExchangeRate = Math.max(1, Math.min(100, Math.floor(Number(coinsPerDiamond || 2))));
-  const chatUnlockCoins = Math.max(1, Number(accessDraft?.unlockLikeChatCoins || 10));
+  const chatUnlockDiamonds = Math.max(1, Number(accessDraft?.unlockLikeChatCoins || 2));
+  const likeUnlockDiamonds = Math.max(1, Number(accessDraft?.unlockLikeCoins || 2));
+  const safeProPlans =
+    Array.isArray(proPlansDraft) && proPlansDraft.length > 0 ? proPlansDraft : PRO_PLANS;
 
   const handleSelectPreset = (preset) => {
     onAccessDraftChange((prev) => ({
@@ -137,17 +132,17 @@ export default function AdminSettingsTab({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* 1. Control Global de Monetización, Anuncios y Modo Libre */}
+      {/* 1. Control Global de Monetización en Diamantes (💎), Anuncios y Modo Libre */}
       <AdminSectionCard accent="emerald" className="lg:col-span-2 p-5 sm:p-6">
         <form onSubmit={onSaveAccessConfig} className="space-y-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="font-display text-lg sm:text-xl font-black text-zinc-900 flex items-center gap-2">
                 <Unlock className="w-5 h-5 text-emerald-600" />
-                Control Global de Cobros, Anuncios y Retención
+                Control Global de Cobros (💎), Anuncios y Retención
               </h2>
               <p className="text-xs text-zinc-600 mt-1 leading-relaxed max-w-2xl">
-                Las <strong className="text-amber-700">Monedas (🪙)</strong> son solo para chats y desbloqueos. Activa <strong className="text-emerald-700">Modo Libre</strong> al iniciar para retener público nuevo y cambia a <strong className="text-sky-700">Solo Anuncios</strong> o <strong className="text-rose-700">Monedas + Ads</strong> en 1 clic.
+                Economía unificada en <strong className="text-sky-700">Diamantes (💎)</strong> sin monedas aparte. Activa <strong className="text-emerald-700">Modo Libre</strong> para retener público nuevo o cambia a <strong className="text-sky-700">Solo Anuncios</strong> / <strong className="text-rose-700">Diamantes + Ads</strong> en 1 clic. Los miembros <strong className="text-[#FF2E54]">Conoscamosnos PRO</strong> tienen chats y Likes ilimitados sin anuncios.
               </p>
             </div>
 
@@ -206,11 +201,11 @@ export default function AdminSettingsTab({
           {/* Interruptores independientes */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <AdminToggleSwitch
-              label="Cobrar con Monedas (Chats sin Match / Likes)"
-              description="Si está apagado, no se pedirán monedas al público para escribir sin Match o revelar Likes."
+              label="Cobrar con Diamantes (💎) por Chats sin Match / Likes"
+              description="Si está apagado, no se pedirán Diamantes al público para escribir sin Match o revelar Likes."
               checked={accessDraft.enableCoinCharges}
               onToggle={() => handleToggleSwitch('enableCoinCharges')}
-              accentClass="bg-amber-500"
+              accentClass="bg-sky-500"
             />
             <AdminToggleSwitch
               label="Habilitar Anuncios Monetag Recompensados"
@@ -221,7 +216,7 @@ export default function AdminSettingsTab({
             />
           </div>
 
-          {/* Parámetros de Anuncios y Tarifas en vivo */}
+          {/* Parámetros de Anuncios y Tarifas en Diamantes (💎) en vivo */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <div>
               <label className="text-[11px] font-bold text-zinc-600 block mb-1">
@@ -242,7 +237,7 @@ export default function AdminSettingsTab({
 
             <div>
               <label className="text-[11px] font-bold text-zinc-600 block mb-1">
-                Chat Directo (🪙)
+                Chat Directo (💎)
               </label>
               <input
                 type="number"
@@ -253,13 +248,13 @@ export default function AdminSettingsTab({
                 onChange={(e) =>
                   onAccessDraftChange((p) => ({ ...p, unlockLikeChatCoins: e.target.value }))
                 }
-                className="w-full px-3 py-2 rounded-xl bg-amber-50/70 border border-amber-200 text-sm font-black text-amber-800 focus:outline-none focus:border-amber-400"
+                className="w-full px-3 py-2 rounded-xl bg-sky-50/70 border border-sky-200 text-sm font-black text-sky-800 focus:outline-none focus:border-sky-400"
               />
             </div>
 
             <div>
               <label className="text-[11px] font-bold text-zinc-600 block mb-1">
-                Ver 1 Like (🪙)
+                Ver 1 Like / Foto (💎)
               </label>
               <input
                 type="number"
@@ -270,13 +265,13 @@ export default function AdminSettingsTab({
                 onChange={(e) =>
                   onAccessDraftChange((p) => ({ ...p, unlockLikeCoins: e.target.value }))
                 }
-                className="w-full px-3 py-2 rounded-xl bg-amber-50/70 border border-amber-200 text-sm font-black text-amber-800 focus:outline-none focus:border-amber-400"
+                className="w-full px-3 py-2 rounded-xl bg-sky-50/70 border border-sky-200 text-sm font-black text-sky-800 focus:outline-none focus:border-sky-400"
               />
             </div>
 
             <div>
               <label className="text-[11px] font-bold text-zinc-600 block mb-1">
-                Ver Todos Likes (🪙)
+                Ver Todos Likes (💎)
               </label>
               <input
                 type="number"
@@ -287,7 +282,7 @@ export default function AdminSettingsTab({
                 onChange={(e) =>
                   onAccessDraftChange((p) => ({ ...p, unlockAllLikesCoins: e.target.value }))
                 }
-                className="w-full px-3 py-2 rounded-xl bg-amber-50/70 border border-amber-200 text-sm font-black text-amber-800 focus:outline-none focus:border-amber-400"
+                className="w-full px-3 py-2 rounded-xl bg-sky-50/70 border border-sky-200 text-sm font-black text-sky-800 focus:outline-none focus:border-sky-400"
               />
             </div>
 
@@ -305,13 +300,13 @@ export default function AdminSettingsTab({
                 onChange={(e) =>
                   onAccessDraftChange((p) => ({ ...p, estimatedAdCpmUSD: e.target.value }))
                 }
-                className="w-full px-3 py-2 rounded-xl bg-sky-50/70 border border-sky-200 text-sm font-black text-sky-800 focus:outline-none focus:border-sky-400"
+                className="w-full px-3 py-2 rounded-xl bg-amber-50/70 border border-amber-200 text-sm font-black text-amber-800 focus:outline-none focus:border-amber-400"
               />
             </div>
 
             <div className="col-span-2 sm:col-span-3 lg:col-span-1 flex items-end">
               <div className="w-full px-3 py-2 rounded-xl bg-zinc-50 border border-zinc-200 text-[10.5px] text-zinc-600">
-                Recomendado: <strong className="text-emerald-700">10–12s</strong> en móviles.
+                Sugerido: <strong className="text-sky-700">1–2 💎</strong> por acción.
               </div>
             </div>
           </div>
@@ -342,85 +337,105 @@ export default function AdminSettingsTab({
         </form>
       </AdminSectionCard>
 
-      {/* 2. NUEVA: Tabla de Intercambio y Aproximación Sugerida (💎 -> 🪙 y Retiros USD) */}
+      {/* 2. NUEVA: Membresía Conoscamosnos PRO y Tabla de Rentabilidad en Diamantes (💎 / USD) */}
       <AdminSectionCard accent="crimson" className="lg:col-span-2 p-5 sm:p-6">
-        <form onSubmit={onSaveExchangeConfig} className="space-y-5">
+        <form onSubmit={onSaveProPlansConfig} className="space-y-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="font-display text-lg sm:text-xl font-black text-zinc-900 flex items-center gap-2">
-                <ArrowLeftRight className="w-5 h-5 text-[#FF2E54]" />
-                Tabla de Intercambio y Aproximación Sugerida (💎 ↔ 🪙 / USD)
+                <Crown className="w-5 h-5 text-[#FF2E54]" />
+                Membresía Conoscamosnos PRO y Tabla de Aproximación (💎 / USD)
               </h2>
               <p className="text-xs text-zinc-600 mt-1 leading-relaxed max-w-3xl">
-                Quien compra <strong className="text-sky-700">Diamantes (💎)</strong> puede enviar regalos o cambiarlos por <strong className="text-amber-700">Monedas (🪙)</strong> para chatear. Quien recibe regalos suma <strong className="text-emerald-700">Diamantes Ganados</strong> y los retira a USD ({creatorSharePct}% neto) o los convierte a monedas con esta misma tasa.
+                Configura los precios de <strong className="text-[#FF2E54]">Conoscamosnos PRO</strong> (en USD directo o en Diamantes <strong className="text-sky-700">💎</strong>). Quien activa PRO obtiene chats directos ilimitados sin Match, ve todos sus Likes y qué foto le gustó, Modo Pasaporte por país, filtros Check Azul/Online y Cero Anuncios.
               </p>
             </div>
             <span className="px-3 py-1 rounded-full bg-rose-100 border border-rose-200 text-rose-800 text-[11px] font-black shrink-0">
-              1 💎 = {cleanExchangeRate} 🪙 en vivo
+              Moneda Única: 💎 Diamantes
             </span>
           </div>
 
-          {/* Controles de Tasa Editable + Presets Sugeridos */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch">
-            <div className="lg:col-span-4 p-4 rounded-2xl bg-gradient-to-br from-rose-50 via-white to-amber-50 border border-rose-200 space-y-2">
-              <label className="text-[11px] font-black uppercase tracking-wider text-rose-700 block">
-                Tasa Editable: Monedas por 1 💎
-              </label>
-              <div className="flex items-center gap-2">
-                <span className="px-2.5 py-2 rounded-xl bg-sky-100 border border-sky-200 text-xs font-black text-sky-800 shrink-0">
-                  1 💎 =
-                </span>
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  required
-                  value={coinsPerDiamond}
-                  onChange={(e) => onCoinsPerDiamondChange(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl bg-white border border-rose-200 text-base font-black text-zinc-900 focus:outline-none focus:border-[#FF2E54]"
-                />
-                <span className="px-2.5 py-2 rounded-xl bg-amber-100 border border-amber-200 text-xs font-black text-amber-800 shrink-0">
-                  🪙
-                </span>
-              </div>
-              <p className="text-[11px] text-zinc-600">
-                Con <strong>{cleanExchangeRate} 🪙/💎</strong>, desbloquear 1 chat directo ({chatUnlockCoins} 🪙) equivale a <strong>{Math.ceil(chatUnlockCoins / cleanExchangeRate)} 💎</strong>.
-              </p>
-            </div>
-
-            <div className="lg:col-span-8 grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              {EXCHANGE_RATE_PRESETS.map((preset) => {
-                const isSelected = Number(coinsPerDiamond) === preset.rate;
-                return (
-                  <button
-                    key={preset.rate}
-                    type="button"
-                    onClick={() => onCoinsPerDiamondChange(String(preset.rate))}
-                    className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between ${
-                      isSelected
-                        ? 'bg-gradient-to-br from-rose-50 to-amber-50 border-rose-400 shadow-sm ring-2 ring-rose-200'
-                        : 'bg-zinc-50/80 border-zinc-200 hover:bg-white'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="text-xs font-black text-zinc-900">{preset.title}</span>
-                      {preset.rate === 2 && (
-                        <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[9px] font-black">
-                          Top
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-lg font-display font-black text-[#FF2E54] mt-1">
-                      1 💎 → {preset.rate} 🪙
+          {/* Planes Editables Conoscamosnos PRO */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {safeProPlans.map((plan, idx) => (
+              <div
+                key={plan.id}
+                className="p-4 rounded-2xl bg-gradient-to-br from-rose-50/90 via-white to-amber-50/75 border border-rose-200 space-y-3"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-black text-zinc-900 flex items-center gap-1.5">
+                      <Crown className="w-3.5 h-3.5 text-[#FF2E54]" />
+                      {plan.shortLabel || plan.title}
                     </p>
-                    <p className="text-[10.5px] text-zinc-500 mt-1 leading-tight">{preset.hint}</p>
-                  </button>
-                );
-              })}
-            </div>
+                    <p className="text-[10.5px] text-zinc-500">{plan.subtitle}</p>
+                  </div>
+                  {plan.badge && (
+                    <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[9.5px] font-black shrink-0">
+                      {plan.badge}
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="text-[10px] font-bold text-zinc-600 block mb-0.5">
+                      Duración (días)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="365"
+                      value={plan.durationDays}
+                      onChange={(e) => {
+                        const next = [...safeProPlans];
+                        next[idx] = { ...next[idx], durationDays: Number(e.target.value) };
+                        onProPlansDraftChange?.(next);
+                      }}
+                      className="w-full px-2.5 py-1.5 rounded-xl bg-white border border-rose-200 text-xs font-black text-zinc-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-zinc-600 block mb-0.5">
+                      Costo en 💎
+                    </label>
+                    <input
+                      type="number"
+                      min="10"
+                      max="50000"
+                      value={plan.priceDiamonds}
+                      onChange={(e) => {
+                        const next = [...safeProPlans];
+                        next[idx] = { ...next[idx], priceDiamonds: Number(e.target.value) };
+                        onProPlansDraftChange?.(next);
+                      }}
+                      className="w-full px-2.5 py-1.5 rounded-xl bg-white border border-sky-200 text-xs font-black text-sky-700"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-zinc-600 block mb-0.5">
+                      Precio USD
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.99"
+                      max="500"
+                      value={plan.priceUSD}
+                      onChange={(e) => {
+                        const next = [...safeProPlans];
+                        next[idx] = { ...next[idx], priceUSD: Number(e.target.value) };
+                        onProPlansDraftChange?.(next);
+                      }}
+                      className="w-full px-2.5 py-1.5 rounded-xl bg-white border border-emerald-200 text-xs font-black text-emerald-700"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
 
-          {/* Tabla de Aproximación Financiera en Tiempo Real */}
+          {/* Tabla de Aproximación Financiera en Tiempo Real (Moneda Única 💎) */}
           <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white">
             <table className="w-full text-left border-collapse min-w-[680px]">
               <thead>
@@ -429,7 +444,7 @@ export default function AdminSettingsTab({
                   <th className="py-3 px-3">Compra (💎)</th>
                   <th className="py-3 px-3">Precio USD</th>
                   <th className="py-3 px-3">Costo / 💎</th>
-                  <th className="py-3 px-3">Cambio a Monedas ({cleanExchangeRate}x)</th>
+                  <th className="py-3 px-3">Alcance en Chats y Likes</th>
                   <th className="py-3 px-3">Pago Máx. Creador ({creatorSharePct}%)</th>
                   <th className="py-3 px-4 text-right">Margen Plataforma</th>
                 </tr>
@@ -439,8 +454,8 @@ export default function AdminSettingsTab({
                   const units = Math.max(0, Number(pkg.diamonds ?? pkg.coins ?? 0));
                   const price = Number(pkg.priceUSD || 0);
                   const costPerDiamond = units > 0 ? price / units : 0;
-                  const coinsEquivalent = units * cleanExchangeRate;
-                  const chatsApprox = Math.floor(coinsEquivalent / chatUnlockCoins);
+                  const chatsApprox = Math.floor(units / chatUnlockDiamonds);
+                  const likesApprox = Math.floor(units / likeUnlockDiamonds);
                   const maxCreatorUSD = units * previewNetDiamondRate;
                   const platformNetUSD = price - maxCreatorUSD;
                   const marginPct = price > 0 ? Math.round((platformNetUSD / price) * 100) : 0;
@@ -468,11 +483,11 @@ export default function AdminSettingsTab({
                         ${costPerDiamond.toFixed(4)}
                       </td>
                       <td className="py-3 px-3">
-                        <span className="font-black text-amber-700 tabular-nums">
-                          {coinsEquivalent.toLocaleString('es-ES')} 🪙
+                        <span className="font-black text-zinc-800 tabular-nums">
+                          ~{chatsApprox} chats ({chatUnlockDiamonds} 💎 c/u)
                         </span>
                         <span className="block text-[10px] text-zinc-500">
-                          ~{chatsApprox} chats directos
+                          o ~{likesApprox} Likes ({likeUnlockDiamonds} 💎 c/u)
                         </span>
                       </td>
                       <td className="py-3 px-3 font-bold text-indigo-700 tabular-nums">
@@ -505,7 +520,7 @@ export default function AdminSettingsTab({
                   key={gift.id}
                   className="px-2.5 py-1 rounded-full bg-white border border-zinc-200 text-zinc-700 font-bold tabular-nums"
                 >
-                  {gift.icon} {gift.price} 💎 → <strong className="text-emerald-700">${(gift.price * previewNetDiamondRate).toFixed(2)}</strong> netos / {gift.price * cleanExchangeRate} 🪙
+                  {gift.icon} {gift.price} 💎 → <strong className="text-emerald-700">${(gift.price * previewNetDiamondRate).toFixed(2)}</strong> netos al creador
                 </span>
               ))}
             </div>
@@ -513,11 +528,11 @@ export default function AdminSettingsTab({
 
           <button
             type="submit"
-            disabled={savingExchange}
+            disabled={savingProPlans}
             className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#FF2E54] via-rose-500 to-amber-500 text-white font-black text-sm shadow-md shadow-rose-200 hover:brightness-105 disabled:opacity-50 transition flex items-center justify-center gap-2"
           >
             <Save className="w-4 h-4" />
-            {savingExchange ? 'Guardando tasa de intercambio...' : 'Guardar Tasa de Intercambio Sugerida'}
+            {savingProPlans ? 'Guardando planes PRO...' : 'Guardar Planes Conoscamosnos PRO en Vivo'}
           </button>
         </form>
       </AdminSectionCard>
@@ -665,7 +680,7 @@ export default function AdminSettingsTab({
               Canales de Cobro y Pasarela IPN
             </h2>
             <p className="text-xs text-zinc-600 mt-1 leading-relaxed">
-              Activa o edita en tiempo real tus cuentas de cobro directo para compra de Diamantes y verifica NowPayments en el servidor.
+              Activa o edita en tiempo real tus cuentas de cobro directo para compra de Diamantes o Conoscamosnos PRO y verifica NowPayments en el servidor.
             </p>
           </div>
 

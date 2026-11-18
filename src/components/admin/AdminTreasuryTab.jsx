@@ -339,8 +339,11 @@ export default function AdminTreasuryTab({
               const copyKey = `req_${req.id}`;
               const isRejectingThis =
                 rejectDraft?.kind === 'recharge' && rejectDraft?.id === req.id;
+              const isProReq = req.creditTarget === 'pro';
               const creditUnits = req.diamondsToCredit || req.coinsToCredit || 0;
-              const creditIcon = req.creditTarget === 'coins' ? '🪙' : '💎';
+              const creditBadgeText = isProReq
+                ? `👑 PRO (${req.proDurationDays || 7} días)`
+                : `+${creditUnits} 💎`;
 
               return (
                 <AdminSectionCard
@@ -383,7 +386,7 @@ export default function AdminTreasuryTab({
                         {formatUSD(req.amountUSD)}
                       </p>
                       <p className="text-xs font-extrabold text-sky-700">
-                        +{creditUnits} {creditIcon}
+                        {creditBadgeText}
                       </p>
                     </div>
                   </div>
@@ -509,7 +512,7 @@ export default function AdminTreasuryTab({
                           className="py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-black flex items-center justify-center gap-1.5 hover:brightness-105 disabled:opacity-50 shadow-sm transition"
                         >
                           <CheckCircle2 className="w-4 h-4" />
-                          {busyId === req.id ? 'Procesando...' : `Aprobar +${creditUnits} ${creditIcon}`}
+                          {busyId === req.id ? 'Procesando...' : `Aprobar ${creditBadgeText}`}
                         </button>
                       </div>
                     )
@@ -752,8 +755,7 @@ export default function AdminTreasuryTab({
               {filteredTxs.map((tx) => {
                 const copyTxKey = `tx_${tx.id}`;
                 const units = tx.diamondsCredited ?? tx.coinsCredited ?? 0;
-                const isDiamondCredit =
-                  tx.creditField === 'diamonds' || (tx.diamondsCredited ?? 0) > 0;
+                const isProTx = tx.creditField === 'pro';
                 return (
                   <AdminSectionCard key={tx.id} className="p-4 space-y-2.5">
                     <div className="flex items-start justify-between gap-2">
@@ -780,7 +782,7 @@ export default function AdminTreasuryTab({
                           {formatUSD(tx.amountUSD)}
                         </p>
                         <p className="text-xs font-extrabold text-sky-700 tabular-nums">
-                          +{units} {isDiamondCredit ? '💎' : '🪙'}
+                          {isProTx ? `👑 PRO (+${tx.proDurationDays || 7}d)` : `+${units} 💎`}
                         </p>
                       </div>
                     </div>

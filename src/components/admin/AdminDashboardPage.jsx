@@ -12,7 +12,7 @@ import {
   Settings,
   X,
 } from 'lucide-react';
-import { resolveAccessPolicy } from '../../config/constants';
+import { PRO_PLANS, resolveAccessPolicy } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
 import { subscribeAllAdImpressions } from '../../services/adRewardService';
 import {
@@ -21,8 +21,8 @@ import {
   setUserVerificationBadge,
   subscribeAllUsersForAdmin,
   updateEconomyConfig,
-  updateExchangeConfig,
   updatePlatformAccessConfig,
+  updateProPlansConfig,
 } from '../../services/adminService';
 import { logoutUser } from '../../services/authService';
 import {
@@ -80,12 +80,12 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
   const [minWithdrawDiamonds, setMinWithdrawDiamonds] = useState(
     String(economyConfig?.minWithdrawalDiamonds ?? 500)
   );
-  const [coinsPerDiamond, setCoinsPerDiamond] = useState(
-    String(economyConfig?.coinsPerDiamond ?? 2)
+  const [proPlansDraft, setProPlansDraft] = useState(
+    economyConfig?.proPlans || PRO_PLANS
   );
   const [packagesDraft, setPackagesDraft] = useState(economyConfig?.coinPackages || []);
   const [savingConfig, setSavingConfig] = useState(false);
-  const [savingExchange, setSavingExchange] = useState(false);
+  const [savingProPlans, setSavingProPlans] = useState(false);
 
   const [accessDraft, setAccessDraft] = useState(() => resolveAccessPolicy(economyConfig));
   const [savingAccess, setSavingAccess] = useState(false);
@@ -99,7 +99,7 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
     setBaseDiamondPrice(String(economyConfig?.baseDiamondValueUSD ?? 0.01));
     setCreatorSharePct(String(Math.round((economyConfig?.creatorShareRatio ?? 0.6) * 100)));
     setMinWithdrawDiamonds(String(economyConfig?.minWithdrawalDiamonds ?? 500));
-    setCoinsPerDiamond(String(economyConfig?.coinsPerDiamond ?? 2));
+    setProPlansDraft(economyConfig?.proPlans || PRO_PLANS);
     setPackagesDraft(economyConfig?.coinPackages || []);
     setAccessDraft(resolveAccessPolicy(economyConfig));
     setChannelsDraft({
@@ -340,9 +340,14 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
     setBusyId(req.id);
     try {
       await approvePaymentRequest({ requestId: req.id, adminId: userProfile.uid });
-      const units = req.diamondsToCredit || req.coinsToCredit || 0;
-      const unitIcon = req.creditTarget === 'coins' ? '🪙' : '💎';
-      onSuccess?.(`✅ Aprobado: +${units} ${unitIcon} a ${req.userName}.`);
+      if (req.creditTarget === 'pro') {
+        onSuccess?.(
+          `👑 Aprobado: Membresía Conoscamosnos PRO (${req.proDurationDays || 7} días) activada para ${req.userName}.`
+        );
+      } else {
+        const units = req.diamondsToCredit || req.coinsToCredit || 0;
+        onSuccess?.(`✅ Aprobado: +${units} 💎 a ${req.userName}.`);
+      }
     } catch (err) {
       onError?.(err.message || 'No se pudo aprobar la recarga.');
     } finally {
@@ -412,7 +417,7 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
         baseDiamondValueUSD: Number(baseDiamondPrice),
         creatorShareRatio: Number(creatorSharePct) / 100,
         minWithdrawalDiamonds: Number(minWithdrawDiamonds),
-        coinsPerDiamond: Number(coinsPerDiamond),
+        coinsPerDiamond: 1,
         coinPackages: packagesDraft,
       });
       onSuccess?.('💎 Configuración económica actualizada en tiempo real.');
@@ -423,20 +428,20 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
     }
   };
 
-  const handleSaveExchangeConfig = async (e) => {
+  const handleSaveProPlansConfig = async (e) => {
     e.preventDefault();
-    if (savingExchange) return;
-    setSavingExchange(true);
+    if (savingProPlans) return;
+    setSavingProPlans(true);
     try {
-      await updateExchangeConfig({
+      await updateProPlansConfig({
         adminId: userProfile.uid,
-        coinsPerDiamond: Number(coinsPerDiamond),
+        proPlans: proPlansDraft,
       });
-      onSuccess?.(`🔄 Tasa actualizada: 1 💎 = ${Math.floor(Number(coinsPerDiamond))} 🪙 en toda la app.`);
+      onSuccess?.('👑 Planes Conoscamosnos PRO actualizados en tiempo real.');
     } catch (err) {
-      onError?.(err.message || 'No se pudo guardar la tasa de intercambio.');
+      onError?.(err.message || 'No se pudieron guardar los planes PRO.');
     } finally {
-      setSavingExchange(false);
+      setSavingProPlans(false);
     }
   };
 
@@ -659,10 +664,10 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
             onCreatorSharePctChange={setCreatorSharePct}
             minWithdrawDiamonds={minWithdrawDiamonds}
             onMinWithdrawDiamondsChange={setMinWithdrawDiamonds}
-            coinsPerDiamond={coinsPerDiamond}
-            onCoinsPerDiamondChange={setCoinsPerDiamond}
-            savingExchange={savingExchange}
-            onSaveExchangeConfig={handleSaveExchangeConfig}
+            proPlansDraft={proPlansDraft}
+            onProPlansDraftChange={setProPlansDraft}
+            savingProPlans={savingProPlans}
+            onSaveProPlansConfig={handleSaveProPlansConfig}
             packagesDraft={packagesDraft}
             onPackagesDraftChange={setPackagesDraft}
             savingConfig={savingConfig}

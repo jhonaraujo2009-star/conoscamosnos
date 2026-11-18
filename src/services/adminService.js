@@ -14,6 +14,7 @@ import {
   AD_REWARD_CONFIG,
   COIN_PACKAGES,
   ECONOMY_CONFIG,
+  PRO_PLANS,
   deriveUnlockMode,
   resolveAccessPolicy,
 } from '../config/constants';
@@ -22,6 +23,7 @@ import { toMillis } from '../utils/formatters';
 export const DEFAULT_LIVE_ECONOMY = {
   ...ECONOMY_CONFIG,
   coinPackages: COIN_PACKAGES,
+  proPlans: PRO_PLANS,
   ...resolveAccessPolicy(AD_REWARD_CONFIG),
   paymentChannels: {
     enableZinli: true,
@@ -71,6 +73,10 @@ export function subscribeEconomyConfig(callback) {
         Array.isArray(data.coinPackages) && data.coinPackages.length > 0
           ? data.coinPackages
           : COIN_PACKAGES;
+      const proPlans =
+        Array.isArray(data.proPlans) && data.proPlans.length > 0
+          ? data.proPlans
+          : PRO_PLANS;
       const accessPolicy = resolveAccessPolicy(data);
       const paymentChannels = {
         ...DEFAULT_LIVE_ECONOMY.paymentChannels,
@@ -88,6 +94,7 @@ export function subscribeEconomyConfig(callback) {
         diamondToNetUSDRate,
         minWithdrawalDiamonds,
         coinPackages,
+        proPlans,
       });
     },
     () => callback(DEFAULT_LIVE_ECONOMY)
@@ -215,6 +222,34 @@ export async function updateEconomyConfig({
       diamondToNetUSDRate: Number((cleanBase * cleanShare).toFixed(4)),
       minWithdrawalDiamonds: cleanMin,
       coinPackages: sanitizedPackages,
+      updatedBy: adminId,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+/**
+ * Super Admin: actualiza planes y precios de la membresía Conoscamosnos PRO en tiempo real.
+ */
+export async function updateProPlansConfig({ adminId, proPlans = PRO_PLANS }) {
+  if (!adminId) throw new Error('Sesión de Super Admin inválida.');
+  const sanitizedProPlans = (Array.isArray(proPlans) ? proPlans : PRO_PLANS).map((plan) => {
+    const durationDays = Math.max(1, Math.min(365, Math.floor(Number(plan.durationDays || 7))));
+    const priceUSD = Number(Math.max(0.99, Number(plan.priceUSD || 4.99)).toFixed(2));
+    const priceDiamonds = Math.max(10, Math.floor(Number(plan.priceDiamonds || 250)));
+    return {
+      ...plan,
+      durationDays,
+      priceUSD,
+      priceDiamonds,
+    };
+  });
+
+  await setDoc(
+    doc(db, 'appConfig', 'economy'),
+    {
+      proPlans: sanitizedProPlans,
       updatedBy: adminId,
       updatedAt: serverTimestamp(),
     },

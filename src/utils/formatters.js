@@ -14,6 +14,33 @@ export function isBoostActive(user) {
   return toMillis(user.boostExpiresAt) > Date.now();
 }
 
+export function isProActive(user) {
+  if (!user || !user.isPro || !user.proExpiresAt) return false;
+  return toMillis(user.proExpiresAt) > Date.now();
+}
+
+export function getSpendableDiamonds(user) {
+  if (!user) return 0;
+  return Math.max(
+    0,
+    Math.floor(Number(user.diamonds || 0) + Number(user.coins || 0))
+  );
+}
+
+export function splitDiamondDeduction(userData, cost) {
+  const cleanCost = Math.max(0, Math.floor(Number(cost || 0)));
+  const currDiamonds = Math.max(0, Math.floor(Number(userData?.diamonds || 0)));
+  const currCoins = Math.max(0, Math.floor(Number(userData?.coins || 0)));
+  if (currDiamonds + currCoins < cleanCost) {
+    return null;
+  }
+  if (currDiamonds >= cleanCost) {
+    return { diamonds: currDiamonds - cleanCost, coins: currCoins };
+  }
+  const rem = cleanCost - currDiamonds;
+  return { diamonds: 0, coins: currCoins - rem };
+}
+
 export function formatTimeRemaining(ts) {
   const diff = toMillis(ts) - Date.now();
   if (diff <= 0) return 'Expirado';

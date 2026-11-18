@@ -45,8 +45,11 @@ import {
 import {
   calculateProfileCompletion,
   calculateWithdrawalBreakdown,
+  formatTimeRemaining,
   formatUSD,
   getPrimaryPhoto,
+  getSpendableDiamonds,
+  isProActive,
   isProfileVerified,
   optimizeCloudinaryUrl,
 } from '../../utils/formatters';
@@ -278,13 +281,13 @@ export default function ProfileScreen({
   const missingPromptsCount = Math.max(0, 2 - filledPromptsCount);
 
   const verified = isProfileVerified(userProfile);
+  const proActive = isProActive(userProfile);
   const completion = calculateProfileCompletion(userProfile);
   const isOwnerSession = Boolean(
     currentAuthUid && userProfile?.uid && currentAuthUid === userProfile.uid
   );
   const giftGateActive = Boolean(userProfile?.requireGiftToChat);
-  const userCoins = Number(userProfile?.coins || 0);
-  const userPurchasedDiamonds = Number(userProfile?.diamonds || 0);
+  const userPurchasedDiamonds = getSpendableDiamonds(userProfile);
   const userDiamonds = Number(userProfile?.earningsDiamonds || 0);
   const { netPayoutUSD } = calculateWithdrawalBreakdown(userDiamonds, liveEconomy);
 
@@ -402,6 +405,11 @@ export default function ProfileScreen({
                     }`}
                     title={verified ? 'Perfil Verificado' : 'Perfil sin verificar'}
                   />
+                  {proActive && (
+                    <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white text-[10px] font-black inline-flex items-center gap-0.5 shrink-0 shadow-xs">
+                      <Crown className="w-3 h-3" /> PRO
+                    </span>
+                  )}
                 </div>
 
                 <p className="text-[11px] font-bold text-zinc-500 truncate">
@@ -486,13 +494,13 @@ export default function ProfileScreen({
             </div>
           )}
 
-          {/* Accesos Rápidos de Billetera (Diamantes 💎, Monedas 🪙 y Ganancias) */}
+          {/* Accesos Rápidos de Billetera (Diamantes 💎, Conoscamosnos PRO 👑 y Ganancias) */}
           {isOwnerSession && (
             <div className="relative space-y-2 pt-2 border-t border-zinc-100">
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={onOpenCoinStore}
+                  onClick={() => onOpenCoinStore?.('buy')}
                   className="p-2.5 rounded-2xl bg-gradient-to-br from-sky-50/90 to-white border border-sky-200/75 text-left hover:border-sky-300 active:scale-[0.99] transition flex items-center justify-between gap-2"
                 >
                   <div className="flex items-center gap-2 min-w-0">
@@ -509,30 +517,32 @@ export default function ProfileScreen({
                     </div>
                   </div>
                   <span className="px-2 py-0.5 rounded-full bg-white border border-sky-200 text-[9.5px] font-extrabold text-sky-700 shrink-0">
-                    Comprar
+                    Recargar
                   </span>
                 </button>
 
                 <button
                   type="button"
-                  onClick={onOpenCoinStore}
-                  className="p-2.5 rounded-2xl bg-gradient-to-br from-amber-50/90 to-white border border-amber-200/75 text-left hover:border-amber-300 active:scale-[0.99] transition flex items-center justify-between gap-2"
+                  onClick={() => onOpenCoinStore?.('pro')}
+                  className="p-2.5 rounded-2xl bg-gradient-to-br from-rose-50/95 via-white to-amber-50/90 border border-rose-200/80 text-left hover:border-[#FF2E54] active:scale-[0.99] transition flex items-center justify-between gap-2"
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
-                      <Coins className="w-4 h-4" />
+                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#FF2E54] to-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Crown className="w-4 h-4" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-[10px] font-extrabold uppercase tracking-wider text-amber-700">
-                        Monedas
+                      <p className="text-[10px] font-extrabold uppercase tracking-wider text-[#FF2E54]">
+                        Membresía PRO
                       </p>
-                      <p className="font-display text-sm font-black text-zinc-900 tabular-nums leading-tight">
-                        {userCoins} 🪙
+                      <p className="font-display text-xs font-black text-zinc-900 truncate leading-tight">
+                        {proActive
+                          ? `Activo (${formatTimeRemaining(userProfile.proExpiresAt)})`
+                          : 'Todo Ilimitado'}
                       </p>
                     </div>
                   </div>
-                  <span className="px-2 py-0.5 rounded-full bg-white border border-amber-200 text-[9.5px] font-extrabold text-amber-800 shrink-0">
-                    Cambiar
+                  <span className="px-2 py-0.5 rounded-full bg-white border border-rose-200 text-[9.5px] font-extrabold text-[#FF2E54] shrink-0">
+                    {proActive ? 'Ver' : 'Activar'}
                   </span>
                 </button>
               </div>

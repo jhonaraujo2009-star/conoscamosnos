@@ -1,8 +1,8 @@
 import {
   ArrowRight,
   BadgeCheck,
-  Coins,
   Crown,
+  Gem,
   Heart,
   Lock,
   MessageCircleHeart,
@@ -11,14 +11,14 @@ import {
   Sparkles,
   X,
 } from 'lucide-react';
-import { AD_REWARD_CONFIG, resolveAccessPolicy } from '../../config/constants';
+import { resolveAccessPolicy } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
 import { openIsolatedAdViewer } from '../../services/monetagLoader';
 import { getDisplayAge, getPrimaryPhoto, isProfileVerified } from '../../utils/formatters';
 
 /**
  * Modal luminoso (Light Luxury Pearl & Rose-Gold) para elegir cómo desbloquear
- * según la política global configurada por el Super Admin (Anuncio / Monedas / Híbrido).
+ * según la política global configurada por el Super Admin (Anuncio / Diamantes 💎 / PRO).
  */
 export default function UnlockChoiceModal({
   isOpen,
@@ -34,6 +34,7 @@ export default function UnlockChoiceModal({
   onWatchAd,
   onUnlockWithCoins,
   onUnlockAllLikes,
+  onOpenPro,
 }) {
   const { economyConfig } = useAuth();
   if (!isOpen || !targetUser) return null;
@@ -44,12 +45,12 @@ export default function UnlockChoiceModal({
   const firstName = (targetUser.name || 'este perfil').split(' ')[0];
   const isRevealLike = mode === 'reveal_like';
   const duration = policy.adDurationSeconds;
-  const resolvedCoinCost =
+  const resolvedDiamondCost =
     coinCost ?? (isRevealLike ? policy.unlockLikeCoins : policy.unlockLikeChatCoins);
   const resolvedAllCost = unlockAllCost ?? policy.unlockAllLikesCoins;
-  const hasEnoughCoins = Number(userCoins) >= Number(resolvedCoinCost);
+  const hasEnoughDiamonds = Number(userCoins) >= Number(resolvedDiamondCost);
   const showAdOption = policy.enableRewardedAds;
-  const showCoinOption = policy.enableCoinCharges;
+  const showDiamondOption = policy.enableCoinCharges;
 
   const handleChooseFreeAd = () => {
     const session = openIsolatedAdViewer({
@@ -132,11 +133,11 @@ export default function UnlockChoiceModal({
 
               <p className="text-[11px] font-medium text-zinc-500 leading-snug mt-0.5 truncate">
                 {isRevealLike
-                  ? showAdOption && showCoinOption
-                    ? 'Elige desbloquear gratis con 1 anuncio o al instante'
+                  ? showAdOption && showDiamondOption
+                    ? 'Elige desbloquear gratis con 1 anuncio o al instante con 💎'
                     : showAdOption
                     ? `Desbloquea gratis viendo 1 anuncio (${duration}s)`
-                    : 'Desbloquea este perfil al instante con tus monedas'
+                    : 'Desbloquea este perfil al instante con tus Diamantes'
                   : alreadyLikedMe
                   ? 'Ya te dio Like · Abre su chat privado sin esperar'
                   : `${targetUser.country?.flag || '🌎'} ${targetUser.city || targetUser.country?.name || 'Comunidad VIP'} · Aún sin Match mutuo`}
@@ -152,7 +153,7 @@ export default function UnlockChoiceModal({
               <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
               <span>
                 Al tocar <strong className="text-zinc-900">Ver 1 anuncio gratis</strong> se abrirá la página del patrocinador ({duration}s). Cuando veas{' '}
-                <strong className="text-emerald-700">✅ ¡Listo!</strong> en la pestaña de la app, ya puedes cerrar el anuncio y entrar. Nunca verás anuncios navegando en la app.
+                <strong className="text-emerald-700">✅ ¡Listo!</strong> en la pestaña de la app, ya puedes cerrar el anuncio y entrar.
               </span>
             </div>
           )}
@@ -179,7 +180,7 @@ export default function UnlockChoiceModal({
                       </span>
                     </div>
                     <p className="text-[11px] text-zinc-500 mt-0.5">
-                      Abre el anuncio {duration}s en nueva pestaña sin gastar monedas
+                      Abre el anuncio {duration}s en nueva pestaña sin gastar Diamantes
                     </p>
                   </div>
                 </div>
@@ -188,51 +189,78 @@ export default function UnlockChoiceModal({
             </button>
           )}
 
-          {/* Opción 2: Con Monedas al Instante */}
-          {showCoinOption && (
+          {/* Opción 2: Con Diamantes 💎 al Instante */}
+          {showDiamondOption && (
             <button
               type="button"
               disabled={busyCoins}
               onClick={onUnlockWithCoins}
-              className="group w-full p-4 rounded-[24px] bg-white border border-amber-200 hover:border-[#FF2E54]/60 text-left transition active:scale-[0.99] disabled:opacity-50 shadow-card"
+              className="group w-full p-4 rounded-[24px] bg-white border border-sky-200 hover:border-sky-400 text-left transition active:scale-[0.99] disabled:opacity-50 shadow-card"
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-300 via-amber-400 to-[#FF2E54] text-white flex items-center justify-center shrink-0 shadow-md shadow-amber-500/20 group-hover:scale-105 transition-transform">
-                    <Coins className="w-5 h-5 stroke-[2.3]" />
+                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-sky-400 via-indigo-400 to-[#FF2E54] text-white flex items-center justify-center shrink-0 shadow-md shadow-sky-500/20 group-hover:scale-105 transition-transform">
+                    <Gem className="w-5 h-5 stroke-[2.2]" />
                   </div>
                   <div className="min-w-0">
                     <p className="font-display text-sm font-black text-zinc-900">
                       {busyCoins
                         ? 'Desbloqueando al instante...'
                         : showAdOption
-                        ? 'Pase directo (Sin anuncios)'
+                        ? 'Pase directo con Diamantes (Sin anuncios)'
                         : 'Desbloquear al instante'}
                     </p>
                     <p className="text-[11px] text-zinc-500 mt-0.5">
-                      {hasEnoughCoins
-                        ? `Tu saldo: ${userCoins} 🪙 · Entrada inmediata`
-                        : `Tienes ${userCoins} 🪙 · Toca para recargar ${resolvedCoinCost} 🪙`}
+                      {hasEnoughDiamonds
+                        ? `Tu saldo: ${userCoins} 💎 · Entrada inmediata`
+                        : `Tienes ${userCoins} 💎 · Toca para recargar ${resolvedDiamondCost} 💎`}
                     </p>
                   </div>
                 </div>
 
-                <span className="px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-black shrink-0 tabular-nums">
-                  {resolvedCoinCost} 🪙
+                <span className="px-3 py-1.5 rounded-full bg-sky-50 border border-sky-200 text-sky-800 text-xs font-black shrink-0 tabular-nums">
+                  {resolvedDiamondCost} 💎
                 </span>
               </div>
             </button>
           )}
 
-          {showCoinOption && isRevealLike && lockedLikesCount >= 2 && onUnlockAllLikes && (
+          {showDiamondOption && isRevealLike && lockedLikesCount >= 2 && onUnlockAllLikes && (
             <button
               type="button"
               disabled={busyCoins}
               onClick={onUnlockAllLikes}
-              className="w-full py-3.5 px-4 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white text-xs font-black hover:brightness-105 transition flex items-center justify-center gap-1.5 shadow-md disabled:opacity-50"
+              className="w-full py-3.5 px-4 rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 text-white text-xs font-black hover:brightness-105 transition flex items-center justify-center gap-1.5 shadow-md disabled:opacity-50"
             >
-              <Crown className="w-3.5 h-3.5" />
-              Revelar TODOS los {lockedLikesCount} Likes por {resolvedAllCost} 🪙
+              <Gem className="w-3.5 h-3.5" />
+              Revelar TODOS los {lockedLikesCount} Likes por {resolvedAllCost} 💎
+            </button>
+          )}
+
+          {/* Opción 3: Suscripción Conoscamosnos PRO */}
+          {onOpenPro && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose?.();
+                onOpenPro?.();
+              }}
+              className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-[#FF2E54] via-rose-500 to-amber-500 text-white text-left shadow-md hover:brightness-105 active:scale-[0.99] transition flex items-center justify-between gap-2.5"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                  <Crown className="w-4 h-4 text-amber-200" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-black truncate">
+                    Hazte Conoscamosnos PRO · Todo Ilimitado
+                  </p>
+                  <p className="text-[10.5px] text-white/90 truncate">
+                    Envía mensajes a cualquiera + mira quién dio Like a tus fotos sin anuncios
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="w-4 h-4 shrink-0" />
             </button>
           )}
         </div>

@@ -11,11 +11,11 @@ import {
   where,
 } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
-import { toMillis } from '../utils/formatters';
+import { splitDiamondDeduction, toMillis } from '../utils/formatters';
 
 /**
  * Solicita al backend seguro (/api/payments/create-invoice) una factura oficial de NowPayments
- * asociada al uid autenticado y al paquete elegido, para acreditación automática vía Webhook.
+ * asociada al uid autenticado y al paquete o plan PRO elegido, para acreditación automática vía Webhook.
  */
 export async function createNowPaymentsCheckout({ pkg, creditTarget = 'diamonds' }) {
   const currentUser = auth?.currentUser;
@@ -52,8 +52,15 @@ export async function simulateAutoPaymentConfirmation({
 }) {
   const userRef = doc(db, 'users', userId);
   const txRef = doc(collection(db, 'paymentTransactions'));
-  const units = Math.floor(Number(pkg.diamonds ?? pkg.coins ?? 0));
-  const field = creditTarget === 'coins' ? 'coins' : 'diamonds';
+  const isProOrder = creditTarget === 'pro';
+  const durationDays = Math.max(1, Math.floor(Number(pkg.durationDays || 7)));
+  const units = Math.max(
+    10,
+    Math.floor(Number(pkg.diamonds ?? pkg.priceDiamonds ?? pkg.coins ?? 100))
+  );
+  const field = isProOrder ? 'pro' : creditTarget === 'coins' ? 'coins' : 'diamonds';
+
+  let newProExpiryMs = 0;
 
   await runTransaction(db, async (transaction) => {
     const userSnap = await transaction.get(userRef);
@@ -61,29 +68,52 @@ export async function simulateAutoPaymentConfirmation({
       throw new Error('Usuario no encontrado.');
     }
 
-    const currentBalance = Number(userSnap.data()[field] || 0);
-    transaction.update(userRef, {
-      [field]: currentBalance + units,
-      updatedAt: serverTimestamp(),
-    });
+    const userData = userSnap.data();
+
+    if (isProOrder) {
+      const existingExpiryMs = toMillis(userData.proExpiresAt);
+      const baseTimeMs = existingExpiryMs > Date.now() ? existingExpiryMs : Date.now();
+      newProExpiryMs = baseTimeMs + durationDays * 24 * 60 * 60 * 1000;
+
+      transaction.update(userRef, {
+        isPro: true,
+        proPlanId: pkg.id,
+        proExpiresAt: Timestamp.fromMillis(newProExpiryMs),
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      const currentBalance = Number(userData[field] || 0);
+      transaction.update(userRef, {
+        [field]: currentBalance + units,
+        updatedAt: serverTimestamp(),
+      });
+    }
 
     transaction.set(txRef, {
       userId,
-      userName: userName || userSnap.data().name || 'Usuario',
+      userName: userName || userData.name || 'Usuario',
       provider,
       packageId: pkg.id,
-      amountUSD: pkg.priceUSD,
+      amountUSD: Number(pkg.priceUSD || 0),
       creditField: field,
+      proDurationDays: isProOrder ? durationDays : 0,
       coinsCredited: units,
-      diamondsCredited: field === 'diamonds' ? units : 0,
-      customData: { userId, packageId: pkg.id, creditTarget: field },
+      diamondsCredited: isProOrder ? 0 : units,
+      customData: { userId, packageId: pkg.id, creditTarget: field, durationDays },
       source: 'simulator',
       status: 'completed',
       createdAt: serverTimestamp(),
     });
   });
 
-  return { txId: txRef.id, coinsAdded: units, diamondsAdded: units, creditField: field };
+  return {
+    txId: txRef.id,
+    coinsAdded: isProOrder ? 0 : units,
+    diamondsAdded: isProOrder ? 0 : units,
+    proDaysAdded: isProOrder ? durationDays : 0,
+    newProExpiryMs,
+    creditField: field,
+  };
 }
 
 export async function submitManualPaymentRequest({
@@ -101,8 +131,13 @@ export async function submitManualPaymentRequest({
     throw new Error('Debes subir la captura del comprobante a Cloudinary.');
   }
 
-  const units = Math.floor(Number(pkg.diamonds ?? pkg.coins ?? 0));
-  const target = creditTarget === 'coins' ? 'coins' : 'diamonds';
+  const isProOrder = creditTarget === 'pro';
+  const durationDays = isProOrder ? Math.max(1, Math.floor(Number(pkg.durationDays || 7))) : 0;
+  const units = Math.max(
+    10,
+    Math.floor(Number(pkg.diamonds ?? pkg.priceDiamonds ?? pkg.coins ?? 100))
+  );
+  const target = isProOrder ? 'pro' : creditTarget === 'coins' ? 'coins' : 'diamonds';
 
   const docRef = await addDoc(collection(db, 'paymentRequests'), {
     userId: user.uid,
@@ -112,11 +147,13 @@ export async function submitManualPaymentRequest({
     countryCode: user.country?.code || 'GLOBAL',
     countryFlag: user.country?.flag || '🌎',
     packageId: pkg.id,
+    packageLabel: pkg.title || pkg.shortLabel || pkg.label || pkg.id,
     methodId: method.id,
     methodName: method.name,
     currency: method.currency,
-    amountUSD: pkg.priceUSD,
+    amountUSD: Number(pkg.priceUSD || 0),
     creditTarget: target,
+    proDurationDays: durationDays,
     diamondsToCredit: units,
     coinsToCredit: units,
     referenceNumber: referenceNumber.trim(),
@@ -168,7 +205,7 @@ export function subscribeAllPaymentTransactions(callback) {
 }
 
 /**
- * Super Admin: aprueba una solicitud de recarga y acredita monedas atómicamente con runTransaction.
+ * Super Admin: aprueba una solicitud de recarga y acredita Diamantes (💎) o membresía Conoscamosnos PRO atómicamente.
  */
 export async function approvePaymentRequest({ requestId, adminId }) {
   const reqRef = doc(db, 'paymentRequests', requestId);
@@ -190,14 +227,30 @@ export async function approvePaymentRequest({ requestId, adminId }) {
       throw new Error('El usuario destinatario no existe.');
     }
 
-    const targetField = reqData.creditTarget === 'coins' ? 'coins' : 'diamonds';
-    const currentBalance = Number(userSnap.data()[targetField] || 0);
-    const unitsToCredit = Number(reqData.diamondsToCredit || reqData.coinsToCredit || 0);
+    const userData = userSnap.data();
 
-    transaction.update(userRef, {
-      [targetField]: currentBalance + unitsToCredit,
-      updatedAt: serverTimestamp(),
-    });
+    if (reqData.creditTarget === 'pro') {
+      const durationDays = Math.max(1, Math.floor(Number(reqData.proDurationDays || 7)));
+      const existingExpiryMs = toMillis(userData.proExpiresAt);
+      const baseTimeMs = existingExpiryMs > Date.now() ? existingExpiryMs : Date.now();
+      const newExpiryMs = baseTimeMs + durationDays * 24 * 60 * 60 * 1000;
+
+      transaction.update(userRef, {
+        isPro: true,
+        proPlanId: reqData.packageId || 'pro_weekly',
+        proExpiresAt: Timestamp.fromMillis(newExpiryMs),
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      const targetField = reqData.creditTarget === 'coins' ? 'coins' : 'diamonds';
+      const currentBalance = Number(userData[targetField] || 0);
+      const unitsToCredit = Number(reqData.diamondsToCredit || reqData.coinsToCredit || 0);
+
+      transaction.update(userRef, {
+        [targetField]: currentBalance + unitsToCredit,
+        updatedAt: serverTimestamp(),
+      });
+    }
 
     transaction.update(reqRef, {
       status: 'approved',
@@ -227,10 +280,11 @@ export async function rejectPaymentRequest({ requestId, adminId, reason = 'Compr
 }
 
 /**
- * Descuenta monedas y activa/extiende el Boost VIP por país.
+ * Descuenta Diamantes (💎) y activa/extiende el Boost VIP por país.
  */
 export async function activateCountryBoost({ userId, plan }) {
   const userRef = doc(db, 'users', userId);
+  const cost = Math.max(1, Math.floor(Number(plan.costDiamonds ?? plan.costCoins ?? 50)));
 
   const result = await runTransaction(db, async (transaction) => {
     const userSnap = await transaction.get(userRef);
@@ -239,9 +293,9 @@ export async function activateCountryBoost({ userId, plan }) {
     }
 
     const data = userSnap.data();
-    const currentCoins = Number(data.coins || 0);
-    if (currentCoins < plan.costCoins) {
-      throw new Error(`Necesitas ${plan.costCoins} monedas para activar este Boost.`);
+    const nextBalances = splitDiamondDeduction(data, cost);
+    if (!nextBalances) {
+      throw new Error(`Necesitas ${cost} 💎 para activar este Boost VIP.`);
     }
 
     const existingExpiryMs = toMillis(data.boostExpiresAt);
@@ -249,14 +303,59 @@ export async function activateCountryBoost({ userId, plan }) {
     const newExpiryMs = baseTimeMs + plan.durationHours * 60 * 60 * 1000;
 
     transaction.update(userRef, {
-      coins: currentCoins - plan.costCoins,
+      diamonds: nextBalances.diamonds,
+      coins: nextBalances.coins,
       isBoosted: true,
       boostExpiresAt: Timestamp.fromMillis(newExpiryMs),
       boostCountry: data.country?.code || 'GLOBAL',
       updatedAt: serverTimestamp(),
     });
 
-    return { newExpiryMs };
+    return { newExpiryMs, cost };
+  });
+
+  return result;
+}
+
+/**
+ * Activa o extiende la membresía Conoscamosnos PRO al instante usando saldo de Diamantes (💎).
+ */
+export async function activateProWithDiamonds({ userId, plan }) {
+  if (!userId || !plan) {
+    throw new Error('Plan Conoscamosnos PRO inválido.');
+  }
+  const userRef = doc(db, 'users', userId);
+  const costDiamonds = Math.max(1, Math.floor(Number(plan.priceDiamonds || 250)));
+  const durationDays = Math.max(1, Math.floor(Number(plan.durationDays || 7)));
+
+  const result = await runTransaction(db, async (transaction) => {
+    const userSnap = await transaction.get(userRef);
+    if (!userSnap.exists()) {
+      throw new Error('Perfil de usuario no encontrado.');
+    }
+
+    const data = userSnap.data();
+    const nextBalances = splitDiamondDeduction(data, costDiamonds);
+    if (!nextBalances) {
+      throw new Error(
+        `Necesitas ${costDiamonds} 💎 para activar ${plan.shortLabel || 'Conoscamosnos PRO'}.`
+      );
+    }
+
+    const existingExpiryMs = toMillis(data.proExpiresAt);
+    const baseTimeMs = existingExpiryMs > Date.now() ? existingExpiryMs : Date.now();
+    const newExpiryMs = baseTimeMs + durationDays * 24 * 60 * 60 * 1000;
+
+    transaction.update(userRef, {
+      diamonds: nextBalances.diamonds,
+      coins: nextBalances.coins,
+      isPro: true,
+      proPlanId: plan.id,
+      proExpiresAt: Timestamp.fromMillis(newExpiryMs),
+      updatedAt: serverTimestamp(),
+    });
+
+    return { newExpiryMs, costDiamonds, durationDays };
   });
 
   return result;

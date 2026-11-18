@@ -529,10 +529,10 @@ export default function RewardedAdModal({
               <button
                 type="button"
                 onClick={onUseCoinsInstead}
-                className="w-full py-3 rounded-full bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 text-xs font-extrabold flex items-center justify-center gap-1.5 transition"
+                className="w-full py-3 rounded-full bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-900 text-xs font-extrabold flex items-center justify-center gap-1.5 transition"
               >
-                <Coins className="w-3.5 h-3.5 text-amber-600" />
-                Omitir espera y usar {resolvedCoinCost} monedas al instante
+                <Sparkles className="w-3.5 h-3.5 text-sky-600" />
+                Omitir espera y usar {resolvedCoinCost} 💎 al instante
               </button>
             )}
           </div>

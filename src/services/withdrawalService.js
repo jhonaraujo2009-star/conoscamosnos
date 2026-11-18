@@ -207,73 +207,73 @@ export async function rejectWithdrawalRequest({
   });
 }
 
-async function runDiamondToCoinsSwap({ userId, balanceField, amountDiamonds, minAmount = 1 }) {
+async function runDiamondToCoinsSwap({
+  userId,
+  balanceField,
+  creditField = 'diamonds',
+  amountDiamonds,
+  minAmount = 1,
+}) {
   const cleanAmount = Math.floor(Number(amountDiamonds || 0));
   if (cleanAmount < minAmount) {
     throw new Error(`El canje mínimo es de ${minAmount} ${minAmount === 1 ? 'diamante' : 'diamantes'}.`);
   }
 
   const userRef = doc(db, 'users', userId);
-  const economyRef = doc(db, 'appConfig', 'economy');
 
   return runTransaction(db, async (transaction) => {
-    const [userSnap, economySnap] = await Promise.all([
-      transaction.get(userRef),
-      transaction.get(economyRef),
-    ]);
+    const userSnap = await transaction.get(userRef);
     if (!userSnap.exists()) {
       throw new Error('Usuario no encontrado.');
     }
 
     const data = userSnap.data();
     const available = Number(data[balanceField] || 0);
-    const currentCoins = Number(data.coins || 0);
+    const currentCredit = Number(data[creditField] || 0);
 
     if (available < cleanAmount) {
       throw new Error('No tienes suficientes diamantes disponibles para este canje.');
     }
 
-    const liveRate = economySnap.exists()
-      ? Math.max(1, Math.min(100, Math.floor(Number(economySnap.data()?.coinsPerDiamond ?? ECONOMY_CONFIG.coinsPerDiamond ?? 2))))
-      : ECONOMY_CONFIG.coinsPerDiamond;
-    const coinsToCredit = cleanAmount * liveRate;
-
     transaction.update(userRef, {
       [balanceField]: available - cleanAmount,
-      coins: currentCoins + coinsToCredit,
+      [creditField]: currentCredit + cleanAmount,
       updatedAt: serverTimestamp(),
     });
 
     return {
       convertedDiamonds: cleanAmount,
-      coinsAdded: coinsToCredit,
-      coinsPerDiamond: liveRate,
-      converted: coinsToCredit,
+      diamondsAdded: cleanAmount,
+      coinsAdded: cleanAmount,
+      coinsPerDiamond: 1,
+      converted: cleanAmount,
     };
   });
 }
 
 /**
- * Permite al usuario que compró Diamantes (users/{uid}.diamonds) cambiarlos a Monedas (coins)
- * para desbloquear chats y mensajes usando la tasa vigente del Super Admin (appConfig/economy.coinsPerDiamond).
+ * Compatibilidad para pasar saldo comprado entre campos si fuera necesario.
  */
 export async function convertPurchasedDiamondsToCoins({ userId, amountDiamonds }) {
   return runDiamondToCoinsSwap({
     userId,
     balanceField: 'diamonds',
+    creditField: 'coins',
     amountDiamonds,
     minAmount: 1,
   });
 }
 
 /**
- * Permite al receptor de regalos canjear sus diamantes ganados (earningsDiamonds) por monedas internas
- * para desbloquear chats/Boost sin retirar a efectivo. Nunca permite convertir monedas compradas en dinero.
+ * Permite al receptor de regalos pasar sus Diamantes Ganados (earningsDiamonds) a su Billetera
+ * de Diamantes Disponibles (diamonds, 1:1) para activar Conoscamosnos PRO, Boost VIP, Chats o Regalos
+ * sin tener que esperar un retiro en efectivo.
  */
 export async function convertDiamondsToCoins({ userId, amountDiamonds }) {
   return runDiamondToCoinsSwap({
     userId,
     balanceField: 'earningsDiamonds',
+    creditField: 'diamonds',
     amountDiamonds,
     minAmount: 10,
   });

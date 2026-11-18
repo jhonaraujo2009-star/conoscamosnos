@@ -39,8 +39,10 @@ import {
   getOrderedPhotos,
   getPrimaryPhoto,
   getSharedInterests,
+  getSpendableDiamonds,
   isBoostActive,
   isGiftChatUnlocked,
+  isProActive,
   isProfileVerified,
   isUserActuallyOnline,
   optimizeCloudinaryUrl,
@@ -99,15 +101,19 @@ export default function PublicProfileModal({
   if (!targetUser || !liveTarget) return null;
 
   const isSelf = currentUser?.uid === targetId;
+  const viewerIsPro = isProActive(currentUser);
+  const targetIsPro = isProActive(liveTarget);
   const isBlocked = (currentUser?.blockedUsers || []).includes(targetId);
   const needsGiftForChat = Boolean(
     !isSelf &&
+      !viewerIsPro &&
       liveTarget.requireGiftToChat &&
       !isGiftChatUnlocked(status.matchData, currentUser?.uid, liveTarget)
   );
   const isChatFreeOrUnlocked = Boolean(
     !needsGiftForChat &&
-      (policy.isFreeMode ||
+      (viewerIsPro ||
+        policy.isFreeMode ||
         status.isMatched ||
         (userUnlocks?.chatUnlockedUserIds || []).includes(targetId))
   );
@@ -143,6 +149,7 @@ export default function PublicProfileModal({
         currentUser,
         targetUser: liveTarget,
         likedPhotoUrl: photos[photoIdx] || photos[0] || '',
+        likedPhotoIndex: photoIdx,
       });
       setStatus((prev) => ({
         ...prev,
@@ -153,7 +160,7 @@ export default function PublicProfileModal({
       if (res.matched) {
         onSuccess?.(`🎉 ¡Es un Match con ${liveTarget.name}! Ya pueden chatear.`);
       } else {
-        onSuccess?.(`❤️ Le diste Like a ${liveTarget.name}.`);
+        onSuccess?.(`❤️ Le diste Like a la foto #${photoIdx + 1} de ${liveTarget.name}.`);
       }
     } catch (err) {
       onError?.(err.message || 'No se pudo enviar el Like.');
@@ -317,6 +324,11 @@ export default function PublicProfileModal({
                 </h2>
                 {verified && (
                   <BadgeCheck className="w-5 h-5 text-sky-400 fill-sky-400 stroke-white shrink-0" />
+                )}
+                {targetIsPro && (
+                  <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white text-[10px] font-black flex items-center gap-0.5 shadow">
+                    <Crown className="w-3 h-3" /> PRO
+                  </span>
                 )}
                 {boosted && (
                   <span className="px-2 py-0.5 rounded-full bg-amber-400 text-zinc-950 text-[10px] font-black flex items-center gap-0.5 shadow">
@@ -571,7 +583,11 @@ export default function PublicProfileModal({
                 }`}
               >
                 <Heart className={`w-4 h-4 ${status.iLiked ? 'fill-[#FF2E54]' : 'fill-white'}`} />
-                {status.iLiked ? 'Ya te gusta' : 'Dar Like'}
+                {status.iLiked
+                  ? 'Ya te gusta'
+                  : photos.length > 1
+                  ? `Dar Like a foto #${photoIdx + 1}`
+                  : 'Dar Like'}
               </button>
 
               <button
@@ -591,7 +607,7 @@ export default function PublicProfileModal({
         isOpen={giftPickerOpen}
         onClose={() => setGiftPickerOpen(false)}
         recipientName={liveTarget.name}
-        userDiamonds={currentUser?.diamonds || 0}
+        userDiamonds={getSpendableDiamonds(currentUser)}
         sendingGiftId={sendingGiftId}
         onSelectGift={handleSendGift}
         onOpenCoinStore={() => {

@@ -17,7 +17,13 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { MAX_PHOTOS, MIN_AGE } from '../config/constants';
-import { isBoostActive, toMillis } from '../utils/formatters';
+import {
+  isBoostActive,
+  isProActive,
+  isProfileVerified,
+  isUserActuallyOnline,
+  toMillis,
+} from '../utils/formatters';
 
 export async function completeOnboarding(uid, formData) {
   const ageNum = Number(formData.age);
@@ -259,20 +265,26 @@ function matchesGenderPreference(preferredOrUser, candidate) {
 export async function fetchDiscoverProfiles({
   currentUser,
   scope = 'global',
+  passportCountryCode = '',
   lookingForFilter = 'Todos',
   genderPreference = null,
   minAge = MIN_AGE,
   maxAge = 99,
+  onlyVerified = false,
+  onlyOnline = false,
   passedIds = [],
   includeAlreadyLiked = false,
 }) {
   const usersRef = collection(db, 'users');
   const constraints = [];
+  const cleanPassport = String(passportCountryCode || '').trim().toUpperCase();
 
-  if (scope === 'local' && currentUser?.country?.code) {
+  if (cleanPassport) {
+    constraints.push(where('country.code', '==', cleanPassport));
+  } else if (scope === 'local' && currentUser?.country?.code) {
     constraints.push(where('country.code', '==', currentUser.country.code));
   }
-  constraints.push(limit(80));
+  constraints.push(limit(100));
 
   const [usersSnap, myLikesSnap] = await Promise.all([
     getDocs(query(usersRef, ...constraints)),
@@ -308,20 +320,25 @@ export async function fetchDiscoverProfiles({
         u.onboardingCompleted || hasUploadedPhotos(u) || (u.name && u.name !== 'Nuevo Usuario');
       if (!isProfileReady) return false;
       if (!includeAlreadyLiked && (likedIds.has(u.id) || passedSet.has(u.id))) return false;
+      if (cleanPassport && u.country?.code !== cleanPassport) return false;
       if (lookingForFilter !== 'Todos' && u.lookingFor !== lookingForFilter) return false;
       if (resolvedGenderPref !== 'Todos' && !matchesGenderPreference(resolvedGenderPref, u)) {
         return false;
       }
+      if (onlyVerified && !isProfileVerified(u)) return false;
+      if (onlyOnline && !isUserActuallyOnline(u)) return false;
       const candidateAge = Number(u.age || 24);
       if (candidateAge < safeMinAge || candidateAge > safeMaxAge) return false;
       return true;
     })
-    // Priorizar perfiles con fotos reales subidas y con Boost VIP activo
+    // Priorizar perfiles con fotos reales subidas, Boost VIP activo y miembros Conoscamosnos PRO
     .sort((a, b) => {
       const photoDiff = Number(hasUploadedPhotos(b)) - Number(hasUploadedPhotos(a));
       if (photoDiff !== 0) return photoDiff;
       const boostDiff = Number(isBoostActive(b)) - Number(isBoostActive(a));
       if (boostDiff !== 0) return boostDiff;
+      const proDiff = Number(isProActive(b)) - Number(isProActive(a));
+      if (proDiff !== 0) return proDiff;
       return Number(matchesGenderPreference(resolvedGenderPref, b)) - Number(matchesGenderPreference(resolvedGenderPref, a));
     });
 

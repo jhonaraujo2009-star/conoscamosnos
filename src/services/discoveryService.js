@@ -134,9 +134,14 @@ export async function openOrCreateDirectChat({ currentUser, targetUser }) {
 }
 
 /**
- * Envía un Like. Si existe Like mutuo, crea el Match automáticamente.
+ * Envía un Like (al perfil o a una foto específica). Si existe Like mutuo, crea el Match automáticamente.
  */
-export async function sendLike({ currentUser, targetUser, likedPhotoUrl = '' }) {
+export async function sendLike({
+  currentUser,
+  targetUser,
+  likedPhotoUrl = '',
+  likedPhotoIndex = 0,
+}) {
   const fromUid = currentUser.uid;
   const toUid = targetUser.uid || targetUser.id;
   if (fromUid === toUid) {
@@ -148,6 +153,7 @@ export async function sendLike({ currentUser, targetUser, likedPhotoUrl = '' }) 
   const targetUserRef = doc(db, 'users', toUid);
   const matchId = buildMatchId(fromUid, toUid);
   const matchRef = doc(db, 'matches', matchId);
+  const cleanPhotoIdx = Math.max(0, Math.floor(Number(likedPhotoIndex || 0)));
 
   const result = await runTransaction(db, async (transaction) => {
     const [likeSnap, reverseSnap, targetSnap, matchSnap] = await Promise.all([
@@ -180,6 +186,7 @@ export async function sendLike({ currentUser, targetUser, likedPhotoUrl = '' }) 
       fromUserId: fromUid,
       toUserId: toUid,
       likedPhotoUrl: typeof likedPhotoUrl === 'string' ? likedPhotoUrl : '',
+      likedPhotoIndex: cleanPhotoIdx,
       createdAt: serverTimestamp(),
     });
 

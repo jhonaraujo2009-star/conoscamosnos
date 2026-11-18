@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   BadgeCheck,
   Ban,
+  Check,
   CheckCheck,
   Crown,
   Flag,
@@ -34,10 +35,13 @@ import {
   formatRelativeLastSeen,
   getDisplayAge,
   getPrimaryPhoto,
+  getSpendableDiamonds,
   isGiftChatUnlocked,
+  isProActive,
   isProfileVerified,
   isUserActuallyOnline,
   optimizeCloudinaryUrl,
+  toMillis,
 } from '../../utils/formatters';
 import GiftAnimationOverlay from './GiftAnimationOverlay';
 import GiftMessageCard from './GiftMessageCard';
@@ -297,7 +301,13 @@ export default function ChatRoom({
 
   const online = isUserActuallyOnline(livePeer);
   const verified = isProfileVerified(livePeer);
+  const viewerIsPro = isProActive(currentUser);
+  const peerIsPro = isProActive(livePeer);
   const visibleAge = getDisplayAge(livePeer);
+  const peerLastReadMs = Math.max(
+    toMillis(liveMatch?.lastReadBy?.[peerId]),
+    Number(liveMatch?.lastReadByClientMs?.[peerId] || 0)
+  );
 
   const isBlockedEitherWay = Boolean(
     (Array.isArray(currentUser?.blockedUsers) && currentUser.blockedUsers.includes(peerId)) ||
@@ -310,7 +320,8 @@ export default function ChatRoom({
       (m.senderId === currentUser.uid && m.type === 'gift')
   );
   const isGiftRequiredLock = Boolean(
-    livePeer?.requireGiftToChat &&
+    !viewerIsPro &&
+      livePeer?.requireGiftToChat &&
       !isGiftChatUnlocked(liveMatch, currentUser.uid, livePeer) &&
       !hasAlreadySentGiftOrPeerReplied
   );
@@ -357,6 +368,11 @@ export default function ChatRoom({
                 </span>
                 {verified && (
                   <BadgeCheck className="w-4 h-4 text-sky-500 fill-sky-500 stroke-white shrink-0" />
+                )}
+                {peerIsPro && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white text-[9px] font-black inline-flex items-center gap-0.5 shrink-0">
+                    <Crown className="w-2.5 h-2.5" /> PRO
+                  </span>
                 )}
               </p>
               <p
@@ -471,6 +487,8 @@ export default function ChatRoom({
           {messages.map((msg) => {
             const isMine = msg.senderId === currentUser.uid;
             const timeLabel = formatMessageTime(msg.createdAt, msg.clientCreatedAt);
+            const msgMs = toMillis(msg.createdAt) || Number(msg.clientCreatedAt || 0);
+            const isReadByPeer = peerLastReadMs > 0 && msgMs > 0 && peerLastReadMs >= msgMs;
 
             if (msg.type === 'system') {
               return (
@@ -519,7 +537,12 @@ export default function ChatRoom({
                       }`}
                     >
                       <span>{timeLabel}</span>
-                      {isMine && <CheckCheck className="w-3 h-3" />}
+                      {isMine &&
+                        (isReadByPeer ? (
+                          <CheckCheck className="w-3.5 h-3.5 text-sky-200" title="Visto" />
+                        ) : (
+                          <Check className="w-3 h-3 opacity-75" title="Enviado" />
+                        ))}
                     </div>
                   </div>
                 </div>
@@ -552,7 +575,12 @@ export default function ChatRoom({
                     }`}
                   >
                     <span>{timeLabel}</span>
-                    {isMine && <CheckCheck className="w-3 h-3" />}
+                    {isMine &&
+                      (isReadByPeer ? (
+                        <CheckCheck className="w-3.5 h-3.5 text-sky-200" title="Visto" />
+                      ) : (
+                        <Check className="w-3 h-3 opacity-75" title="Enviado" />
+                      ))}
                   </div>
                 </div>
               </div>
@@ -670,7 +698,7 @@ export default function ChatRoom({
         isOpen={giftPickerOpen}
         onClose={() => setGiftPickerOpen(false)}
         recipientName={livePeer?.name}
-        userDiamonds={currentUser?.diamonds || 0}
+        userDiamonds={getSpendableDiamonds(currentUser)}
         sendingGiftId={sendingGiftId}
         onSelectGift={handleSendGift}
         onOpenCoinStore={onOpenCoinStore}

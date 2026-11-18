@@ -14,7 +14,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { AD_REWARD_CONFIG } from '../config/constants';
-import { toMillis } from '../utils/formatters';
+import { splitDiamondDeduction, toMillis } from '../utils/formatters';
 
 function getUnlocksRef(uid) {
   return doc(db, 'users', uid, 'private', 'unlocks');
@@ -99,7 +99,7 @@ export async function recordAdRewardUnlock({
 }
 
 /**
- * Desbloquea un Like específico gastando monedas de forma atómica.
+ * Desbloquea un Like específico gastando Diamantes (💎) de forma atómica.
  */
 export async function unlockLikeWithCoins({
   uid,
@@ -124,13 +124,14 @@ export async function unlockLikeWithCoins({
       return;
     }
 
-    const currentCoins = Number(userSnap.data().coins || 0);
-    if (currentCoins < costCoins) {
-      throw new Error(`Necesitas ${costCoins} monedas para revelar este Like al instante.`);
+    const nextBalances = splitDiamondDeduction(userSnap.data(), costCoins);
+    if (!nextBalances) {
+      throw new Error(`Necesitas ${costCoins} 💎 para revelar este Like al instante.`);
     }
 
     transaction.update(userRef, {
-      coins: currentCoins - costCoins,
+      diamonds: nextBalances.diamonds,
+      coins: nextBalances.coins,
       updatedAt: serverTimestamp(),
     });
 
@@ -148,7 +149,7 @@ export async function unlockLikeWithCoins({
 }
 
 /**
- * Desbloquea todos los Likes pendientes de una vez con un paquete de monedas.
+ * Desbloquea todos los Likes pendientes de una vez con Diamantes (💎).
  */
 export async function unlockAllLikesWithCoins({
   uid,
@@ -168,9 +169,9 @@ export async function unlockAllLikesWithCoins({
     ]);
     if (!userSnap.exists()) throw new Error('Perfil de usuario no encontrado.');
 
-    const currentCoins = Number(userSnap.data().coins || 0);
-    if (currentCoins < costCoins) {
-      throw new Error(`Necesitas ${costCoins} monedas para revelar todos tus Likes al instante.`);
+    const nextBalances = splitDiamondDeduction(userSnap.data(), costCoins);
+    if (!nextBalances) {
+      throw new Error(`Necesitas ${costCoins} 💎 para revelar todos tus Likes al instante.`);
     }
 
     const existingRevealed = Array.isArray(unlocksSnap.data()?.revealedLikeIds)
@@ -179,7 +180,8 @@ export async function unlockAllLikesWithCoins({
     const merged = Array.from(new Set([...existingRevealed, ...cleanIds]));
 
     transaction.update(userRef, {
-      coins: currentCoins - costCoins,
+      diamonds: nextBalances.diamonds,
+      coins: nextBalances.coins,
       updatedAt: serverTimestamp(),
     });
 
@@ -197,7 +199,7 @@ export async function unlockAllLikesWithCoins({
 }
 
 /**
- * Desbloquea el acceso para enviar mensaje a un perfil desde Likes gastando monedas atómicamente.
+ * Desbloquea el acceso para enviar mensaje a un perfil sin Match gastando Diamantes (💎) atómicamente.
  */
 export async function unlockChatWithCoins({
   uid,
@@ -222,13 +224,14 @@ export async function unlockChatWithCoins({
       return;
     }
 
-    const currentCoins = Number(userSnap.data().coins || 0);
-    if (currentCoins < costCoins) {
-      throw new Error(`Necesitas ${costCoins} monedas para abrir este chat sin anuncios.`);
+    const nextBalances = splitDiamondDeduction(userSnap.data(), costCoins);
+    if (!nextBalances) {
+      throw new Error(`Necesitas ${costCoins} 💎 para abrir este chat sin anuncios.`);
     }
 
     transaction.update(userRef, {
-      coins: currentCoins - costCoins,
+      diamonds: nextBalances.diamonds,
+      coins: nextBalances.coins,
       updatedAt: serverTimestamp(),
     });
 

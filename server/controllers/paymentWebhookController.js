@@ -1,21 +1,23 @@
 import { FieldValue, getAdminFirestore } from '../config/firebaseAdmin.js';
 
 const DEFAULT_PACKAGES = [
-  { id: 'pack_100', coins: 100, priceUSD: 1.99 },
-  { id: 'pack_550', coins: 550, priceUSD: 7.99 },
-  { id: 'pack_1200', coins: 1200, priceUSD: 14.99 },
-  { id: 'pack_3000', coins: 3000, priceUSD: 29.99 },
+  { id: 'pack_100', diamonds: 100, coins: 100, priceUSD: 1.99 },
+  { id: 'pack_550', diamonds: 550, coins: 550, priceUSD: 7.99 },
+  { id: 'pack_1200', diamonds: 1200, coins: 1200, priceUSD: 14.99 },
+  { id: 'pack_3000', diamonds: 3000, coins: 3000, priceUSD: 29.99 },
+];
+
+const DEFAULT_PRO_PLANS = [
+  { id: 'pro_weekly', durationDays: 7, priceUSD: 4.99, priceDiamonds: 250 },
+  { id: 'pro_monthly', durationDays: 30, priceUSD: 12.99, priceDiamonds: 600 },
 ];
 
 /**
- * Extrae userId, packageId y tipo de saldo ('coins' | 'diamonds') desde el order_id.
- * Convención recomendada al generar la orden:
- *   order_id = "uid:<FIREBASE_UID>|pkg:<PACKAGE_ID>|target:<coins|diamonds>"
- *   o formato simple "<FIREBASE_UID>__<PACKAGE_ID>"
+ * Extrae userId, packageId y tipo de saldo ('diamonds' | 'pro' | 'coins') desde el order_id.
  */
 export function parseOrderMetadata(rawOrderId = '') {
   const text = String(rawOrderId || '').trim();
-  if (!text) return { userId: '', packageId: '', creditTarget: 'coins' };
+  if (!text) return { userId: '', packageId: '', creditTarget: 'diamonds' };
 
   if (text.includes('|')) {
     const parts = {};
@@ -23,10 +25,11 @@ export function parseOrderMetadata(rawOrderId = '') {
       const [k, ...rest] = segment.split(':');
       if (k && rest.length) parts[k.trim()] = rest.join(':').trim();
     });
+    const rawTarget = parts.target || 'diamonds';
     return {
       userId: parts.uid || parts.user || '',
       packageId: parts.pkg || parts.pack || '',
-      creditTarget: parts.target === 'diamonds' ? 'diamonds' : 'coins',
+      creditTarget: rawTarget === 'pro' ? 'pro' : rawTarget === 'coins' ? 'coins' : 'diamonds',
     };
   }
 
@@ -35,11 +38,11 @@ export function parseOrderMetadata(rawOrderId = '') {
     return {
       userId: (userId || '').trim(),
       packageId: (packageId || '').trim(),
-      creditTarget: target === 'diamonds' ? 'diamonds' : 'coins',
+      creditTarget: target === 'pro' ? 'pro' : target === 'coins' ? 'coins' : 'diamonds',
     };
   }
 
-  return { userId: '', packageId: '', creditTarget: 'coins' };
+  return { userId: '', packageId: '', creditTarget: 'diamonds' };
 }
 
 /**
@@ -50,6 +53,12 @@ function normalizePaymentEvent(payload) {
   const settled = status === 'finished' || status === 'confirmed';
   const meta = parseOrderMetadata(payload.order_id);
   const amountUSD = Number(payload.price_amount || payload.outcome_amount || 0);
+  const resolvedTarget =
+    payload.credit_target === 'pro' || meta.creditTarget === 'pro'
+      ? 'pro'
+      : payload.credit_target === 'coins' || meta.creditTarget === 'coins'
+      ? 'coins'
+      : 'diamonds';
   return {
     provider: 'nowpayments',
     externalPaymentId: String(payload.payment_id || payload.invoice_id || ''),
@@ -57,12 +66,7 @@ function normalizePaymentEvent(payload) {
     isSettled: settled,
     userId: payload.user_id || meta.userId,
     packageId: payload.package_id || meta.packageId,
-    creditTarget:
-      payload.credit_target === 'coins'
-        ? 'coins'
-        : payload.credit_target === 'diamonds' || meta.creditTarget === 'diamonds'
-        ? 'diamonds'
-        : 'diamonds',
+    creditTarget: resolvedTarget,
     amountUSD,
     currency: String(payload.price_currency || payload.pay_currency || 'USD').toUpperCase(),
   };
@@ -72,7 +76,7 @@ function normalizePaymentEvent(payload) {
  * Procesa de forma atómica e idempotente el pago verificado:
  * - Consulta precios vigentes desde appConfig/economy en Firestore.
  * - Impide doble acreditación usando ID determinista paymentTransactions/nowpayments_{externalPaymentId}.
- * - Acredita el saldo al usuario (coins o earningsDiamonds según la orden) en una única transacción.
+ * - Acredita Diamantes (💎) o activa membresía Conoscamosnos PRO en una única transacción.
  */
 export async function processVerifiedPaymentWebhook({ payload }) {
   const event = normalizePaymentEvent(payload);
@@ -81,7 +85,6 @@ export async function processVerifiedPaymentWebhook({ payload }) {
     return { statusCode: 400, body: { ok: false, error: 'Falta identificador único de transacción.' } };
   }
 
-  // Estados intermedios (waiting, confirming, sending): responder 200 sin acreditar todavía
   if (!event.isSettled) {
     console.info('[PaymentWebhook] Estado no liquidado ignorado:', {
       provider: event.provider,
@@ -127,13 +130,72 @@ export async function processVerifiedPaymentWebhook({ payload }) {
       Array.isArray(economyData?.coinPackages) && economyData.coinPackages.length > 0
         ? economyData.coinPackages
         : DEFAULT_PACKAGES;
+    const proPlans =
+      Array.isArray(economyData?.proPlans) && economyData.proPlans.length > 0
+        ? economyData.proPlans
+        : DEFAULT_PRO_PLANS;
     const baseDiamondValueUSD = Number(economyData?.baseDiamondValueUSD || 0.01);
+    const userData = userSnap.data() || {};
+
+    if (event.creditTarget === 'pro') {
+      const matchedPro =
+        proPlans.find((p) => p.id === event.packageId) || proPlans[0] || DEFAULT_PRO_PLANS[0];
+      if (event.amountUSD + 0.05 < Number(matchedPro.priceUSD || 0)) {
+        throw new Error(
+          `Monto pagado (${event.amountUSD} USD) es inferior al precio del plan PRO ${matchedPro.id} (${matchedPro.priceUSD} USD).`
+        );
+      }
+      const durationDays = Math.max(1, Math.floor(Number(matchedPro.durationDays || 7)));
+      const rawExisting = userData.proExpiresAt;
+      const existingMs =
+        typeof rawExisting?.toMillis === 'function'
+          ? rawExisting.toMillis()
+          : typeof rawExisting === 'number'
+          ? rawExisting
+          : 0;
+      const baseTimeMs = existingMs > Date.now() ? existingMs : Date.now();
+      const newExpiryDate = new Date(baseTimeMs + durationDays * 24 * 60 * 60 * 1000);
+      const refUnits = Math.max(10, Math.floor(Number(matchedPro.priceDiamonds || 250)));
+
+      transaction.update(userRef, {
+        isPro: true,
+        proPlanId: matchedPro.id,
+        proExpiresAt: newExpiryDate,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      transaction.set(txRef, {
+        userId: event.userId,
+        userName: userData.name || 'Usuario',
+        provider: event.provider,
+        externalPaymentId: event.externalPaymentId,
+        packageId: matchedPro.id,
+        creditField: 'pro',
+        proDurationDays: durationDays,
+        coinsCredited: refUnits,
+        diamondsCredited: 0,
+        amountUSD: Number(event.amountUSD.toFixed(2)),
+        currency: event.currency,
+        rawStatus: event.rawStatus,
+        verifiedSignature: true,
+        source: 'webhook',
+        status: 'completed',
+        createdAt: FieldValue.serverTimestamp(),
+      });
+
+      return {
+        duplicate: false,
+        txId: txDocId,
+        proDurationDays: durationDays,
+        creditField: 'pro',
+        amountUSD: Number(event.amountUSD.toFixed(2)),
+      };
+    }
 
     let unitsToCredit = 0;
     const matchedPkg = packages.find((p) => p.id === event.packageId);
 
     if (matchedPkg) {
-      // Tolerancia mínima de $0.05 por variaciones de redondeo en pasarela crypto
       if (event.amountUSD + 0.05 < Number(matchedPkg.priceUSD || 0)) {
         throw new Error(
           `Monto pagado (${event.amountUSD} USD) es inferior al precio del paquete ${matchedPkg.id} (${matchedPkg.priceUSD} USD).`
@@ -141,16 +203,13 @@ export async function processVerifiedPaymentWebhook({ payload }) {
       }
       unitsToCredit = Math.floor(Number(matchedPkg.diamonds ?? matchedPkg.coins ?? 0));
     } else if (event.amountUSD > 0 && baseDiamondValueUSD > 0) {
-      // Cálculo dinámico basado en el precio oficial de diamantes configurado por el Super Admin
       unitsToCredit = Math.max(1, Math.floor(event.amountUSD / baseDiamondValueUSD));
     }
 
     if (unitsToCredit <= 0) {
-      throw new Error('Cantidad de diamantes/monedas a acreditar inválida.');
+      throw new Error('Cantidad de diamantes a acreditar inválida.');
     }
 
-    const userData = userSnap.data() || {};
-    // Los diamantes comprados van a `diamonds` (regalar/cambiar a monedas), nunca directo a ganancias retirables
     const creditField = event.creditTarget === 'coins' ? 'coins' : 'diamonds';
     const currentBalance = Number(userData[creditField] || 0);
 
@@ -167,7 +226,7 @@ export async function processVerifiedPaymentWebhook({ payload }) {
       packageId: event.packageId || 'dynamic_rate',
       creditField,
       coinsCredited: unitsToCredit,
-      diamondsCredited: event.creditTarget === 'diamonds' ? unitsToCredit : 0,
+      diamondsCredited: creditField === 'diamonds' ? unitsToCredit : 0,
       amountUSD: Number(event.amountUSD.toFixed(2)),
       currency: event.currency,
       rawStatus: event.rawStatus,
@@ -198,9 +257,6 @@ export async function processVerifiedPaymentWebhook({ payload }) {
   };
 }
 
-/**
- * Controlador Express para POST /api/webhooks/payments
- */
 export async function paymentWebhookExpressHandler(req, res) {
   try {
     const result = await processVerifiedPaymentWebhook({

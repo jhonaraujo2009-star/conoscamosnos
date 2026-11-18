@@ -63,15 +63,15 @@ export default function AdminOverviewTab({
         }
       : accessPolicy?.unlockMode === 'coins_only'
       ? {
-          title: `Solo Monedas (${accessPolicy.unlockLikeChatCoins} 🪙)`,
-          desc: 'Anuncios desactivados globalmente; desbloqueo inmediato solo con monedas.',
-          pill: 'Solo Monedas',
-          pillClass: 'bg-amber-50 border-amber-200 text-amber-800',
+          title: `Solo Diamantes (${accessPolicy.unlockLikeChatCoins} 💎)`,
+          desc: 'Anuncios desactivados globalmente; desbloqueo inmediato con Diamantes o membresía PRO.',
+          pill: 'Solo Diamantes 💎',
+          pillClass: 'bg-sky-50 border-sky-200 text-sky-800',
         }
       : {
-          title: `Híbrido: Anuncio (${accessPolicy?.adDurationSeconds || 12}s) o ${accessPolicy?.unlockLikeChatCoins || 10} Monedas`,
-          desc: 'Cada usuario elige ver 1 anuncio gratis o usar monedas al instante.',
-          pill: 'Monedas + Ads',
+          title: `Híbrido: Anuncio (${accessPolicy?.adDurationSeconds || 12}s), ${accessPolicy?.unlockLikeChatCoins || 2} 💎 o PRO`,
+          desc: 'Cada usuario elige ver 1 anuncio gratis, usar Diamantes al instante o hacerse Conoscamosnos PRO.',
+          pill: 'Diamantes + Ads',
           pillClass: 'bg-rose-50 border-rose-200 text-rose-700',
         };
 

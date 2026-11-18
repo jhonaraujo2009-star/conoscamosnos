@@ -22,8 +22,10 @@ import {
 import { getUserById } from './services/userService';
 import {
   buildMatchId,
+  getSpendableDiamonds,
   isGiftChatUnlocked,
   isMatchUnread,
+  isProActive,
   toMillis,
 } from './utils/formatters';
 import AuthScreen from './components/auth/AuthScreen';
@@ -124,6 +126,7 @@ function UserAppView({ onSuccess, onError }) {
   const [busyLikeChatCoins, setBusyLikeChatCoins] = useState(false);
 
   const [coinStoreOpen, setCoinStoreOpen] = useState(false);
+  const [coinStoreSection, setCoinStoreSection] = useState('buy');
   const [withdrawalsOpen, setWithdrawalsOpen] = useState(false);
   const [giftNotificationsOpen, setGiftNotificationsOpen] = useState(false);
   const [boostOpen, setBoostOpen] = useState(false);
@@ -143,9 +146,9 @@ function UserAppView({ onSuccess, onError }) {
     if (!paymentStatus) return;
 
     if (paymentStatus === 'success') {
-      handleSuccess('⚡ ¡Pago enviado! En cuanto NowPayments confirme en blockchain verás tus monedas acreditadas al instante.');
+      handleSuccess('⚡ ¡Pago enviado! En cuanto NowPayments confirme en blockchain verás tus Diamantes (💎) o membresía PRO acreditados al instante.');
     } else if (paymentStatus === 'cancel') {
-      handleError('Pago cancelado. Puedes intentarlo cuando gustes desde la Tienda de Monedas.');
+      handleError('Pago cancelado. Puedes intentarlo cuando gustes desde la Tienda VIP.');
     }
     navigate('/app', { replace: true });
   }, [location.search, navigate, handleSuccess, handleError]);
@@ -344,11 +347,17 @@ function UserAppView({ onSuccess, onError }) {
     }).length;
   }, [matches, userProfile?.uid, userProfile?.blockedUsers, optimisticReadMap]);
 
+  const openCoinStore = useCallback((section = 'buy') => {
+    setCoinStoreSection(section === 'pro' ? 'pro' : 'buy');
+    setCoinStoreOpen(true);
+  }, []);
+
   const handleStartDirectChat = useCallback(
     async (targetUser, options = {}) => {
       if (!userProfile?.uid || !targetUser) return;
       const targetUid = targetUser.uid || targetUser.id;
       if (!targetUid || targetUid === userProfile.uid) return;
+      const userIsPro = isProActive(userProfile);
 
       try {
         const freshTarget = (await getUserById(targetUid).catch(() => null)) || targetUser;
@@ -367,15 +376,16 @@ function UserAppView({ onSuccess, onError }) {
           existingMatch = conn?.matchData || null;
         }
 
-        // Si el perfil exige regalo para iniciar chats nuevos y este usuario aún no ha desbloqueado con regalo
-        if (!isGiftChatUnlocked(existingMatch, userProfile.uid, freshTarget)) {
+        // Si el perfil exige regalo para iniciar chats nuevos y el usuario no es miembro PRO
+        if (!userIsPro && !isGiftChatUnlocked(existingMatch, userProfile.uid, freshTarget)) {
           setSelectedProfile(null);
           setGiftGateTarget(freshTarget);
           return;
         }
 
-        // Regla global dinámica desde Panel Super Admin (Libre / Solo Ads / Solo Monedas / Híbrido)
+        // Regla global dinámica desde Panel Super Admin (Libre / PRO / Solo Ads / Solo Diamantes / Híbrido)
         const isChatUnlocked =
+          userIsPro ||
           accessPolicy.isFreeMode ||
           Boolean(options.skipLikeChatGate) ||
           Boolean(existingMatch) ||
@@ -407,22 +417,22 @@ function UserAppView({ onSuccess, onError }) {
   const handleUnlockLikeChatWithCoins = useCallback(
     async (target) => {
       if (!userProfile?.uid || !target || busyLikeChatCoins) return;
-      if (!accessPolicy.enableCoinCharges) {
+      if (!accessPolicy.enableCoinCharges || isProActive(userProfile)) {
         await handleStartDirectChat(target, { skipLikeChatGate: true });
         return;
       }
       const targetUid = target.uid || target.id;
       const cost = accessPolicy.unlockLikeChatCoins;
-      if (Number(userProfile.coins || 0) < cost) {
+      if (getSpendableDiamonds(userProfile) < cost) {
         setLikeChatGateTarget(null);
         setLikeChatAdTarget(null);
         setLikeChatAdSession(null);
         handleError(
           accessPolicy.enableRewardedAds
-            ? `Necesitas ${cost} monedas. Recarga en la tienda o mira 1 anuncio gratis.`
-            : `Necesitas ${cost} monedas. Recarga en la tienda para continuar.`
+            ? `Necesitas ${cost} 💎. Recarga Diamantes o mira 1 anuncio gratis.`
+            : `Necesitas ${cost} 💎. Recarga Diamantes en la tienda para continuar.`
         );
-        setCoinStoreOpen(true);
+        openCoinStore('buy');
         return;
       }
 
@@ -577,7 +587,8 @@ function UserAppView({ onSuccess, onError }) {
               setActiveTab('chat');
             }}
             onOpenBoost={() => setBoostOpen(true)}
-            onOpenCoinStore={() => setCoinStoreOpen(true)}
+            onOpenCoinStore={() => openCoinStore('buy')}
+            onOpenPro={() => openCoinStore('pro')}
             onSuccess={handleSuccess}
             onError={handleError}
           />
@@ -607,7 +618,8 @@ function UserAppView({ onSuccess, onError }) {
             userUnlocks={userUnlocks}
             onSelectProfile={setSelectedProfile}
             onStartChat={handleStartDirectChat}
-            onOpenCoinStore={() => setCoinStoreOpen(true)}
+            onOpenCoinStore={() => openCoinStore('buy')}
+            onOpenPro={() => openCoinStore('pro')}
             onGoToSwipe={() => handleChangeTab('swipe')}
             onOpenBoost={() => setBoostOpen(true)}
             onSuccess={handleSuccess}
@@ -641,7 +653,7 @@ function UserAppView({ onSuccess, onError }) {
             receivedGifts={receivedGifts}
             unreadGiftsCount={unreadGiftsCount}
             onPreviewOwnProfile={() => setSelectedProfile(userProfile)}
-            onOpenCoinStore={() => setCoinStoreOpen(true)}
+            onOpenCoinStore={(sec) => openCoinStore(sec)}
             onOpenWithdrawals={() => setWithdrawalsOpen(true)}
             onOpenBoost={() => setBoostOpen(true)}
             onOpenSafetyCenter={(tab = 'blocked') => {
@@ -662,7 +674,7 @@ function UserAppView({ onSuccess, onError }) {
         userUnlocks={userUnlocks}
         onClose={() => setSelectedProfile(null)}
         onStartChat={handleStartDirectChat}
-        onOpenCoinStore={() => setCoinStoreOpen(true)}
+        onOpenCoinStore={() => openCoinStore('buy')}
         onSuccess={handleSuccess}
         onError={handleError}
       />
@@ -675,7 +687,7 @@ function UserAppView({ onSuccess, onError }) {
           onBack={() => setActiveChat(null)}
           onMarkRead={handleMarkMatchReadOptimistic}
           onOpenProfile={(peer) => setSelectedProfile(peer)}
-          onOpenCoinStore={() => setCoinStoreOpen(true)}
+          onOpenCoinStore={() => openCoinStore('buy')}
           onSuccess={handleSuccess}
           onError={handleError}
         />
@@ -684,11 +696,11 @@ function UserAppView({ onSuccess, onError }) {
       <GiftGateChatModal
         isOpen={Boolean(giftGateTarget)}
         targetUser={giftGateTarget}
-        userDiamonds={userProfile?.diamonds || 0}
+        userDiamonds={getSpendableDiamonds(userProfile)}
         sendingGiftId={sendingGateGiftId}
         onClose={() => setGiftGateTarget(null)}
         onSelectGift={handleSendGiftToUnlockChat}
-        onOpenCoinStore={() => setCoinStoreOpen(true)}
+        onOpenCoinStore={() => openCoinStore('buy')}
       />
 
       <UnlockChoiceModal
@@ -702,7 +714,7 @@ function UserAppView({ onSuccess, onError }) {
               )
             : false
         }
-        userCoins={userProfile?.coins || 0}
+        userCoins={getSpendableDiamonds(userProfile)}
         coinCost={accessPolicy.unlockLikeChatCoins}
         busyCoins={busyLikeChatCoins}
         onClose={() => setLikeChatGateTarget(null)}
@@ -713,6 +725,7 @@ function UserAppView({ onSuccess, onError }) {
           setLikeChatAdTarget(target);
         }}
         onUnlockWithCoins={() => handleUnlockLikeChatWithCoins(likeChatGateTarget)}
+        onOpenPro={() => openCoinStore('pro')}
       />
 
       <RewardedAdModal
@@ -742,6 +755,7 @@ function UserAppView({ onSuccess, onError }) {
       <CoinStoreModal
         key={`coins-${userProfile.uid}`}
         isOpen={coinStoreOpen}
+        initialSection={coinStoreSection}
         onClose={() => setCoinStoreOpen(false)}
         userProfile={userProfile}
         onSuccess={handleSuccess}

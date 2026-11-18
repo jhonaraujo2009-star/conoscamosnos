@@ -132,10 +132,10 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
         amountDiamonds: swapAmount,
       });
       onSuccess?.(
-        `🪙 Canjeaste ${res.convertedDiamonds || swapAmount} 💎 por +${res.coinsAdded || res.converted} Monedas internas.`
+        `💎 Pasaste ${res.convertedDiamonds || swapAmount} 💎 ganados a tu Billetera de Diamantes disponibles.`
       );
     } catch (err) {
-      onError?.(err.message || 'No se pudo completar el canje a monedas.');
+      onError?.(err.message || 'No se pudo pasar a tu billetera disponible.');
     } finally {
       setSwapping(false);
     }
@@ -232,12 +232,12 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
                 Pay, Zinli o Pago Móvil.
               </p>
               <p className="text-zinc-500">
-                Tus <strong>{currentCoins} monedas</strong> sirven para desbloquear chats, ver Likes y Boost VIP; únicamente tus <strong>diamantes ganados por regalos</strong> son retirables en USD o canjeables a monedas (1 💎 = {coinsPerDiamond} 🪙).
+                Únicamente tus <strong>diamantes ganados por regalos</strong> son retirables en USD reales o puedes pasarlos 1:1 a tu <strong>Billetera de Diamantes disponibles (💎)</strong> para activar Conoscamosnos PRO, Boost VIP, chats o regalos.
               </p>
             </div>
           )}
 
-          {/* Selector de acción: Vender por $ USD vs Canjear a Monedas */}
+          {/* Selector de acción: Vender por $ USD vs Pasar a Billetera de Uso (💎) */}
           <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-zinc-200/70 border border-zinc-200">
             <button
               type="button"
@@ -256,12 +256,12 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
               onClick={() => setActiveMode('convert')}
               className={`py-2.5 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
                 activeMode === 'convert'
-                  ? 'bg-white text-amber-700 shadow-sm'
+                  ? 'bg-white text-sky-700 shadow-sm'
                   : 'text-zinc-600 hover:text-zinc-900'
               }`}
             >
-              <RefreshCw className="w-3.5 h-3.5 text-amber-500" />
-              Canjear a Monedas
+              <RefreshCw className="w-3.5 h-3.5 text-sky-500" />
+              Usar en la App (💎)
             </button>
           </div>
 
@@ -421,21 +421,21 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
             >
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-black text-zinc-900 flex items-center gap-1.5">
-                  <Coins className="w-4 h-4 text-amber-500" />
-                  Canjear Ganancias por Monedas
+                  <Gem className="w-4 h-4 text-sky-500" />
+                  Pasar Ganancias a mi Billetera (💎)
                 </h4>
-                <span className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
-                  1 💎 = {coinsPerDiamond} 🪙
+                <span className="text-[11px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded-full">
+                  1 💎 ganado = 1 💎 disponible
                 </span>
               </div>
 
               <p className="text-[11px] text-zinc-500 leading-relaxed">
-                Usa tus diamantes ganados para desbloquear chats, enviar mensajes, revelar Likes o activar Boost VIP. Conversión irreversible (no retirable en efectivo).
+                Usa tus diamantes ganados para activar <strong>Conoscamosnos PRO</strong>, desbloquear chats, ver Likes, enviar regalos o activar Boost VIP. Conversión irreversible (no retirable en efectivo).
               </p>
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs text-zinc-600 font-bold">Diamantes ganados a canjear (mín. {MIN_SWAP_DIAMONDS} 💎)</label>
+                  <label className="text-xs text-zinc-600 font-bold">Diamantes ganados a pasar (mín. {MIN_SWAP_DIAMONDS} 💎)</label>
                   {canSwap && (
                     <div className="flex items-center gap-1.5">
                       <button
@@ -448,7 +448,7 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
                       <button
                         type="button"
                         onClick={() => setSwapAmount(availableDiamonds)}
-                        className="px-2 py-0.5 rounded-full bg-amber-50 text-[10px] font-extrabold text-amber-700"
+                        className="px-2 py-0.5 rounded-full bg-sky-50 text-[10px] font-extrabold text-sky-700"
                       >
                         Todo ({availableDiamonds})
                       </button>
@@ -462,13 +462,13 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
                   value={swapAmount}
                   onChange={(e) => setSwapAmount(Number(e.target.value))}
                   disabled={!canSwap}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-sm font-black text-zinc-900 focus:outline-none focus:bg-white focus:border-amber-500 disabled:opacity-50"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-sm font-black text-zinc-900 focus:outline-none focus:bg-white focus:border-sky-500 disabled:opacity-50"
                 />
               </div>
 
-              <div className="p-3 rounded-2xl bg-amber-50/75 border border-amber-200/80 text-xs flex items-center justify-between font-black text-amber-900">
-                <span>Recibirás al instante:</span>
-                <span>+{Math.max(0, Math.floor(Number(swapAmount || 0)) * coinsPerDiamond)} 🪙</span>
+              <div className="p-3 rounded-2xl bg-sky-50/75 border border-sky-200/80 text-xs flex items-center justify-between font-black text-sky-900">
+                <span>Se acreditarán en tu billetera:</span>
+                <span>+{Math.max(0, Math.floor(Number(swapAmount || 0)))} 💎</span>
               </div>
 
               <button
@@ -479,12 +479,12 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
                   Number(swapAmount || 0) > availableDiamonds ||
                   Number(swapAmount || 0) < MIN_SWAP_DIAMONDS
                 }
-                className="w-full py-3.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-sm flex items-center justify-center gap-2 shadow-md hover:brightness-105 disabled:opacity-40 transition"
+                className="w-full py-3.5 rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 text-white font-black text-sm flex items-center justify-center gap-2 shadow-md hover:brightness-105 disabled:opacity-40 transition"
               >
-                <Coins className="w-4 h-4" />
+                <Gem className="w-4 h-4" />
                 {swapping
-                  ? 'Canjeando...'
-                  : `Convertir ${Math.max(0, Math.floor(Number(swapAmount || 0)))} 💎 en Monedas`}
+                  ? 'Procesando...'
+                  : `Pasar ${Math.max(0, Math.floor(Number(swapAmount || 0)))} 💎 a mi Billetera`}
               </button>
             </form>
           )}

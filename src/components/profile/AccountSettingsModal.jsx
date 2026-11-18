@@ -29,7 +29,14 @@ import {
   subscribeUserPayoutAccount,
   updateUserProfile,
 } from '../../services/userService';
-import { calculateWithdrawalBreakdown, formatUSD, isBoostActive } from '../../utils/formatters';
+import {
+  calculateWithdrawalBreakdown,
+  formatTimeRemaining,
+  formatUSD,
+  getSpendableDiamonds,
+  isBoostActive,
+  isProActive,
+} from '../../utils/formatters';
 import LuxuryModalHeader from '../layout/LuxuryModalHeader';
 
 function SettingsSwitchRow({ icon: Icon, title, description, checked, busy, onToggle, accent }) {
@@ -140,6 +147,8 @@ export default function AccountSettingsModal({
   };
 
   const boosted = isBoostActive(userProfile);
+  const proActive = isProActive(userProfile);
+  const spendableDiamonds = getSpendableDiamonds(userProfile);
   const diamonds = Number(userProfile.earningsDiamonds || 0);
   const { netPayoutUSD } = calculateWithdrawalBreakdown(diamonds, economyConfig);
   const isDiscoverable = userProfile.discoverable !== false;
@@ -259,17 +268,17 @@ export default function AccountSettingsModal({
             </div>
           </section>
 
-          {/* 2. Billetera Privada: Diamantes + Monedas + Ganancias + Boost */}
+          {/* 2. Billetera Privada: Diamantes + Conoscamosnos PRO + Ganancias + Boost */}
           <section className="space-y-2">
             <p className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 px-1">
-              Mis Diamantes, Monedas y Ganancias
+              Mis Diamantes, Membresía PRO y Ganancias
             </p>
             <div className="grid grid-cols-2 gap-2.5">
               <button
                 type="button"
                 onClick={() => {
                   onClose();
-                  onOpenCoinStore?.();
+                  onOpenCoinStore?.('buy');
                 }}
                 className="p-4 rounded-3xl bg-white border border-sky-200/80 shadow-card text-left hover:border-sky-400 transition"
               >
@@ -279,11 +288,11 @@ export default function AccountSettingsModal({
                   </span>
                   <ChevronRight className="w-4 h-4 text-zinc-400" />
                 </div>
-                <p className="font-display text-2xl font-black text-zinc-900 mt-1.5">
-                  {userProfile.diamonds || 0} 💎
+                <p className="font-display text-2xl font-black text-zinc-900 mt-1.5 tabular-nums">
+                  {spendableDiamonds} 💎
                 </p>
                 <p className="text-[10px] font-bold text-zinc-500 mt-0.5">
-                  Para regalar y cambiar → Tienda
+                  Chats, Likes, Boost y Regalos
                 </p>
               </button>
 
@@ -291,21 +300,23 @@ export default function AccountSettingsModal({
                 type="button"
                 onClick={() => {
                   onClose();
-                  onOpenCoinStore?.();
+                  onOpenCoinStore?.('pro');
                 }}
-                className="p-4 rounded-3xl bg-white border border-amber-200/80 shadow-card text-left hover:border-amber-400 transition"
+                className="p-4 rounded-3xl bg-gradient-to-br from-rose-50 via-white to-amber-50 border border-rose-200/80 shadow-card text-left hover:border-[#FF2E54] transition"
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold text-amber-700 flex items-center gap-1.5">
-                    <Coins className="w-4 h-4 text-amber-500" /> Monedas
+                  <span className="text-xs font-extrabold text-[#FF2E54] flex items-center gap-1.5">
+                    <Crown className="w-4 h-4 text-amber-500" /> PRO VIP
                   </span>
                   <ChevronRight className="w-4 h-4 text-zinc-400" />
                 </div>
-                <p className="font-display text-2xl font-black text-zinc-900 mt-1.5">
-                  {userProfile.coins || 0} 🪙
+                <p className="font-display text-lg font-black text-zinc-900 mt-1.5 truncate">
+                  {proActive ? 'PRO Activo' : 'Hazte PRO'}
                 </p>
-                <p className="text-[10px] font-bold text-zinc-500 mt-0.5">
-                  Para chats y Likes → Cambiar 💎
+                <p className="text-[10px] font-bold text-rose-700 mt-0.5 truncate">
+                  {proActive
+                    ? `Quedan ${formatTimeRemaining(userProfile.proExpiresAt)}`
+                    : 'Chats y Likes ilimitados'}
                 </p>
               </button>
             </div>
