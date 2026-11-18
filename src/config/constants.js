@@ -180,7 +180,7 @@ export const AD_REWARD_CONFIG = {
   adsenseClient: import.meta.env.VITE_ADSENSE_CLIENT || '',
   monetagZoneId: import.meta.env.VITE_MONETAG_ZONE_ID || '311878',
   monetagScriptSrc: import.meta.env.VITE_MONETAG_SCRIPT_SRC || 'https://quge5.com/88/tag.min.js',
-  monetagDirectLink: import.meta.env.VITE_MONETAG_DIRECT_LINK || '',
+  monetagDirectLink: import.meta.env.VITE_MONETAG_DIRECT_LINK || 'https://uplcm.com/4/12295528',
   adsterraDirectLink: import.meta.env.VITE_ADSTERRA_DIRECT_LINK || '',
   customSponsorUrl: import.meta.env.VITE_CUSTOM_SPONSOR_URL || '',
   unlockLikeCoins: 10,

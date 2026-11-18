@@ -42,7 +42,7 @@ export default function RewardedAdModal({
   purpose = 'reveal_like', // 'reveal_like' | 'unlock_chat'
   targetName = 'esta persona',
   targetUser = null,
-  adSession = null, // { token, opened, url, windowRef }
+  adSession = null, // { mode, token, opened, url, startedAt, windowRef }
   coinCost = AD_REWARD_CONFIG.unlockLikeCoins,
   onClose,
   onRewardEarned,
@@ -57,30 +57,76 @@ export default function RewardedAdModal({
 
   const rewardedRef = useRef(false);
   const soundPlayedRef = useRef(false);
-  const sponsorStartedAtRef = useRef(0);
+  const startedAtRef = useRef(0);
   const originalTitleRef = useRef('');
 
   useEffect(() => {
     if (!isOpen) return;
     rewardedRef.current = false;
     soundPlayedRef.current = false;
-    sponsorStartedAtRef.current = 0;
     setSponsorClicked(false);
     setClaiming(false);
     setSecondsLeft(duration);
 
     if (adSession) {
+      startedAtRef.current = adSession.startedAt || Date.now();
       setSession(adSession);
       setAdState(adSession.opened ? 'watching' : 'blocked');
     } else {
+      startedAtRef.current = 0;
       setSession(null);
       setAdState('blocked');
     }
   }, [isOpen, adSession, duration]);
 
-  // Suscripción en tiempo real a eventos emitidos por la pestaña aislada /ad-viewer.html
+  // Modo 1: Monetag Direct Link — seguimiento por tiempo real de reloj + verificación de cierre anticipado
   useEffect(() => {
-    if (!isOpen || !session?.token) return;
+    if (!isOpen || !session || session.mode !== 'direct_link' || adState !== 'watching') {
+      return;
+    }
+
+    const evaluateDirectLinkProgress = () => {
+      const elapsedSec = Math.floor((Date.now() - (startedAtRef.current || Date.now())) / 1000);
+      if (elapsedSec >= duration) {
+        setSecondsLeft(0);
+        setAdState('completed');
+        return true;
+      }
+
+      if (session.windowRef && session.windowRef.closed) {
+        setAdState('aborted');
+        return true;
+      }
+
+      setSecondsLeft(Math.max(1, duration - elapsedSec));
+      return false;
+    };
+
+    evaluateDirectLinkProgress();
+    const interval = setInterval(() => {
+      if (evaluateDirectLinkProgress()) {
+        clearInterval(interval);
+      }
+    }, 500);
+
+    const onFocusOrVisible = () => {
+      if (document.visibilityState === 'visible') {
+        evaluateDirectLinkProgress();
+      }
+    };
+    document.addEventListener('visibilitychange', onFocusOrVisible);
+    window.addEventListener('focus', onFocusOrVisible);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onFocusOrVisible);
+      window.removeEventListener('focus', onFocusOrVisible);
+    };
+  }, [isOpen, session, adState, duration]);
+
+  // Modo 2 (respaldo): /ad-viewer.html vía eventos same-origin
+  useEffect(() => {
+    if (!isOpen || !session?.token || session.mode !== 'ad_viewer') return;
 
     const unsubscribe = subscribeAdViewerSession(session.token, {
       onStarted: (data) => {
@@ -96,7 +142,7 @@ export default function RewardedAdModal({
         }
       },
       onSponsorClicked: () => {
-        sponsorStartedAtRef.current = Date.now();
+        startedAtRef.current = Date.now();
         setSponsorClicked(true);
       },
       onCompleted: () => {
@@ -109,15 +155,16 @@ export default function RewardedAdModal({
     });
 
     return () => unsubscribe();
-  }, [isOpen, session?.token]);
+  }, [isOpen, session?.token, session?.mode]);
 
-  // Respaldo por si el usuario tocó el patrocinador en ad-viewer.html y fue redirigido a otra web fuera de nuestro origen
   useEffect(() => {
-    if (!isOpen || !sponsorClicked || adState === 'completed') return;
+    if (!isOpen || !sponsorClicked || adState === 'completed' || session?.mode !== 'ad_viewer') {
+      return;
+    }
     const onReturnFocus = () => {
       if (document.visibilityState !== 'visible') return;
-      const elapsedSec = Math.floor((Date.now() - sponsorStartedAtRef.current) / 1000);
-      if (sponsorStartedAtRef.current > 0 && elapsedSec >= duration - 1) {
+      const elapsedSec = Math.floor((Date.now() - startedAtRef.current) / 1000);
+      if (startedAtRef.current > 0 && elapsedSec >= duration - 1) {
         setSecondsLeft(0);
         setAdState('completed');
       }
@@ -128,9 +175,9 @@ export default function RewardedAdModal({
       document.removeEventListener('visibilitychange', onReturnFocus);
       window.removeEventListener('focus', onReturnFocus);
     };
-  }, [isOpen, sponsorClicked, adState, duration]);
+  }, [isOpen, sponsorClicked, adState, duration, session?.mode]);
 
-  // Título claro en la pestaña para confirmar al usuario cuándo puede cerrar
+  // Título claro en la pestaña para confirmar al usuario cuándo puede cerrar el anuncio
   useEffect(() => {
     if (typeof document === 'undefined' || !isOpen) return;
     if (!originalTitleRef.current) {
@@ -138,7 +185,7 @@ export default function RewardedAdModal({
     }
 
     if (adState === 'completed') {
-      document.title = '✅ ¡Listo! Ya puedes entrar — Conoscamosnos';
+      document.title = '✅ ¡Listo! Ya puedes cerrar el anuncio — Conoscamosnos';
     } else if (adState === 'watching') {
       document.title = `⏳ Viendo anuncio (${secondsLeft}s) — Conoscamosnos`;
     } else {
@@ -179,6 +226,7 @@ export default function RewardedAdModal({
       targetName: firstName,
       duration,
     });
+    startedAtRef.current = nextSession.startedAt || Date.now();
     setSession(nextSession);
     setSecondsLeft(duration);
     setSponsorClicked(false);
@@ -191,7 +239,7 @@ export default function RewardedAdModal({
         session.windowRef.close();
       }
     } catch {
-      // Ignorar si ya cerró
+      // Ignorar si ya cerró o es de otro origen
     }
     onClose?.();
   };
@@ -214,7 +262,7 @@ export default function RewardedAdModal({
 
   const steps = [
     {
-      label: adState === 'blocked' ? 'Falta abrir la pestaña del anuncio' : 'Pestaña del anuncio abierta',
+      label: adState === 'blocked' ? 'Falta abrir la página del anuncio' : 'Página del anuncio abierta',
       done: adState === 'watching' || rewardReady,
       active: adState === 'blocked' || adState === 'aborted',
     },
@@ -223,14 +271,14 @@ export default function RewardedAdModal({
         ? `Tiempo completado (${duration}s)`
         : adState === 'aborted'
         ? 'Cerrado antes de completar los 8s'
-        : `Viendo anuncio en su pestaña (${secondsLeft}s)`,
+        : `Viendo patrocinador (${secondsLeft}s)`,
       done: rewardReady,
       active: adState === 'watching',
     },
     {
       label: rewardReady
-        ? '¡Ya puedes cerrar el anuncio y entrar!'
-        : 'Al marcar ✓ Listo, cierra el anuncio',
+        ? '¡Ya puedes cerrar esa pestaña y entrar!'
+        : 'Cierra el anuncio cuando diga ✓ Listo',
       done: rewardReady,
       active: false,
     },
@@ -261,7 +309,7 @@ export default function RewardedAdModal({
                   rewardReady ? 'text-emerald-700' : 'text-[#E11D48]'
                 }`}
               >
-                {rewardReady ? 'Anuncio Verificado' : 'Publicidad en Pestaña Aparte'}
+                {rewardReady ? 'Anuncio Verificado' : 'Publicidad en Nueva Pestaña'}
               </p>
               <h3 className="font-display text-sm sm:text-base font-black text-zinc-900 truncate">
                 {isChatPurpose ? `Desbloqueando chat con ${firstName}` : 'Revelando tu Like secreto'}
@@ -398,7 +446,7 @@ export default function RewardedAdModal({
                     ? `Debes mantener abierta la pestaña del anuncio durante ${duration}s para desbloquear gratis.`
                     : adState === 'blocked'
                     ? 'Tu navegador bloqueó la pestaña automática. Ábrela con el botón verde de abajo para contar los 8 segundos.'
-                    : 'Mantén abierta la otra pestaña; ahí mismo verás un aviso verde cuando termine el conteo y puedas cerrarla.'}
+                    : 'Mantén abierta la pestaña del anuncio; cuando terminen los 8s verás ✅ ¡Listo! en el título de esta pestaña y podrás cerrarlo.'}
                 </p>
               </div>
             </div>

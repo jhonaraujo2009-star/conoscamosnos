@@ -10,8 +10,10 @@ export function createAdSessionToken() {
 }
 
 /**
- * Abre la pestaña aislada de publicidad (/ad-viewer.html) donde vive el script de Monetag.
- * Así Monetag NUNCA inyecta listeners globales sobre la app principal ni redirige clics posteriores.
+ * Abre la publicidad en una pestaña independiente:
+ * - Si existe Monetag Direct Link (https://uplcm.com/4/12295528), abre ese enlace directo al primer clic.
+ * - Si no existe Direct Link, abre la página aislada /ad-viewer.html.
+ * En ningún caso se inyecta el script de Monetag sobre la app principal.
  */
 export function openIsolatedAdViewer({
   purpose = 'reveal_like',
@@ -19,8 +21,44 @@ export function openIsolatedAdViewer({
   duration = AD_REWARD_CONFIG.adDurationSeconds,
 } = {}) {
   const token = createAdSessionToken();
+  const startedAt = Date.now();
+
   if (typeof window === 'undefined') {
-    return { token, opened: false, url: '' };
+    return { mode: 'direct_link', token, opened: false, url: '', startedAt, windowRef: null };
+  }
+
+  const directLink = String(
+    AD_REWARD_CONFIG.monetagDirectLink ||
+      AD_REWARD_CONFIG.adsterraDirectLink ||
+      AD_REWARD_CONFIG.customSponsorUrl ||
+      ''
+  ).trim();
+
+  if (/^https?:\/\//i.test(directLink)) {
+    try {
+      const adWin = window.open(directLink, '_blank');
+      const opened = Boolean(adWin && !adWin.closed);
+      if (opened && typeof adWin.focus === 'function') {
+        adWin.focus();
+      }
+      return {
+        mode: 'direct_link',
+        token,
+        opened,
+        url: directLink,
+        startedAt,
+        windowRef: adWin || null,
+      };
+    } catch {
+      return {
+        mode: 'direct_link',
+        token,
+        opened: false,
+        url: directLink,
+        startedAt,
+        windowRef: null,
+      };
+    }
   }
 
   const params = new URLSearchParams({
@@ -32,10 +70,6 @@ export function openIsolatedAdViewer({
     src: String(AD_REWARD_CONFIG.monetagScriptSrc || 'https://quge5.com/88/tag.min.js'),
   });
 
-  if (AD_REWARD_CONFIG.monetagDirectLink) {
-    params.set('direct', AD_REWARD_CONFIG.monetagDirectLink);
-  }
-
   const url = `${window.location.origin}/ad-viewer.html?${params.toString()}`;
 
   try {
@@ -44,14 +78,28 @@ export function openIsolatedAdViewer({
     if (opened && typeof adWin.focus === 'function') {
       adWin.focus();
     }
-    return { token, opened, url, windowRef: adWin || null };
+    return {
+      mode: 'ad_viewer',
+      token,
+      opened,
+      url,
+      startedAt,
+      windowRef: adWin || null,
+    };
   } catch {
-    return { token, opened: false, url, windowRef: null };
+    return {
+      mode: 'ad_viewer',
+      token,
+      opened: false,
+      url,
+      startedAt,
+      windowRef: null,
+    };
   }
 }
 
 /**
- * Escucha eventos verificados provenientes únicamente de /ad-viewer.html para un token dado.
+ * Escucha eventos verificados provenientes de /ad-viewer.html para el modo script aislado.
  */
 export function subscribeAdViewerSession(token, handlers = {}) {
   if (!token || typeof window === 'undefined') {
