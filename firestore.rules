@@ -149,7 +149,7 @@ service cloud.firestore {
       allow delete: if false;
 
       // ==================== DATOS PRIVADOS DEL USUARIO (COBRO Y DESBLOQUEOS) ====================
-      // Estrictamente privados por uid: cuentas de PayPal/Binance/banco y desbloqueos de anuncios/monedas.
+      // Estrictamente privados por uid: cuentas de Binance/Zinli/Pago Móvil y desbloqueos de anuncios/monedas.
       // Ningún otro usuario puede leer ni escribir estos documentos.
       match /private/{docId} {
         allow read, write: if isOwner(userId) || isAdmin();

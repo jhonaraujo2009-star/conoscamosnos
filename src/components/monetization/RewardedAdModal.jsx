@@ -19,7 +19,7 @@ const SPONSOR_SLIDES = [
   {
     eyebrow: 'EXPERIENCIA PATROCINADA',
     title: 'Conoscamosnos Creador VIP',
-    body: '¿Sabías que puedes recibir regalos virtuales y convertir tus Diamantes en dinero real por Binance Pay o PayPal?',
+    body: '¿Sabías que puedes recibir regalos virtuales y convertir tus Diamantes en dinero real por Binance Pay o Zinli?',
     badge: 'Retiros desde $3.00 USD',
   },
   {

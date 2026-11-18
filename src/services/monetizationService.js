@@ -46,31 +46,32 @@ export async function createNowPaymentsCheckout({ pkg, creditTarget = 'coins' })
 
 export function buildCheckoutUrl(provider, userId, pkg) {
   const customData = { userId, packageId: pkg.id };
+  const base = (CHECKOUT_CONFIG.lemonSqueezyBaseUrl || '').trim();
 
-  if (provider === 'lemonsqueezy') {
-    const url = new URL(`${CHECKOUT_CONFIG.lemonSqueezyBaseUrl}/${pkg.id}`);
-    url.searchParams.set('checkout[custom][user_id]', customData.userId);
-    url.searchParams.set('checkout[custom][package_id]', customData.packageId);
-    return {
-      url: url.toString(),
-      customData,
-    };
+  if (provider === 'lemonsqueezy' && base && !base.includes('tu-tienda')) {
+    try {
+      const url = new URL(`${base.replace(/\/$/, '')}/${pkg.id}`);
+      url.searchParams.set('checkout[custom][user_id]', customData.userId);
+      url.searchParams.set('checkout[custom][package_id]', customData.packageId);
+      return {
+        url: url.toString(),
+        customData,
+      };
+    } catch {
+      return { url: '', customData };
+    }
   }
 
-  const paypalUrl = `${CHECKOUT_CONFIG.paypalBaseUrl}/${pkg.priceUSD}?custom=${encodeURIComponent(
-    JSON.stringify(customData)
-  )}`;
   return {
-    url: paypalUrl,
+    url: '',
     customData,
   };
 }
 
 /**
- * Simulador de confirmación automática / webhook de LemonSqueezy o PayPal
- * para acreditar monedas de prueba inmediatamente en modo MVP.
+ * Simulador de confirmación automática / webhook para acreditar monedas de prueba en Admin/Demo.
  */
-export async function simulateAutoPaymentConfirmation({ userId, userName, pkg, provider = 'lemonsqueezy' }) {
+export async function simulateAutoPaymentConfirmation({ userId, userName, pkg, provider = 'nowpayments' }) {
   const userRef = doc(db, 'users', userId);
   const txRef = doc(collection(db, 'paymentTransactions'));
 

@@ -343,7 +343,7 @@ export default function AccountSettingsModal({
             </button>
           </section>
 
-          {/* 2.5 Cuenta Privada de Cobro (PayPal, Binance Pay, Banco) */}
+          {/* 2.5 Cuenta Privada de Cobro (Binance Pay, Zinli, Pago Móvil) */}
           <section className="space-y-2">
             <div className="flex items-center justify-between px-1">
               <p className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400">
@@ -369,7 +369,7 @@ export default function AccountSettingsModal({
                     Dónde recibes tus pagos de la plataforma
                   </p>
                   <p className="text-[11px] text-zinc-500 leading-snug mt-0.5">
-                    Configura tu <strong>Binance Pay</strong>, <strong>PayPal</strong> o cuenta bancaria. Se pre-carga automáticamente al retirar tus Diamantes.
+                    Configura tu <strong>Binance Pay</strong>, <strong>Zinli (USD)</strong> o <strong>Pago Móvil</strong>. Se pre-carga automáticamente al retirar tus Diamantes.
                   </p>
                 </div>
               </div>
@@ -394,7 +394,7 @@ export default function AccountSettingsModal({
 
                 <div>
                   <label className="text-[11px] font-bold text-zinc-600 block mb-1">
-                    Número de cuenta, PayPal o Binance ID
+                    Binance ID, correo Zinli o Pago Móvil
                   </label>
                   <input
                     type="text"

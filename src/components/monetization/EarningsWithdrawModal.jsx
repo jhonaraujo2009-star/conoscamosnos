@@ -232,7 +232,7 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
                 {formatUSD(liveEconomy.baseDiamondValueUSD)}/💎). Al retirar a dinero real recibes{' '}
                 <strong>{Math.round(liveEconomy.creatorShareRatio * 100)}% neto</strong> (
                 <strong>${liveEconomy.diamondToNetUSDRate.toFixed(3)} USD/💎</strong>) por Binance
-                Pay, PayPal o billeteras disponibles.
+                Pay, Zinli o Pago Móvil.
               </p>
               <p className="text-zinc-500">
                 Tus <strong>{currentCoins} monedas compradas</strong> solo sirven para regalar;

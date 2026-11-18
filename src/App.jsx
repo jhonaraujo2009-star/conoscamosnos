@@ -347,7 +347,7 @@ function UserAppView({ onSuccess, onError }) {
 
         const matchId = buildMatchId(userProfile.uid, targetUid);
         let existingMatch = matches.find((m) => m.id === matchId) || null;
-        if (!existingMatch && freshTarget.requireGiftToChat) {
+        if (!existingMatch) {
           const conn = await checkConnectionStatus(userProfile.uid, targetUid).catch(() => null);
           existingMatch = conn?.matchData || null;
         }
@@ -359,14 +359,14 @@ function UserAppView({ onSuccess, onError }) {
           return;
         }
 
-        // Si es una persona que le dio Like (y no tienen chat todavía), exigir 10 monedas o 1 anuncio antes de chatear
-        const isIncomingLiker = receivedLikes.some((like) => like.fromUserId === targetUid);
-        const isLikeChatUnlocked =
+        // Regla estricta: solo chatear gratis si ya hicieron Match (existe match) o ya se desbloqueó el chat.
+        // En Swipe, Explorar, Likes o Perfil, si no son Match debe pagar 10 monedas o ver 1 anuncio gratis.
+        const isChatUnlocked =
           Boolean(options.skipLikeChatGate) ||
           Boolean(existingMatch) ||
           (userUnlocks?.chatUnlockedUserIds || []).includes(targetUid);
 
-        if (isIncomingLiker && !isLikeChatUnlocked) {
+        if (!isChatUnlocked) {
           setSelectedProfile(null);
           setLikeChatGateTarget(freshTarget);
           return;
@@ -386,7 +386,7 @@ function UserAppView({ onSuccess, onError }) {
         handleError(err.message || 'No se pudo abrir la conversación privada.');
       }
     },
-    [userProfile, matches, receivedLikes, userUnlocks, handleOpenChatSession, handleError]
+    [userProfile, matches, userUnlocks, handleOpenChatSession, handleError]
   );
 
   const handleUnlockLikeChatWithCoins = useCallback(
@@ -670,7 +670,9 @@ function UserAppView({ onSuccess, onError }) {
             </div>
 
             <p className="text-xs text-zinc-300 leading-relaxed">
-              Ya descubriste quién te dio Me Gusta. Elige ver 1 anuncio gratuito para escribirle sin costo o desbloquea el chat al instante con {AD_REWARD_CONFIG.unlockLikeChatCoins} monedas.
+              {receivedLikes.some((l) => l.fromUserId === (likeChatGateTarget.uid || likeChatGateTarget.id))
+                ? `Ya descubriste el Like de ${likeChatGateTarget.name}. Mira 1 anuncio gratis o usa ${AD_REWARD_CONFIG.unlockLikeChatCoins} monedas para escribirle.`
+                : `Aún no hacen Match mutuo con ${likeChatGateTarget.name}. Para enviarle un mensaje directo sin esperar al Match, mira 1 anuncio gratis o paga ${AD_REWARD_CONFIG.unlockLikeChatCoins} monedas.`}
             </p>
 
             <div className="space-y-2.5">

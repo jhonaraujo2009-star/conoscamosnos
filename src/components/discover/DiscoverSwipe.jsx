@@ -1144,7 +1144,7 @@ export default function DiscoverSwipe({
                   type="button"
                   onClick={() => onStartChat?.(topCard)}
                   className="w-12 h-12 rounded-full bg-zinc-900/95 border border-white/20 text-sky-400 flex items-center justify-center shadow-lg active:scale-90 transition-transform"
-                  title="Enviar mensaje privado directo"
+                  title="Enviar mensaje (Gratis con Match · Directo: 10 monedas o 1 anuncio)"
                   aria-label="Chatear"
                 >
                   <MessageCircle className="w-5 h-5 stroke-[2.4]" />

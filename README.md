@@ -13,8 +13,8 @@ Aplicación web progresiva (**PWA mobile-first**) construida con **React (Vite)*
 2. **Monetización Multimoneda + Ganancias de Creadores**
    - **Tienda de Monedas (`CoinStoreModal`)**:
      - Paquetes: 100 ($1.99), 550 ($7.99), 1200 ($14.99), 3000 ($29.99).
-     - **Pago Automático**: enlaces preparados para LemonSqueezy y PayPal con `custom_data: { userId, packageId }` + **Simulador de Webhook** para acreditación instantánea en pruebas.
-     - **Billeteras Directas**: Binance Pay (USDT), Zinli / Wally Tech (USD), Meru / ACH, Pago Móvil (Local), con QR dinámico local y subida de comprobante a Cloudinary (`paymentRequests`).
+     - **Pago Automático**: facturación y webhook verificable HMAC-SHA512 con **NowPayments** (`/api/payments/create-invoice` + `/api/webhooks/payments`).
+     - **Billeteras Directas**: Binance Pay (USDT), Zinli (USD), Pago Móvil (Local), con QR dinámico local y subida de comprobante a Cloudinary (`paymentRequests`).
    - **Retiro de Ganancias por Regalos (`EarningsWithdrawModal`)**:
      - El dinero real de las recargas entra a la **empresa**.
      - Al recibir regalos virtuales, el destinatario acumula **1 Diamante por moneda** (`earningsDiamonds`).
@@ -62,4 +62,4 @@ Aplicación web progresiva (**PWA mobile-first**) construida con **React (Vite)*
    npm run build
    ```
 
-> **Nota de Producción:** En `firestore.rules` existe un bloque marcado `[SOLO MODO SIMULADOR/MVP SIN CLOUD FUNCTIONS]` que permite probar el simulador de confirmación automática desde el cliente. Antes de publicar con pagos reales, elimina esa línea en las reglas y mueve la verificación de webhooks de LemonSqueezy/PayPal a Cloud Functions.
+> **Nota de Producción:** Mantén `VITE_ENABLE_DEMO_PAYMENTS=false` en producción y registra `https://conoscamosnos.vercel.app/api/webhooks/payments` en NowPayments.

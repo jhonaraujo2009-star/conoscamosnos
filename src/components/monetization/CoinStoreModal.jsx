@@ -12,7 +12,6 @@ import {
   Info,
   Loader2,
   QrCode,
-  ShieldCheck,
   Sparkles,
   Wallet,
   X,
@@ -88,7 +87,6 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
   if (!isOpen) return null;
 
   const lemonCheckout = buildCheckoutUrl('lemonsqueezy', userProfile.uid, selectedPkg);
-  const paypalCheckout = buildCheckoutUrl('paypal', userProfile.uid, selectedPkg);
 
   const handleNowPaymentsCheckout = async () => {
     if (creatingInvoice) return;
@@ -314,7 +312,7 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
             </div>
           </div>
 
-          {/* TAB 1: Pago Automático (NowPayments / Tarjeta / PayPal) */}
+          {/* TAB 1: Pago Automático (NowPayments) */}
           {activeTab === 'auto' && (
             <div className="space-y-3">
               <div className="p-4 rounded-3xl bg-white border border-zinc-200/85 shadow-sm space-y-3">
@@ -324,6 +322,21 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
                     +{selectedPkg.coins} 🪙 · {formatUSD(selectedPkg.priceUSD)}
                   </span>
                 </div>
+
+                {Number(selectedPkg.priceUSD) < 12 && (
+                  <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200/90 text-[11px] text-amber-900 space-y-1 leading-relaxed">
+                    <p className="font-extrabold flex items-center gap-1.5 text-amber-800">
+                      <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      Mínimo de red en NowPayments
+                    </p>
+                    <p>
+                      Si pagas en <strong>USDT TRC20</strong> (TRON), NowPayments exige aprox.{' '}
+                      <strong>$11.50 USD</strong> mínimo por comisiones de red. Para paquetes menores a $12, usa{' '}
+                      <strong>USDT BEP20 (BSC) / Polygon</strong> en NowPayments o paga sin mínimo por{' '}
+                      <strong>Binance Pay / Zinli</strong>.
+                    </p>
+                  </div>
+                )}
 
                 <button
                   type="button"
@@ -345,27 +358,17 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
                   )}
                 </button>
 
-                <div className="grid grid-cols-2 gap-2">
+                {lemonCheckout.url && (
                   <a
                     href={lemonCheckout.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="py-2.5 px-3 rounded-2xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 text-indigo-800 text-[11px] font-extrabold flex items-center justify-center gap-1.5 transition"
+                    className="w-full py-2.5 px-3 rounded-2xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 text-indigo-800 text-[11px] font-extrabold flex items-center justify-center gap-1.5 transition"
                   >
                     <CreditCard className="w-3.5 h-3.5" />
-                    Tarjeta Visa/MC
+                    Tarjeta Visa / Mastercard
                   </a>
-
-                  <a
-                    href={paypalCheckout.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="py-2.5 px-3 rounded-2xl bg-sky-50 hover:bg-sky-100 border border-sky-200/80 text-sky-800 text-[11px] font-extrabold flex items-center justify-center gap-1.5 transition"
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    PayPal
-                  </a>
-                </div>
+                )}
 
                 <p className="text-[10.5px] text-center text-zinc-400 font-medium">
                   🔒 Acreditación automática al instante cuando NowPayments confirma la red.
@@ -378,24 +381,14 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
                     <Sparkles className="w-4 h-4 text-amber-600" />
                     Recarga Instantánea Admin / Prueba
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      disabled={simulating}
-                      onClick={() => handleSimulateWebhook('lemonsqueezy')}
-                      className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-white text-xs font-extrabold shadow-sm hover:brightness-105 disabled:opacity-50 transition"
-                    >
-                      {simulating ? 'Acreditando...' : 'Simular Tarjeta'}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={simulating}
-                      onClick={() => handleSimulateWebhook('paypal')}
-                      className="py-2.5 px-3 rounded-xl bg-white text-amber-800 border border-amber-300 text-xs font-extrabold hover:bg-amber-100/60 disabled:opacity-50 transition"
-                    >
-                      {simulating ? 'Acreditando...' : 'Simular PayPal'}
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    disabled={simulating}
+                    onClick={() => handleSimulateWebhook('nowpayments')}
+                    className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-white text-xs font-extrabold shadow-sm hover:brightness-105 disabled:opacity-50 transition"
+                  >
+                    {simulating ? 'Acreditando...' : `Simular Recarga (+${selectedPkg.coins} 🪙)`}
+                  </button>
                 </div>
               )}
             </div>
@@ -404,7 +397,7 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
           {/* TAB 2: Transferencia Directa */}
           {activeTab === 'direct' && (
             <div className="space-y-3.5">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {DIRECT_PAYMENT_METHODS.map((method) => {
                   const active = selectedMethod.id === method.id;
                   return (

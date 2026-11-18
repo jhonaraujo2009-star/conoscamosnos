@@ -128,24 +128,14 @@ export const DIRECT_PAYMENT_METHODS = [
     qrPrefix: 'binance://pay?id=',
   },
   {
-    id: 'zinli_wally',
-    name: 'Zinli / Wally Tech (USD)',
+    id: 'zinli',
+    name: 'Zinli (USD)',
     currency: 'USD',
     badge: 'LATAM Sin Comisiones',
-    accountLabel: 'Correo / Usuario Billetera USD',
+    accountLabel: 'Correo / Teléfono registrado en Zinli',
     accountValue: import.meta.env.VITE_ZINLI_EMAIL || 'pagos@conoscamosnos.app',
-    extraInstructions: 'Transferencia en USD desde Zinli o Wally Tech. Indica tu nombre de usuario en la nota.',
-    qrPrefix: 'wallet://usd?to=',
-  },
-  {
-    id: 'meru_ach',
-    name: 'Meru / Transferencia ACH',
-    currency: 'USD',
-    badge: 'EE.UU. & Global',
-    accountLabel: 'Cuenta USD / Routing ACH',
-    accountValue: import.meta.env.VITE_MERU_ACCOUNT || 'MERU-USD-8849201 | Routing: 021000021',
-    extraInstructions: 'Envía vía transferencia ACH o usuario Meru en USD. El saldo se acredita tras validar el comprobante.',
-    qrPrefix: 'ach://account?id=',
+    extraInstructions: 'Abre tu app Zinli, toca Enviar dinero en USD a este correo y adjunta la captura con tu número de referencia.',
+    qrPrefix: 'zinli://pay?to=',
   },
   {
     id: 'pago_movil',
@@ -161,16 +151,12 @@ export const DIRECT_PAYMENT_METHODS = [
 
 export const WITHDRAWAL_PAYOUT_METHODS = [
   { id: 'binance_pay', name: 'Binance Pay (USDT)', placeholder: 'Tu Binance Pay ID o correo de Binance' },
-  { id: 'zinli', name: 'Zinli (USD)', placeholder: 'Tu correo registrado en Zinli' },
-  { id: 'wally', name: 'Wally Tech (USD)', placeholder: 'Tu número o correo Wally Tech' },
-  { id: 'meru_ach', name: 'Meru / Cuenta ACH (USD)', placeholder: 'Usuario Meru o Banco + Número de Cuenta + Routing' },
-  { id: 'paypal', name: 'PayPal (USD)', placeholder: 'Tu correo de PayPal' },
+  { id: 'zinli', name: 'Zinli (USD)', placeholder: 'Tu correo o teléfono registrado en Zinli' },
   { id: 'pago_movil', name: 'Pago Móvil (Local)', placeholder: 'Banco + Teléfono + Cédula/Documento' },
 ];
 
 export const CHECKOUT_CONFIG = {
-  lemonSqueezyBaseUrl: import.meta.env.VITE_LEMONSQUEEZY_CHECKOUT_BASE || 'https://conoscamosnos.lemonsqueezy.com/checkout/buy',
-  paypalBaseUrl: import.meta.env.VITE_PAYPAL_CHECKOUT_BASE || 'https://www.paypal.com/paypalme/conoscamosnos',
+  lemonSqueezyBaseUrl: import.meta.env.VITE_LEMONSQUEEZY_CHECKOUT_BASE || '',
 };
 
 export const ENABLE_DEMO_PAYMENTS = import.meta.env.VITE_ENABLE_DEMO_PAYMENTS === 'true';

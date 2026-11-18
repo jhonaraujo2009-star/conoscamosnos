@@ -86,14 +86,14 @@ export async function updateUserProfile(uid, updates) {
 }
 
 /**
- * Guarda la cuenta de cobro privada del usuario (Binance Pay, PayPal, banco, etc.)
+ * Guarda la cuenta de cobro privada del usuario (Binance Pay, Zinli, Pago Móvil)
  * en la subcolección estrictamente privada users/{uid}/private/payout.
  */
 export async function saveUserPayoutAccount(uid, { methodId, methodName, accountValue, holderName = '' }) {
   if (!uid) throw new Error('Sesión inválida.');
   const cleanAccount = String(accountValue || '').trim();
   if (cleanAccount.length < 4) {
-    throw new Error('Ingresa un número de cuenta, ID de Binance o correo de PayPal válido.');
+    throw new Error('Ingresa un número de cuenta, ID de Binance, correo Zinli o Pago Móvil válido.');
   }
   await setDoc(
     doc(db, 'users', uid, 'private', 'payout'),
