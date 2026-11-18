@@ -2,17 +2,16 @@ import {
   addDoc,
   collection,
   doc,
+  limit,
   onSnapshot,
   orderBy,
   query,
-  runTransaction,
   serverTimestamp,
   updateDoc,
   where,
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
-import { ECONOMY_CONFIG } from '../config/constants';
-import { buildMatchId, splitDiamondDeduction, toMillis } from '../utils/formatters';
+import { auth, db } from '../config/firebase';
+import { toMillis } from '../utils/formatters';
 import { sendPushNotificationToUser } from './pushNotificationService';
 
 export function subscribeUserMatches(userId, callback, onError) {
@@ -170,172 +169,54 @@ export async function sendImageMessage({ matchId, senderId, senderName = '', rec
 }
 
 /**
- * Transacción atómica de regalo virtual usando Diamantes disponibles (sender.diamonds):
- * - Verifica saldo en Diamantes del emisor
- * - Descuenta Diamantes al emisor
- * - Suma +1 a giftsReceivedCount y acredita earningsDiamonds retirables en $ USD al receptor
- * - Registra giftTransactions
- * - Crea o actualiza la sala de chat privada 1-a-1 e inserta el mensaje especial type: 'gift'
+ * Envía un regalo virtual de forma autoritativa y atómica a través de `/api/economy/spend`:
+ * - Verifica precio vigente desde appConfig/economy y saldo del emisor en el servidor
+ * - Descuenta Diamantes del emisor y acredita `earningsDiamonds` retirables al receptor
+ * - Crea o actualiza la sala 1-a-1, inserta el mensaje `type: 'gift'` y dispara push FCM
  */
 export async function sendVirtualGift({
   matchId = null,
   sender,
   receiver,
   gift,
-  economyConfig = ECONOMY_CONFIG,
 }) {
-  const senderId = sender.uid || sender.id;
-  const receiverId = receiver.uid || receiver.id;
+  const senderId = sender?.uid || sender?.id;
+  const receiverId = receiver?.uid || receiver?.id;
   if (!receiverId || !senderId || senderId === receiverId) {
     throw new Error('Destinatario de regalo inválido.');
   }
+  if (!gift?.id) {
+    throw new Error('Regalo virtual inválido.');
+  }
 
-  const resolvedMatchId = matchId || buildMatchId(senderId, receiverId);
-  const senderRef = doc(db, 'users', senderId);
-  const receiverRef = doc(db, 'users', receiverId);
-  const matchRef = doc(db, 'matches', resolvedMatchId);
-  const giftTxRef = doc(collection(db, 'giftTransactions'));
-  const messageRef = doc(collection(db, 'matches', resolvedMatchId, 'messages'));
-
-  const diamondsToCredit = Math.max(1, Math.floor(Number(gift.price || 0)));
-  const nowMs = Date.now();
-
-  await runTransaction(db, async (transaction) => {
-    const [senderSnap, receiverSnap, matchSnap] = await Promise.all([
-      transaction.get(senderRef),
-      transaction.get(receiverRef),
-      transaction.get(matchRef),
-    ]);
-
-    if (!senderSnap.exists() || !receiverSnap.exists()) {
-      throw new Error('Uno de los perfiles ya no existe.');
-    }
-
-    const senderData = senderSnap.data();
-    const receiverData = receiverSnap.data();
-
-    if (
-      (Array.isArray(senderData.blockedUsers) && senderData.blockedUsers.includes(receiverId)) ||
-      (Array.isArray(receiverData.blockedUsers) && receiverData.blockedUsers.includes(senderId))
-    ) {
-      throw new Error('No puedes enviar regalos a este perfil porque existe un bloqueo activo.');
-    }
-
-    const nextBalances = splitDiamondDeduction(senderData, gift.price);
-    if (!nextBalances) {
-      throw new Error(`No tienes suficientes diamantes. Necesitas ${gift.price} 💎 para enviar ${gift.name}.`);
-    }
-
-    const receiverGiftsCount = Number(receiverData.giftsReceivedCount || 0);
-    const receiverDiamonds = Number(receiverData.earningsDiamonds || 0);
-    const prevGiftCounts =
-      receiverData.giftCounts && typeof receiverData.giftCounts === 'object'
-        ? { ...receiverData.giftCounts }
-        : {};
-    prevGiftCounts[gift.id] = Number(prevGiftCounts[gift.id] || 0) + 1;
-
-    const senderUpdate = {
-      diamonds: nextBalances.diamonds,
-      updatedAt: serverTimestamp(),
-    };
-    if (Number(senderData.coins || 0) !== nextBalances.coins) {
-      senderUpdate.coins = nextBalances.coins;
-    }
-    transaction.update(senderRef, senderUpdate);
-
-    transaction.update(receiverRef, {
-      giftsReceivedCount: receiverGiftsCount + 1,
-      earningsDiamonds: receiverDiamonds + diamondsToCredit,
-      giftCounts: prevGiftCounts,
-      updatedAt: serverTimestamp(),
-    });
-
-    transaction.set(giftTxRef, {
-      senderId,
-      senderName: sender.name || senderData.name || 'Usuario',
+  const currentUser = auth?.currentUser;
+  if (!currentUser) {
+    throw new Error('Debes iniciar sesión para enviar regalos.');
+  }
+  const idToken = await currentUser.getIdToken();
+  const res = await fetch('/api/economy/spend', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({
+      action: 'send_gift',
       receiverId,
-      receiverName: receiver.name || receiverData.name || 'Usuario',
       giftId: gift.id,
-      giftName: gift.name,
-      giftIcon: gift.icon,
-      coinsCost: gift.price,
-      diamondsCost: gift.price,
-      diamondsCredited: diamondsToCredit,
-      matchId: resolvedMatchId,
-      createdAt: serverTimestamp(),
-    });
-
-    const participantProfiles = {
-      [senderId]: {
-        uid: senderId,
-        name: sender.name || senderData.name || 'Usuario',
-        photo: sender.photos?.[0] || senderData.photos?.[0] || '',
-        country: sender.country || senderData.country || null,
-      },
-      [receiverId]: {
-        uid: receiverId,
-        name: receiver.name || receiverData.name || 'Usuario',
-        photo: receiver.photos?.[0] || receiverData.photos?.[0] || '',
-        country: receiver.country || receiverData.country || null,
-      },
-    };
-
-    if (matchSnap.exists()) {
-      const existingMatch = matchSnap.data() || {};
-      const nextGiftUnlocked = {
-        ...(existingMatch.giftUnlockedBy || {}),
-        [senderId]: true,
-      };
-      transaction.update(matchRef, {
-        participantProfiles,
-        giftUnlockedBy: nextGiftUnlocked,
-        lastMessage: `${gift.icon} Envió ${gift.name} (${gift.price} 💎)`,
-        lastSenderId: senderId,
-        lastMessageAt: serverTimestamp(),
-        lastMessageClientMs: nowMs,
-        [`lastReadBy.${senderId}`]: serverTimestamp(),
-        [`lastReadByClientMs.${senderId}`]: nowMs,
-      });
-    } else {
-      transaction.set(matchRef, {
-        participants: [senderId, receiverId].sort(),
-        participantProfiles,
-        isVipDirect: false,
-        giftUnlockedBy: { [senderId]: true },
-        lastMessage: `${gift.icon} Envió ${gift.name} (${gift.price} 💎)`,
-        lastSenderId: senderId,
-        lastMessageAt: serverTimestamp(),
-        lastMessageClientMs: nowMs,
-        lastReadBy: { [senderId]: serverTimestamp() },
-        lastReadByClientMs: { [senderId]: nowMs },
-        createdAt: serverTimestamp(),
-      });
-    }
-
-    transaction.set(messageRef, {
-      senderId,
-      senderName: sender.name || senderData.name || 'Usuario',
-      receiverId,
-      type: 'gift',
-      giftId: gift.id,
-      giftName: gift.name,
-      giftIcon: gift.icon,
-      giftValue: gift.price,
-      diamondsCredited: diamondsToCredit,
-      clientCreatedAt: nowMs,
-      createdAt: serverTimestamp(),
-    });
+      matchId: matchId || '',
+    }),
   });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.error || 'No se pudo enviar el regalo.');
+  }
 
-  sendPushNotificationToUser({
-    recipientUid: receiverId,
-    type: 'gift',
-    title: `${gift.icon || '🎁'} ¡Recibiste un regalo en Conoscamosnos!`,
-    body: `${sender.name || 'Alguien'} te envió ${gift.name} (+${diamondsToCredit} 💎 retirables).`,
-    link: '/app',
-  });
-
-  return { giftTxId: giftTxRef.id, diamondsCredited: diamondsToCredit, matchId: resolvedMatchId };
+  return {
+    giftTxId: data.giftTxId,
+    diamondsCredited: data.diamondsCredited,
+    matchId: data.matchId,
+  };
 }
 
 /**
@@ -359,6 +240,56 @@ export function subscribeReceivedGiftTransactions(receiverUid, callback, onError
       callback(list);
     },
     (err) => {
+      if (onError) onError(err);
+    }
+  );
+}
+
+/**
+ * Suscribe a los regalos y desbloqueos de Fotos VIP enviados por el usuario autenticado.
+ */
+export function subscribeSentGiftTransactions(senderUid, callback, onError) {
+  if (!senderUid || !db) {
+    callback([]);
+    return () => {};
+  }
+  const q = query(
+    collection(db, 'giftTransactions'),
+    where('senderId', '==', senderUid)
+  );
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
+      callback(list);
+    },
+    (err) => {
+      if (onError) onError(err);
+    }
+  );
+}
+
+/**
+ * Super Admin: escucha regalos y desbloqueos de Fotos Exclusivas VIP recientes en toda la plataforma.
+ */
+export function subscribeAllGiftTransactions(callback, onError) {
+  if (!db) {
+    callback([]);
+    return () => {};
+  }
+  const q = query(collection(db, 'giftTransactions'), limit(300));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
+      callback(list);
+    },
+    (err) => {
+      console.error('Error escuchando giftTransactions admin:', err);
       if (onError) onError(err);
     }
   );

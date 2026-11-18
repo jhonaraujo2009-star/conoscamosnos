@@ -3,6 +3,7 @@ import {
   addDoc,
   collection,
   doc,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -199,6 +200,60 @@ export function subscribeAllPaymentTransactions(callback) {
       callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     },
     (err) => console.error('Error escuchando transacciones admin:', err)
+  );
+}
+
+export function subscribeMyPaymentTransactions(userId, callback) {
+  if (!userId || !db) {
+    callback([]);
+    return () => {};
+  }
+  const q = query(collection(db, 'paymentTransactions'), where('userId', '==', userId));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
+      callback(list);
+    },
+    (err) => console.error('Error escuchando mis transacciones:', err)
+  );
+}
+
+export function subscribeMyStoreActivations(userId, callback) {
+  if (!userId || !db) {
+    callback([]);
+    return () => {};
+  }
+  const q = query(collection(db, 'storeActivations'), where('userId', '==', userId));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
+      callback(list);
+    },
+    (err) => console.error('Error escuchando activaciones:', err)
+  );
+}
+
+export function subscribeAllStoreActivations(callback) {
+  if (!db) {
+    callback([]);
+    return () => {};
+  }
+  const q = query(collection(db, 'storeActivations'), limit(300));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
+      callback(list);
+    },
+    (err) => console.error('Error escuchando activaciones admin:', err)
   );
 }
 

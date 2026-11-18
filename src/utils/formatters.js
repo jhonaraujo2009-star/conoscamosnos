@@ -452,13 +452,15 @@ export function getPrimaryPhoto(user, width = 600, options = {}) {
 /**
  * Ordena los regalos recibidos por un usuario del de mayor valor al menor (y por conteo como desempate).
  */
-export function getSortedReceivedGifts(user) {
+export function getSortedReceivedGifts(user, giftsCatalog = VIRTUAL_GIFTS) {
   const counts = user?.giftCounts;
   if (!counts || typeof counts !== 'object') return [];
-  return VIRTUAL_GIFTS.map((gift) => ({
-    ...gift,
-    count: Math.max(0, Math.floor(Number(counts[gift.id] || 0))),
-  }))
+  const catalog = Array.isArray(giftsCatalog) && giftsCatalog.length > 0 ? giftsCatalog : VIRTUAL_GIFTS;
+  return catalog
+    .map((gift) => ({
+      ...gift,
+      count: Math.max(0, Math.floor(Number(counts[gift.id] || 0))),
+    }))
     .filter((item) => item.count > 0)
     .sort((a, b) => {
       if (b.price !== a.price) return b.price - a.price;

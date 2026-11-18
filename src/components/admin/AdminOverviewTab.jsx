@@ -1,17 +1,20 @@
 import {
   Activity,
   BadgeCheck,
+  Camera,
   CheckCircle2,
   Crown,
   DollarSign,
   Flag,
   Gem,
+  Gift,
   Globe,
   ShieldCheck,
   Sparkles,
   Tv,
   Users,
   Wallet,
+  Zap,
 } from 'lucide-react';
 import { formatUSD } from '../../utils/formatters';
 import { AdminSectionCard } from './AdminPrimitives';
@@ -295,6 +298,77 @@ export default function AdminOverviewTab({
                 {metrics.pendingRechargesCount + metrics.pendingWithdrawalsCount}
               </strong>
             </button>
+          </div>
+        </AdminSectionCard>
+      </div>
+
+      {/* Rendimiento PRO, Boost, Álbum VIP y Regalos (💎) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <AdminSectionCard accent="crimson" className="p-4 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-[#FF2E54]">
+              Miembros PRO Activos
+            </p>
+            <p className="font-display text-2xl font-black text-zinc-900 tabular-nums mt-0.5">
+              {metrics.activeProCount ?? 0}
+            </p>
+            <p className="text-[11px] text-zinc-500 truncate">
+              {metrics.proActivationsCount ?? 0} activaciones en el periodo
+            </p>
+          </div>
+          <div className="w-10 h-10 rounded-2xl bg-rose-50 border border-rose-200 text-[#FF2E54] flex items-center justify-center shrink-0">
+            <Crown className="w-5 h-5" />
+          </div>
+        </AdminSectionCard>
+
+        <AdminSectionCard accent="none" className="p-4 flex items-center justify-between gap-3 border-purple-200/80">
+          <div className="min-w-0">
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-purple-700">
+              Boost VIP Activos
+            </p>
+            <p className="font-display text-2xl font-black text-zinc-900 tabular-nums mt-0.5">
+              {metrics.activeBoostCount ?? 0}
+            </p>
+            <p className="text-[11px] text-zinc-500 truncate">
+              {(metrics.totalDiamondsSpentInRange ?? 0).toLocaleString('es-ES')} 💎 movidos
+            </p>
+          </div>
+          <div className="w-10 h-10 rounded-2xl bg-purple-50 border border-purple-200 text-purple-600 flex items-center justify-center shrink-0">
+            <Zap className="w-5 h-5" />
+          </div>
+        </AdminSectionCard>
+
+        <AdminSectionCard accent="sky" className="p-4 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-sky-700">
+              Fotos VIP Desbloqueadas
+            </p>
+            <p className="font-display text-2xl font-black text-zinc-900 tabular-nums mt-0.5">
+              {metrics.exclusivePhotosCount ?? 0}
+            </p>
+            <p className="text-[11px] text-sky-700 font-bold truncate">
+              {(metrics.exclusivePhotosDiamonds ?? 0).toLocaleString('es-ES')} 💎 a creadores
+            </p>
+          </div>
+          <div className="w-10 h-10 rounded-2xl bg-sky-50 border border-sky-200 text-sky-600 flex items-center justify-center shrink-0">
+            <Camera className="w-5 h-5" />
+          </div>
+        </AdminSectionCard>
+
+        <AdminSectionCard accent="amber" className="p-4 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800">
+              Regalos Virtuales
+            </p>
+            <p className="font-display text-2xl font-black text-zinc-900 tabular-nums mt-0.5">
+              {metrics.giftsSentCount ?? 0}
+            </p>
+            <p className="text-[11px] text-amber-800 font-bold truncate">
+              {(metrics.giftsSentDiamonds ?? 0).toLocaleString('es-ES')} 💎 enviados
+            </p>
+          </div>
+          <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center shrink-0">
+            <Gift className="w-5 h-5" />
           </div>
         </AdminSectionCard>
       </div>

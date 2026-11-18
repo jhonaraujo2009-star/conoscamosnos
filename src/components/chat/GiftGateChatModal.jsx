@@ -1,5 +1,5 @@
 import { BadgeCheck, Crown, Gem, Gift, Lock, Sparkles, X } from 'lucide-react';
-import { ECONOMY_CONFIG, VIRTUAL_GIFTS } from '../../config/constants';
+import { ECONOMY_CONFIG, resolveVirtualGifts } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   calculateGiftEconomics,
@@ -21,6 +21,11 @@ export default function GiftGateChatModal({
   const { economyConfig } = useAuth();
   if (!isOpen || !targetUser) return null;
   const liveEconomy = economyConfig || ECONOMY_CONFIG;
+  const liveGifts = resolveVirtualGifts(liveEconomy);
+  const minGiftPrice = liveGifts.reduce(
+    (min, g) => Math.min(min, Number(g.price || 10)),
+    Number(liveGifts[0]?.price || 10)
+  );
 
   const verified = isProfileVerified(targetUser);
   const firstName = (targetUser.name || 'este perfil').split(' ')[0];
@@ -93,12 +98,12 @@ export default function GiftGateChatModal({
           <div className="px-3.5 py-2.5 rounded-2xl bg-sky-50 border border-sky-200/80 text-[11px] text-sky-900 font-medium flex items-start gap-2">
             <Gem className="w-4 h-4 text-sky-500 shrink-0 mt-0.5" />
             <span>
-              Al enviar <strong>cualquier regalo</strong> (desde 🌹 10 💎), desbloqueas su chat privado al instante y {firstName} recibe <strong>1 💎 retirable</strong> por cada diamante ({formatDiamondRateUSD(liveEconomy.diamondToNetUSDRate)} USD/💎).
+              Al enviar <strong>cualquier regalo</strong> (desde 🌹 {minGiftPrice} 💎), desbloqueas su chat privado al instante y {firstName} recibe <strong>1 💎 retirable</strong> por cada diamante ({formatDiamondRateUSD(liveEconomy.diamondToNetUSDRate)} USD/💎).
             </span>
           </div>
 
           <div className="grid grid-cols-2 gap-2.5">
-            {VIRTUAL_GIFTS.map((gift) => {
+            {liveGifts.map((gift) => {
               const canAfford = userDiamonds >= gift.price;
               const busy = sendingGiftId === gift.id;
               const eco = calculateGiftEconomics(gift.price, liveEconomy);

@@ -5,46 +5,20 @@ import { FieldValue, getAdminAuth, getAdminFirestore, getAdminMessaging } from '
  * del usuario destinatario en `users/{recipientUid}/private/fcmTokens`.
  * Funciona incluso cuando el usuario tiene la PWA cerrada.
  */
-export async function sendPushNotification({
-  authHeader = '',
+export async function dispatchPushNotificationInternal({
+  senderUid = '',
   recipientUid = '',
   type = 'message',
   title = 'Conoscamosnos',
   body = 'Tienes una nueva notificación en Conoscamosnos',
   link = '/app',
 }) {
-  const bearerMatch = String(authHeader || '').match(/^Bearer\s+(.+)$/i);
-  if (!bearerMatch?.[1]) {
-    return {
-      statusCode: 401,
-      body: { ok: false, error: 'Se requiere sesión autenticada para enviar notificaciones.' },
-    };
-  }
-
   const cleanRecipientUid = String(recipientUid || '').trim();
   if (!cleanRecipientUid) {
-    return {
-      statusCode: 400,
-      body: { ok: false, error: 'Falta recipientUid.' },
-    };
+    return { statusCode: 400, body: { ok: false, error: 'Falta recipientUid.' } };
   }
-
-  let senderUid = '';
-  try {
-    const decoded = await getAdminAuth().verifyIdToken(bearerMatch[1]);
-    senderUid = decoded.uid;
-  } catch {
-    return {
-      statusCode: 401,
-      body: { ok: false, error: 'Token de sesión inválido.' },
-    };
-  }
-
-  if (senderUid === cleanRecipientUid) {
-    return {
-      statusCode: 200,
-      body: { ok: true, skipped: 'self' },
-    };
+  if (senderUid && senderUid === cleanRecipientUid) {
+    return { statusCode: 200, body: { ok: true, skipped: 'self' } };
   }
 
   try {
@@ -63,6 +37,7 @@ export async function sendPushNotification({
       return { statusCode: 200, body: { ok: true, skipped: 'disabled_by_user' } };
     }
     if (
+      senderUid &&
       Array.isArray(recipientData.blockedUsers) &&
       recipientData.blockedUsers.includes(senderUid)
     ) {
@@ -92,7 +67,7 @@ export async function sendPushNotification({
       },
       data: {
         type: cleanType,
-        senderUid,
+        senderUid: senderUid || '',
         title: cleanTitle,
         body: cleanBody,
         url: cleanLink,
@@ -106,7 +81,7 @@ export async function sendPushNotification({
           body: cleanBody,
           icon: '/icons/icon-192.png',
           badge: '/icons/icon-192.png',
-          tag: `conoscamosnos_${cleanType}_${senderUid}`,
+          tag: `conoscamosnos_${cleanType}_${senderUid || 'system'}`,
           renotify: true,
         },
         fcmOptions: {
@@ -163,6 +138,51 @@ export async function sendPushNotification({
       },
     };
   }
+}
+
+export async function sendPushNotification({
+  authHeader = '',
+  recipientUid = '',
+  type = 'message',
+  title = 'Conoscamosnos',
+  body = 'Tienes una nueva notificación en Conoscamosnos',
+  link = '/app',
+}) {
+  const bearerMatch = String(authHeader || '').match(/^Bearer\s+(.+)$/i);
+  if (!bearerMatch?.[1]) {
+    return {
+      statusCode: 401,
+      body: { ok: false, error: 'Se requiere sesión autenticada para enviar notificaciones.' },
+    };
+  }
+
+  const cleanRecipientUid = String(recipientUid || '').trim();
+  if (!cleanRecipientUid) {
+    return {
+      statusCode: 400,
+      body: { ok: false, error: 'Falta recipientUid.' },
+    };
+  }
+
+  let senderUid = '';
+  try {
+    const decoded = await getAdminAuth().verifyIdToken(bearerMatch[1]);
+    senderUid = decoded.uid;
+  } catch {
+    return {
+      statusCode: 401,
+      body: { ok: false, error: 'Token de sesión inválido.' },
+    };
+  }
+
+  return dispatchPushNotificationInternal({
+    senderUid,
+    recipientUid: cleanRecipientUid,
+    type,
+    title,
+    body,
+    link,
+  });
 }
 
 export async function sendPushExpressHandler(req, res) {

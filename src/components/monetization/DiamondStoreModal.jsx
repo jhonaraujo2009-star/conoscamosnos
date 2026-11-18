@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Camera,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -8,8 +9,10 @@ import {
   Crown,
   ExternalLink,
   Gem,
+  Gift,
   Globe,
   Heart,
+  History,
   ImagePlus,
   Info,
   Loader2,
@@ -18,6 +21,7 @@ import {
   Sparkles,
   Tv,
   Wallet,
+  Zap,
 } from 'lucide-react';
 import {
   DIAMOND_PACKAGES,
@@ -28,6 +32,7 @@ import {
   resolveDirectPaymentMethods,
 } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
+import { subscribeSentGiftTransactions } from '../../services/chatService';
 import { getUserCloudinaryFolder, uploadImageToCloudinary } from '../../services/cloudinaryService';
 import {
   activateProWithDiamonds,
@@ -35,13 +40,17 @@ import {
   simulateAutoPaymentConfirmation,
   submitManualPaymentRequest,
   subscribeMyPaymentRequests,
+  subscribeMyPaymentTransactions,
+  subscribeMyStoreActivations,
 } from '../../services/monetizationService';
 import { buildQrMatrix } from '../../utils/qrGenerator';
 import {
+  formatGiftDate,
   formatTimeRemaining,
   formatUSD,
   getSpendableDiamonds,
   isProActive,
+  toMillis,
 } from '../../utils/formatters';
 import LuxuryModalHeader from '../layout/LuxuryModalHeader';
 
@@ -117,7 +126,9 @@ export default function DiamondStoreModal({
   const spendableDiamonds = getSpendableDiamonds(userProfile);
   const proActive = isProActive(userProfile);
 
-  const [storeSection, setStoreSection] = useState(initialSection === 'pro' ? 'pro' : 'buy'); // 'buy' | 'pro'
+  const [storeSection, setStoreSection] = useState(
+    initialSection === 'pro' ? 'pro' : initialSection === 'history' ? 'history' : 'buy'
+  ); // 'buy' | 'pro' | 'history'
   const [selectedPkgId, setSelectedPkgId] = useState(livePackages[1]?.id || livePackages[0].id);
   const selectedPkg = livePackages.find((p) => p.id === selectedPkgId) || livePackages[0];
   const selectedPkgUnits = Number(selectedPkg.diamonds ?? selectedPkg.coins ?? 0);
@@ -145,11 +156,16 @@ export default function DiamondStoreModal({
   const [submittingDirect, setSubmittingDirect] = useState(false);
   const [copied, setCopied] = useState(false);
   const [myRequests, setMyRequests] = useState([]);
+  const [myPaymentTxs, setMyPaymentTxs] = useState([]);
+  const [myActivations, setMyActivations] = useState([]);
+  const [mySentGifts, setMySentGifts] = useState([]);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (isOpen) {
-      setStoreSection(initialSection === 'pro' ? 'pro' : 'buy');
+      setStoreSection(
+        initialSection === 'pro' ? 'pro' : initialSection === 'history' ? 'history' : 'buy'
+      );
     }
   }, [isOpen, initialSection]);
 
@@ -162,9 +178,114 @@ export default function DiamondStoreModal({
 
   useEffect(() => {
     if (!isOpen || !userProfile?.uid) return;
-    const unsub = subscribeMyPaymentRequests(userProfile.uid, setMyRequests);
-    return () => unsub();
+    const unsubReqs = subscribeMyPaymentRequests(userProfile.uid, setMyRequests);
+    const unsubTxs = subscribeMyPaymentTransactions(userProfile.uid, setMyPaymentTxs);
+    const unsubActs = subscribeMyStoreActivations(userProfile.uid, setMyActivations);
+    const unsubGifts = subscribeSentGiftTransactions(userProfile.uid, setMySentGifts);
+    return () => {
+      unsubReqs();
+      unsubTxs();
+      unsubActs();
+      unsubGifts();
+    };
   }, [isOpen, userProfile?.uid]);
+
+  const timelineEvents = useMemo(() => {
+    const items = [];
+
+    myPaymentTxs.forEach((tx) => {
+      const units = Number(tx.diamondsCredited ?? tx.coinsCredited ?? 0);
+      const isProTx = tx.creditField === 'pro';
+      items.push({
+        id: `tx_${tx.id}`,
+        ms: toMillis(tx.createdAt),
+        createdAt: tx.createdAt,
+        icon: isProTx ? 'crown' : 'gem',
+        title: isProTx
+          ? `Conoscamosnos PRO (${tx.proDurationDays || 7}d)`
+          : 'Recarga automática NowPayments',
+        subtitle: `${formatUSD(tx.amountUSD)} · ${tx.provider || 'pasarela'}`,
+        badgeText: isProTx ? 'PRO Activo' : `+${units} 💎`,
+        badgeClass: 'bg-emerald-100 text-emerald-800',
+      });
+    });
+
+    myRequests.forEach((r) => {
+      const isProReq = r.creditTarget === 'pro';
+      const units = Number(r.diamondsToCredit || r.coinsToCredit || 0);
+      const statusLabel =
+        r.status === 'approved' ? 'Aprobado' : r.status === 'rejected' ? 'Rechazado' : 'En revisión';
+      items.push({
+        id: `req_${r.id}`,
+        ms: toMillis(r.createdAt),
+        createdAt: r.createdAt,
+        icon: isProReq ? 'crown' : 'wallet',
+        title: isProReq
+          ? `Solicitud PRO (${r.proDurationDays || 7}d)`
+          : `Recarga directa (+${units} 💎)`,
+        subtitle: `${r.methodName || 'Transferencia'} · ${formatUSD(r.amountUSD)} · ${statusLabel}`,
+        badgeText:
+          r.status === 'approved'
+            ? isProReq
+              ? 'PRO'
+              : `+${units} 💎`
+            : statusLabel,
+        badgeClass:
+          r.status === 'approved'
+            ? 'bg-emerald-100 text-emerald-800'
+            : r.status === 'rejected'
+            ? 'bg-rose-100 text-rose-800'
+            : 'bg-amber-100 text-amber-800',
+      });
+    });
+
+    myActivations.forEach((act) => {
+      const spent = Number(act.diamondsSpent || 0);
+      const labels = {
+        pro: `Activación Conoscamosnos PRO (${act.durationDays || 7} días)`,
+        boost: `Activación Boost VIP (${act.durationHours || 24}h)`,
+        unlock_chat: 'Chat directo desbloqueado',
+        unlock_like: 'Like secreto revelado',
+        unlock_all_likes: `Revelados ${act.unlockedCount || ''} Likes`,
+      };
+      items.push({
+        id: `act_${act.id}`,
+        ms: toMillis(act.createdAt),
+        createdAt: act.createdAt,
+        icon:
+          act.kind === 'pro'
+            ? 'crown'
+            : act.kind === 'boost'
+            ? 'zap'
+            : act.kind === 'unlock_chat'
+            ? 'message'
+            : 'heart',
+        title: labels[act.kind] || 'Consumo en Tienda',
+        subtitle: act.kind === 'pro' || act.kind === 'boost' ? `Plan ${act.planId}` : 'Consumo inmediato',
+        badgeText: `-${spent} 💎`,
+        badgeClass: 'bg-sky-100 text-sky-800',
+      });
+    });
+
+    mySentGifts.forEach((g) => {
+      const cost = Number(g.diamondsCost ?? g.coinsCost ?? g.diamondsCredited ?? 0);
+      const isPhoto = g.giftId === 'exclusive_photo';
+      items.push({
+        id: `gift_${g.id}`,
+        ms: toMillis(g.createdAt),
+        createdAt: g.createdAt,
+        icon: isPhoto ? 'camera' : 'gift',
+        title: isPhoto
+          ? `Foto Exclusiva VIP de ${g.receiverName || 'Creador'}`
+          : `${g.giftIcon || '🎁'} ${g.giftName || 'Regalo'} a ${g.receiverName || 'Usuario'}`,
+        subtitle: isPhoto ? 'Álbum Exclusivo VIP desbloqueado' : 'Regalo virtual enviado',
+        badgeText: `-${cost} 💎`,
+        badgeClass: 'bg-rose-100 text-rose-800',
+      });
+    });
+
+    return items.sort((a, b) => b.ms - a.ms).slice(0, 40);
+  }, [myPaymentTxs, myRequests, myActivations, mySentGifts]);
 
   if (!isOpen) return null;
 
@@ -578,32 +699,45 @@ export default function DiamondStoreModal({
         />
 
         <div className="flex-1 overflow-y-auto no-scrollbar p-4 sm:p-5 space-y-4 bg-[#FAF7F9]">
-          {/* Selector Principal: Comprar Diamantes 💎 vs Conoscamosnos PRO 👑 */}
-          <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-zinc-200/75 border border-zinc-200">
+          {/* Selector Principal: Diamantes 💎 vs Conoscamosnos PRO 👑 vs Historial */}
+          <div className="grid grid-cols-3 gap-1 p-1 rounded-2xl bg-zinc-200/75 border border-zinc-200">
             <button
               type="button"
               onClick={() => setStoreSection('buy')}
-              className={`py-2.5 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
+              className={`py-2.5 px-2 rounded-xl text-[11px] font-extrabold flex items-center justify-center gap-1 transition ${
                 storeSection === 'buy'
                   ? 'bg-white text-zinc-900 shadow-sm'
                   : 'text-zinc-600 hover:text-zinc-900'
               }`}
             >
-              <Gem className="w-3.5 h-3.5 text-sky-500" />
-              Diamantes (💎)
+              <Gem className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+              <span className="truncate">Diamantes</span>
             </button>
 
             <button
               type="button"
               onClick={() => setStoreSection('pro')}
-              className={`py-2.5 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
+              className={`py-2.5 px-2 rounded-xl text-[11px] font-extrabold flex items-center justify-center gap-1 transition ${
                 storeSection === 'pro'
                   ? 'bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white shadow-sm'
                   : 'text-zinc-700 hover:text-zinc-900'
               }`}
             >
-              <Crown className="w-3.5 h-3.5 text-amber-400" />
-              Conoscamosnos PRO
+              <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="truncate">PRO VIP</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setStoreSection('history')}
+              className={`py-2.5 px-2 rounded-xl text-[11px] font-extrabold flex items-center justify-center gap-1 transition ${
+                storeSection === 'history'
+                  ? 'bg-white text-zinc-900 shadow-sm'
+                  : 'text-zinc-600 hover:text-zinc-900'
+              }`}
+            >
+              <History className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+              <span className="truncate">Historial</span>
             </button>
           </div>
 
@@ -683,7 +817,7 @@ export default function DiamondStoreModal({
 
               {renderGatewayPaymentBlock()}
             </>
-          ) : (
+          ) : storeSection === 'pro' ? (
             /* SECCIÓN 2: MEMBRESÍA CONOSCAMOSNOS PRO */
             <div className="space-y-4">
               {proActive && (
@@ -838,10 +972,86 @@ export default function DiamondStoreModal({
                 renderGatewayPaymentBlock()
               )}
             </div>
+          ) : (
+            /* SECCIÓN 3: HISTORIAL DE MOVIMIENTOS DE DIAMANTES */
+            <div className="space-y-3">
+              <div className="p-3.5 rounded-2xl bg-white border border-zinc-200/80 shadow-xs flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-black text-zinc-900 flex items-center gap-1.5">
+                    <History className="w-4 h-4 text-indigo-500" />
+                    Historial de tus Diamantes (💎)
+                  </p>
+                  <p className="text-[11px] text-zinc-500">
+                    Recargas, suscripciones PRO, Boost VIP, regalos y Fotos VIP
+                  </p>
+                </div>
+                <span className="px-2.5 py-1 rounded-full bg-sky-50 border border-sky-200 text-sky-800 text-xs font-black tabular-nums shrink-0">
+                  {spendableDiamonds} 💎
+                </span>
+              </div>
+
+              {timelineEvents.length === 0 ? (
+                <div className="bg-white rounded-3xl p-8 text-center border border-zinc-200/80 shadow-xs space-y-2">
+                  <div className="w-11 h-11 mx-auto rounded-2xl bg-sky-50 text-sky-500 flex items-center justify-center">
+                    <Gem className="w-5 h-5" />
+                  </div>
+                  <p className="text-sm font-extrabold text-zinc-900">Aún no tienes movimientos</p>
+                  <p className="text-xs text-zinc-500 max-w-[240px] mx-auto">
+                    Tus recargas, activaciones PRO, Boost VIP y regalos aparecerán aquí automáticamente.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {timelineEvents.map((item) => {
+                    const IconComp =
+                      item.icon === 'crown'
+                        ? Crown
+                        : item.icon === 'zap'
+                        ? Zap
+                        : item.icon === 'gift'
+                        ? Gift
+                        : item.icon === 'camera'
+                        ? Camera
+                        : item.icon === 'wallet'
+                        ? Wallet
+                        : item.icon === 'message'
+                        ? MessageCircle
+                        : item.icon === 'heart'
+                        ? Heart
+                        : Gem;
+                    return (
+                      <div
+                        key={item.id}
+                        className="p-3 rounded-2xl bg-white border border-zinc-200/80 shadow-xs flex items-center justify-between gap-3"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-9 h-9 rounded-xl bg-zinc-50 border border-zinc-200/80 text-zinc-700 flex items-center justify-center shrink-0">
+                            <IconComp className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-extrabold text-zinc-900 truncate">
+                              {item.title}
+                            </p>
+                            <p className="text-[10.5px] text-zinc-500 truncate">
+                              {item.subtitle} · {formatGiftDate(item.createdAt)}
+                            </p>
+                          </div>
+                        </div>
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-black shrink-0 tabular-nums ${item.badgeClass}`}
+                        >
+                          {item.badgeText}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           )}
 
-          {/* Historial de solicitudes de recarga del usuario */}
-          {myRequests.length > 0 && (
+          {/* Historial rápido de solicitudes pendientes/recientes debajo de compra */}
+          {storeSection !== 'history' && myRequests.length > 0 && (
             <div className="rounded-[24px] p-4 bg-white border border-zinc-200/80 shadow-sm space-y-2.5">
               <p className="text-xs font-black text-zinc-900 flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-amber-500" />

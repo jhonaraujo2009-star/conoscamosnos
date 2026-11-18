@@ -1,4 +1,4 @@
-import { Component, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Component, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Flame, LogOut, ShieldAlert } from 'lucide-react';
 import { getIntentionMood, MIN_AGE, resolveAccessPolicy } from './config/constants';
@@ -33,7 +33,6 @@ import {
   toMillis,
 } from './utils/formatters';
 import AuthScreen from './components/auth/AuthScreen';
-import OnboardingWizard from './components/auth/OnboardingWizard';
 import MobileShell from './components/layout/MobileShell';
 import NotificationBanner from './components/layout/NotificationBanner';
 import HomeFeed from './components/home/HomeFeed';
@@ -45,14 +44,16 @@ import ChatRoom from './components/chat/ChatRoom';
 import GiftAnimationOverlay from './components/chat/GiftAnimationOverlay';
 import GiftGateChatModal from './components/chat/GiftGateChatModal';
 import ProfileScreen from './components/profile/ProfileScreen';
-import SafetyCenterModal from './components/profile/SafetyCenterModal';
-import DiamondStoreModal from './components/monetization/DiamondStoreModal';
-import EarningsWithdrawModal from './components/monetization/EarningsWithdrawModal';
 import GiftNotificationsModal from './components/monetization/GiftNotificationsModal';
 import RewardedAdModal from './components/monetization/RewardedAdModal';
 import UnlockChoiceModal from './components/monetization/UnlockChoiceModal';
 import BoostModal from './components/home/BoostModal';
-import AdminDashboardPage from './components/admin/AdminDashboardPage';
+
+const AdminDashboardPage = lazy(() => import('./components/admin/AdminDashboardPage'));
+const OnboardingWizard = lazy(() => import('./components/auth/OnboardingWizard'));
+const DiamondStoreModal = lazy(() => import('./components/monetization/DiamondStoreModal'));
+const EarningsWithdrawModal = lazy(() => import('./components/monetization/EarningsWithdrawModal'));
+const SafetyCenterModal = lazy(() => import('./components/profile/SafetyCenterModal'));
 
 function FullScreenLoader() {
   return (
@@ -373,7 +374,9 @@ function UserAppView({ onSuccess, onError }) {
   }, [matches, userProfile?.uid, userProfile?.blockedUsers, optimisticReadMap]);
 
   const openDiamondStore = useCallback((section = 'buy') => {
-    setDiamondStoreSection(section === 'pro' ? 'pro' : 'buy');
+    setDiamondStoreSection(
+      section === 'pro' ? 'pro' : section === 'history' ? 'history' : 'buy'
+    );
     setDiamondStoreOpen(true);
   }, []);
 
@@ -574,11 +577,13 @@ function UserAppView({ onSuccess, onError }) {
   if (!userProfile?.onboardingCompleted) {
     return (
       <div className="h-[100dvh] w-screen overflow-y-auto bg-[#FAF7F9]">
-        <OnboardingWizard
-          userProfile={userProfile}
-          onSuccess={handleSuccess}
-          onError={handleError}
-        />
+        <Suspense fallback={<FullScreenLoader />}>
+          <OnboardingWizard
+            userProfile={userProfile}
+            onSuccess={handleSuccess}
+            onError={handleError}
+          />
+        </Suspense>
       </div>
     );
   }
@@ -780,24 +785,32 @@ function UserAppView({ onSuccess, onError }) {
         onComplete={() => setGateGiftAnim(null)}
       />
 
-      <DiamondStoreModal
-        key={`diamonds-${userProfile.uid}`}
-        isOpen={diamondStoreOpen}
-        initialSection={diamondStoreSection}
-        onClose={() => setDiamondStoreOpen(false)}
-        userProfile={userProfile}
-        onSuccess={handleSuccess}
-        onError={handleError}
-      />
+      {diamondStoreOpen && (
+        <Suspense fallback={null}>
+          <DiamondStoreModal
+            key={`diamonds-${userProfile.uid}`}
+            isOpen={diamondStoreOpen}
+            initialSection={diamondStoreSection}
+            onClose={() => setDiamondStoreOpen(false)}
+            userProfile={userProfile}
+            onSuccess={handleSuccess}
+            onError={handleError}
+          />
+        </Suspense>
+      )}
 
-      <EarningsWithdrawModal
-        key={`withdraw-${userProfile.uid}`}
-        isOpen={withdrawalsOpen}
-        onClose={() => setWithdrawalsOpen(false)}
-        userProfile={userProfile}
-        onSuccess={handleSuccess}
-        onError={handleError}
-      />
+      {withdrawalsOpen && (
+        <Suspense fallback={null}>
+          <EarningsWithdrawModal
+            key={`withdraw-${userProfile.uid}`}
+            isOpen={withdrawalsOpen}
+            onClose={() => setWithdrawalsOpen(false)}
+            userProfile={userProfile}
+            onSuccess={handleSuccess}
+            onError={handleError}
+          />
+        </Suspense>
+      )}
 
       <GiftNotificationsModal
         key={`gifts-${userProfile.uid}`}
@@ -829,19 +842,23 @@ function UserAppView({ onSuccess, onError }) {
         onError={handleError}
       />
 
-      <SafetyCenterModal
-        key={`safety-${userProfile.uid}`}
-        isOpen={safetyCenterOpen}
-        onClose={() => setSafetyCenterOpen(false)}
-        userProfile={userProfile}
-        initialTab={safetyInitialTab}
-        onSelectProfile={(profile) => {
-          setSafetyCenterOpen(false);
-          setSelectedProfile(profile);
-        }}
-        onSuccess={handleSuccess}
-        onError={handleError}
-      />
+      {safetyCenterOpen && (
+        <Suspense fallback={null}>
+          <SafetyCenterModal
+            key={`safety-${userProfile.uid}`}
+            isOpen={safetyCenterOpen}
+            onClose={() => setSafetyCenterOpen(false)}
+            userProfile={userProfile}
+            initialTab={safetyInitialTab}
+            onSelectProfile={(profile) => {
+              setSafetyCenterOpen(false);
+              setSelectedProfile(profile);
+            }}
+            onSuccess={handleSuccess}
+            onError={handleError}
+          />
+        </Suspense>
+      )}
     </>
   );
 }
@@ -892,7 +909,9 @@ function AppRoutes() {
             ) : !isSuperAdmin ? (
               <Navigate to="/app" replace />
             ) : (
-              <AdminDashboardPage onSuccess={handleSuccess} onError={handleError} />
+              <Suspense fallback={<FullScreenLoader />}>
+                <AdminDashboardPage onSuccess={handleSuccess} onError={handleError} />
+              </Suspense>
             )
           }
         />

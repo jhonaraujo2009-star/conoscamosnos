@@ -1,5 +1,6 @@
 import express from 'express';
 import { createInvoiceExpressHandler } from './controllers/createInvoiceController.js';
+import { economySpendExpressHandler } from './controllers/economySpendController.js';
 import { sendPushExpressHandler } from './controllers/pushNotificationController.js';
 import { storeActivateExpressHandler } from './controllers/storeActivationController.js';
 import paymentsRouter from './routes/payments.js';
@@ -20,6 +21,7 @@ app.get('/api/health', (_req, res) => {
 
 app.post('/api/payments/create-invoice', createInvoiceExpressHandler);
 app.post('/api/store/activate', storeActivateExpressHandler);
+app.post('/api/economy/spend', economySpendExpressHandler);
 app.post('/api/notifications/send', sendPushExpressHandler);
 app.use('/api/webhooks', paymentsRouter);
 

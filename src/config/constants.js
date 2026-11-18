@@ -383,6 +383,7 @@ export function resolveAccessPolicy(economyConfig = null) {
     Array.isArray(economyConfig?.boostPlans) && economyConfig.boostPlans.length > 0
       ? economyConfig.boostPlans
       : BOOST_PLANS;
+  const virtualGifts = resolveVirtualGifts(economyConfig);
 
   return {
     unlockMode,
@@ -397,9 +398,34 @@ export function resolveAccessPolicy(economyConfig = null) {
     unlockExclusivePhotoDiamonds,
     proPlans,
     boostPlans,
+    virtualGifts,
     estimatedAdCpmUSD,
     estimatedRevenuePerAdUSD: Number(Math.max(0.0005, estimatedAdCpmUSD / 1000).toFixed(4)),
   };
+}
+
+export function resolveVirtualGifts(economyConfig = null) {
+  const customList = Array.isArray(economyConfig?.virtualGifts)
+    ? economyConfig.virtualGifts
+    : [];
+  const customById = {};
+  customList.forEach((g) => {
+    if (g?.id) customById[g.id] = g;
+  });
+
+  return VIRTUAL_GIFTS.map((base) => {
+    const override = customById[base.id];
+    if (!override) return base;
+    const rawPrice = Number(override.price);
+    const cleanPrice =
+      Number.isFinite(rawPrice) && rawPrice >= 1
+        ? Math.max(1, Math.min(50000, Math.floor(rawPrice)))
+        : base.price;
+    return {
+      ...base,
+      price: cleanPrice,
+    };
+  });
 }
 
 export const LOOKING_FOR_OPTIONS = [

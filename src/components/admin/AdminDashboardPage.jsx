@@ -12,7 +12,13 @@ import {
   Settings,
   X,
 } from 'lucide-react';
-import { BOOST_PLANS, DIAMOND_PACKAGES, PRO_PLANS, resolveAccessPolicy } from '../../config/constants';
+import {
+  BOOST_PLANS,
+  DIAMOND_PACKAGES,
+  PRO_PLANS,
+  VIRTUAL_GIFTS,
+  resolveAccessPolicy,
+} from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
 import { subscribeAllAdImpressions } from '../../services/adRewardService';
 import {
@@ -25,11 +31,13 @@ import {
   updateProPlansConfig,
 } from '../../services/adminService';
 import { logoutUser } from '../../services/authService';
+import { subscribeAllGiftTransactions } from '../../services/chatService';
 import {
   approvePaymentRequest,
   rejectPaymentRequest,
   subscribeAllPaymentRequests,
   subscribeAllPaymentTransactions,
+  subscribeAllStoreActivations,
 } from '../../services/monetizationService';
 import { subscribeAllReports, updateReportStatus } from '../../services/userService';
 import {
@@ -37,7 +45,14 @@ import {
   rejectWithdrawalRequest,
   subscribeAllWithdrawals,
 } from '../../services/withdrawalService';
-import { formatUSD, isProfileVerified, isUserActuallyOnline, toMillis } from '../../utils/formatters';
+import {
+  formatUSD,
+  isBoostActive,
+  isProActive,
+  isProfileVerified,
+  isUserActuallyOnline,
+  toMillis,
+} from '../../utils/formatters';
 import AdminOverviewTab from './AdminOverviewTab';
 import AdminReportsTab from './AdminReportsTab';
 import AdminSettingsTab from './AdminSettingsTab';
@@ -65,6 +80,8 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
   const [withdrawals, setWithdrawals] = useState([]);
   const [reports, setReports] = useState([]);
   const [adImpressions, setAdImpressions] = useState([]);
+  const [giftTxs, setGiftTxs] = useState([]);
+  const [storeActivations, setStoreActivations] = useState([]);
 
   const [copiedKey, setCopiedKey] = useState('');
   const [busyId, setBusyId] = useState('');
@@ -86,6 +103,9 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
   const [boostPlansDraft, setBoostPlansDraft] = useState(
     economyConfig?.boostPlans || BOOST_PLANS
   );
+  const [giftsDraft, setGiftsDraft] = useState(
+    economyConfig?.virtualGifts || VIRTUAL_GIFTS
+  );
   const [packagesDraft, setPackagesDraft] = useState(
     economyConfig?.diamondPackages || economyConfig?.coinPackages || DIAMOND_PACKAGES
   );
@@ -106,6 +126,7 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
     setMinWithdrawDiamonds(String(economyConfig?.minWithdrawalDiamonds ?? 500));
     setProPlansDraft(economyConfig?.proPlans || PRO_PLANS);
     setBoostPlansDraft(economyConfig?.boostPlans || BOOST_PLANS);
+    setGiftsDraft(economyConfig?.virtualGifts || VIRTUAL_GIFTS);
     setPackagesDraft(
       economyConfig?.diamondPackages || economyConfig?.coinPackages || DIAMOND_PACKAGES
     );
@@ -123,6 +144,8 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
     const unsubW = subscribeAllWithdrawals(setWithdrawals);
     const unsubReports = subscribeAllReports(setReports);
     const unsubAds = subscribeAllAdImpressions(setAdImpressions);
+    const unsubGifts = subscribeAllGiftTransactions(setGiftTxs);
+    const unsubActs = subscribeAllStoreActivations(setStoreActivations);
 
     return () => {
       unsubUsers();
@@ -131,6 +154,8 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
       unsubW();
       unsubReports();
       unsubAds();
+      unsubGifts();
+      unsubActs();
     };
   }, []);
 
@@ -257,6 +282,34 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
       .reduce((acc, w) => acc + Number(w.netPayoutUSD || 0), 0);
     const paidWithdrawalsCount = paidWithdrawalsInRange.length;
 
+    const activeProCount = users.filter(isProActive).length;
+    const activeBoostCount = users.filter(isBoostActive).length;
+
+    const giftsInRange = giftTxs.filter((g) => inRange(g, 'createdAt'));
+    const exclusivePhotosInRange = giftsInRange.filter((g) => g.giftId === 'exclusive_photo');
+    const virtualGiftsInRange = giftsInRange.filter((g) => g.giftId !== 'exclusive_photo');
+
+    const exclusivePhotosCount = exclusivePhotosInRange.length;
+    const exclusivePhotosDiamonds = exclusivePhotosInRange.reduce(
+      (acc, g) => acc + Number(g.diamondsCost ?? g.coinsCost ?? g.diamondsCredited ?? 0),
+      0
+    );
+    const giftsSentCount = virtualGiftsInRange.length;
+    const giftsSentDiamonds = virtualGiftsInRange.reduce(
+      (acc, g) => acc + Number(g.diamondsCost ?? g.coinsCost ?? g.diamondsCredited ?? 0),
+      0
+    );
+
+    const actsInRange = storeActivations.filter((a) => inRange(a, 'createdAt'));
+    const proActivationsCount =
+      actsInRange.filter((a) => a.kind === 'pro').length +
+      approvedReqsInRange.filter((r) => r.creditTarget === 'pro').length +
+      completedTxsInRange.filter((t) => t.creditField === 'pro').length;
+    const totalDiamondsSpentInRange =
+      exclusivePhotosDiamonds +
+      giftsSentDiamonds +
+      actsInRange.reduce((acc, a) => acc + Number(a.diamondsSpent || 0), 0);
+
     return {
       totalUsers,
       newUsersCount,
@@ -282,8 +335,26 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
       pendingRechargesUSD,
       pendingWithdrawalsUSD,
       paidWithdrawalsCount,
+      activeProCount,
+      activeBoostCount,
+      proActivationsCount,
+      exclusivePhotosCount,
+      exclusivePhotosDiamonds,
+      giftsSentCount,
+      giftsSentDiamonds,
+      totalDiamondsSpentInRange,
     };
-  }, [users, dateFilter, paymentRequests, paymentTxs, adImpressions, withdrawals, reports]);
+  }, [
+    users,
+    dateFilter,
+    paymentRequests,
+    paymentTxs,
+    adImpressions,
+    withdrawals,
+    reports,
+    giftTxs,
+    storeActivations,
+  ]);
 
   const handleToggleBan = async (targetUid, targetName, currentlyBanned, reason, reportId = null) => {
     setBusyId(reportId || targetUid);
@@ -444,8 +515,9 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
         adminId: userProfile.uid,
         proPlans: proPlansDraft,
         boostPlans: boostPlansDraft,
+        virtualGifts: giftsDraft,
       });
-      onSuccess?.('👑 Planes Conoscamosnos PRO y Boost VIP actualizados en tiempo real.');
+      onSuccess?.('👑 Planes Conoscamosnos PRO, Boost VIP y Regalos actualizados en tiempo real.');
     } catch (err) {
       onError?.(err.message || 'No se pudieron guardar los planes PRO y Boost.');
     } finally {
@@ -677,6 +749,8 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
             onProPlansDraftChange={setProPlansDraft}
             boostPlansDraft={boostPlansDraft}
             onBoostPlansDraftChange={setBoostPlansDraft}
+            giftsDraft={giftsDraft}
+            onGiftsDraftChange={setGiftsDraft}
             savingProPlans={savingProPlans}
             onSaveProPlansConfig={handleSaveProPlansConfig}
             packagesDraft={packagesDraft}

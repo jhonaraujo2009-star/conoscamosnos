@@ -67,6 +67,8 @@ export default function AdminSettingsTab({
   onProPlansDraftChange,
   boostPlansDraft = BOOST_PLANS,
   onBoostPlansDraftChange,
+  giftsDraft = VIRTUAL_GIFTS,
+  onGiftsDraftChange,
   savingProPlans,
   onSaveProPlansConfig,
   packagesDraft,
@@ -115,6 +117,8 @@ export default function AdminSettingsTab({
     Array.isArray(proPlansDraft) && proPlansDraft.length > 0 ? proPlansDraft : PRO_PLANS;
   const safeBoostPlans =
     Array.isArray(boostPlansDraft) && boostPlansDraft.length > 0 ? boostPlansDraft : BOOST_PLANS;
+  const safeGifts =
+    Array.isArray(giftsDraft) && giftsDraft.length > 0 ? giftsDraft : VIRTUAL_GIFTS;
   const minW = Math.max(100, Math.floor(Number(minWithdrawDiamonds || 500)));
   const minWGrossUSD = minW * Number(baseDiamondPrice || 0.01);
   const minWCreatorUSD = minW * previewNetDiamondRate;
@@ -600,17 +604,48 @@ export default function AdminSettingsTab({
             </table>
           </div>
 
-          {/* Aproximación rápida por regalo */}
-          <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-            <span className="font-extrabold text-zinc-700">Equivalencia de Regalos al Creador:</span>
-            <div className="flex flex-wrap items-center gap-2">
-              {VIRTUAL_GIFTS.map((gift) => (
-                <span
+          {/* Precios Editables de Regalos Virtuales (💎) */}
+          <div className="p-4 rounded-2xl bg-zinc-50 border border-zinc-200 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[11px] font-black uppercase tracking-wider text-zinc-800">
+                Catálogo de Regalos Virtuales (Editables en 💎)
+              </span>
+              <span className="text-[10.5px] font-bold text-emerald-700">
+                Se sincroniza en vivo con Chat y Perfil ({safeCreatorPct}% al creador)
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+              {safeGifts.map((gift, idx) => (
+                <div
                   key={gift.id}
-                  className="px-2.5 py-1 rounded-full bg-white border border-zinc-200 text-zinc-700 font-bold tabular-nums"
+                  className="p-3 rounded-2xl bg-white border border-zinc-200/85 space-y-1.5 shadow-xs"
                 >
-                  {gift.icon} {gift.price} 💎 → <strong className="text-emerald-700">${(gift.price * previewNetDiamondRate).toFixed(2)}</strong> netos al creador
-                </span>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xl leading-none">{gift.icon}</span>
+                    <span className="text-[11px] font-black text-zinc-900 truncate">
+                      {gift.name}
+                    </span>
+                  </div>
+                  <label className="text-[9.5px] font-bold text-zinc-500 block">
+                    Precio (💎)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="50000"
+                    required
+                    value={gift.price}
+                    onChange={(e) => {
+                      const next = [...safeGifts];
+                      next[idx] = { ...next[idx], price: Number(e.target.value) };
+                      onGiftsDraftChange?.(next);
+                    }}
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-sky-50/70 border border-sky-200 text-xs font-black text-sky-800 focus:outline-none focus:border-sky-400"
+                  />
+                  <p className="text-[10px] font-bold text-emerald-700 tabular-nums">
+                    Creador: {formatUSD(Number(gift.price || 0) * previewNetDiamondRate)}
+                  </p>
+                </div>
               ))}
             </div>
           </div>
@@ -621,7 +656,7 @@ export default function AdminSettingsTab({
             className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#FF2E54] via-rose-500 to-amber-500 text-white font-black text-sm shadow-md shadow-rose-200 hover:brightness-105 disabled:opacity-50 transition flex items-center justify-center gap-2"
           >
             <Save className="w-4 h-4" />
-            {savingProPlans ? 'Guardando planes...' : 'Guardar Planes PRO y Boost VIP en Vivo'}
+            {savingProPlans ? 'Guardando cambios...' : 'Guardar Planes PRO, Boost y Regalos en Vivo'}
           </button>
         </form>
       </AdminSectionCard>

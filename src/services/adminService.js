@@ -16,8 +16,10 @@ import {
   DIAMOND_PACKAGES,
   ECONOMY_CONFIG,
   PRO_PLANS,
+  VIRTUAL_GIFTS,
   deriveUnlockMode,
   resolveAccessPolicy,
+  resolveVirtualGifts,
 } from '../config/constants';
 import { toMillis } from '../utils/formatters';
 
@@ -27,6 +29,7 @@ export const DEFAULT_LIVE_ECONOMY = {
   diamondPackages: DIAMOND_PACKAGES,
   proPlans: PRO_PLANS,
   boostPlans: BOOST_PLANS,
+  virtualGifts: VIRTUAL_GIFTS,
   ...resolveAccessPolicy(AD_REWARD_CONFIG),
   paymentChannels: {
     enableZinli: true,
@@ -87,6 +90,7 @@ export function subscribeEconomyConfig(callback) {
         Array.isArray(data.boostPlans) && data.boostPlans.length > 0
           ? data.boostPlans
           : BOOST_PLANS;
+      const virtualGifts = resolveVirtualGifts(data);
       const accessPolicy = resolveAccessPolicy(data);
       const paymentChannels = {
         ...DEFAULT_LIVE_ECONOMY.paymentChannels,
@@ -107,6 +111,7 @@ export function subscribeEconomyConfig(callback) {
         diamondPackages,
         proPlans,
         boostPlans,
+        virtualGifts,
       });
     },
     () => callback(DEFAULT_LIVE_ECONOMY)
@@ -249,6 +254,7 @@ export async function updateProPlansConfig({
   adminId,
   proPlans = PRO_PLANS,
   boostPlans = null,
+  virtualGifts = null,
 }) {
   if (!adminId) throw new Error('Sesión de Super Admin inválida.');
   const sanitizedProPlans = (Array.isArray(proPlans) ? proPlans : PRO_PLANS).map((plan) => {
@@ -278,6 +284,18 @@ export async function updateProPlansConfig({
         costDiamonds: Math.max(10, Math.floor(Number(plan.costDiamonds ?? plan.costCoins ?? 50))),
       };
     });
+  }
+
+  if (Array.isArray(virtualGifts) && virtualGifts.length > 0) {
+    const sanitizedGifts = resolveVirtualGifts({ virtualGifts }).map((g) => ({
+      id: g.id,
+      name: g.name,
+      icon: g.icon,
+      price: Math.max(1, Math.min(50000, Math.floor(Number(g.price || 10)))),
+      accent: g.accent,
+      tagline: g.tagline,
+    }));
+    payload.virtualGifts = sanitizedGifts;
   }
 
   await setDoc(doc(db, 'appConfig', 'economy'), payload, { merge: true });

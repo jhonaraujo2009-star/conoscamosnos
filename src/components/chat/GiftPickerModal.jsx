@@ -1,5 +1,5 @@
 import { Gem, Gift, Sparkles } from 'lucide-react';
-import { ECONOMY_CONFIG, VIRTUAL_GIFTS } from '../../config/constants';
+import { ECONOMY_CONFIG, resolveVirtualGifts } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
 import { calculateGiftEconomics, formatDiamondRateUSD, formatUSD } from '../../utils/formatters';
 import LuxuryModalHeader from '../layout/LuxuryModalHeader';
@@ -16,6 +16,7 @@ export default function GiftPickerModal({
   const { economyConfig } = useAuth();
   if (!isOpen) return null;
   const liveEconomy = economyConfig || ECONOMY_CONFIG;
+  const liveGifts = resolveVirtualGifts(liveEconomy);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -59,7 +60,7 @@ export default function GiftPickerModal({
         </div>
 
         <div className="grid grid-cols-2 gap-2.5">
-          {VIRTUAL_GIFTS.map((gift) => {
+          {liveGifts.map((gift) => {
             const canAfford = userDiamonds >= gift.price;
             const busy = sendingGiftId === gift.id;
             const eco = calculateGiftEconomics(gift.price, liveEconomy);

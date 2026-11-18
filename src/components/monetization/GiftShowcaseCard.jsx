@@ -1,4 +1,6 @@
 import { Gift, Sparkles } from 'lucide-react';
+import { resolveVirtualGifts } from '../../config/constants';
+import { useAuth } from '../../contexts/AuthContext';
 import { formatGiftBadgeCount, getSortedReceivedGifts } from '../../utils/formatters';
 
 export default function GiftShowcaseCard({
@@ -7,7 +9,8 @@ export default function GiftShowcaseCard({
   emptyText = 'Aún no ha recibido regalos virtuales.',
   headerAction = null,
 }) {
-  const sortedGifts = getSortedReceivedGifts(user);
+  const { economyConfig } = useAuth();
+  const sortedGifts = getSortedReceivedGifts(user, resolveVirtualGifts(economyConfig));
   const totalCount = Number(user?.giftsReceivedCount || 0);
 
   if (sortedGifts.length === 0 && totalCount === 0) {

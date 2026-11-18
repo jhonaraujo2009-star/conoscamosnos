@@ -50,18 +50,6 @@ service cloud.firestore {
         : 0.006;
     }
 
-    function economyExclusivePhotoCost() {
-      return exists(/databases/$(database)/documents/appConfig/economy)
-        ? get(/databases/$(database)/documents/appConfig/economy).data.get('unlockExclusivePhotoDiamonds', 15)
-        : 15;
-    }
-
-    // Valores permitidos para acreditar ganancias a un creador:
-    // Regalos (10, 25, 50, 150, 500 💎) y Foto Exclusiva VIP (configurable en Admin, default 15 💎)
-    function isValidGiftValue(amount) {
-      return amount in [10, 25, 50, 150, 500] || amount == economyExclusivePhotoCost();
-    }
-
     function boostFieldsUnchanged() {
       return request.resource.data.get('isBoosted', false) == resource.data.get('isBoosted', false)
         && request.resource.data.get('boostExpiresAt', null) == resource.data.get('boostExpiresAt', null)
@@ -118,7 +106,7 @@ service cloud.firestore {
           && proFieldsUnchanged()
           && (
             (
-              // 1A. Edición de perfil, solicitud de retiro o gasto válido de Diamantes (el saldo NUNCA puede subir)
+              // 1A. Edición de perfil o solicitud de retiro (diamonds, coins, PRO y Boost son 100% servidor-only)
               (
                 (
                   request.resource.data.earningsDiamonds == resource.data.earningsDiamonds
@@ -131,10 +119,8 @@ service cloud.firestore {
                      == (resource.data.earningsDiamonds + resource.data.get('pendingWithdrawalDiamonds', 0))
                 )
               )
-              && request.resource.data.get('coins', 0) <= resource.data.get('coins', 0)
-              && request.resource.data.get('coins', 0) >= 0
-              && request.resource.data.get('diamonds', 0) <= resource.data.get('diamonds', 0)
-              && request.resource.data.get('diamonds', 0) >= 0
+              && request.resource.data.get('coins', 0) == resource.data.get('coins', 0)
+              && request.resource.data.get('diamonds', 0) == resource.data.get('diamonds', 0)
             )
             || (
               // 1B. Traspaso interno estricto 1:1 de Diamantes Ganados (earningsDiamonds) -> Diamantes Disponibles (diamonds)
@@ -158,32 +144,15 @@ service cloud.firestore {
           && request.resource.data.likesCount == resource.data.get('likesCount', 0) + 1
           && !exists(/databases/$(database)/documents/likes/$(request.auth.uid + '_' + userId))
           && existsAfter(/databases/$(database)/documents/likes/$(request.auth.uid + '_' + userId))
-        )
-        || (
-          // 3. Otro usuario enviando un Regalo Virtual o desbloqueando una Foto Exclusiva VIP:
-          // Exige prueba atómica (get vs getAfter) de que al emisor se le descontó EXACTAMENTE esa misma cantidad de sus Diamantes.
-          isSignedIn()
-          && request.auth.uid != userId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['giftsReceivedCount', 'earningsDiamonds', 'giftCounts', 'updatedAt'])
-          && request.resource.data.giftsReceivedCount == resource.data.get('giftsReceivedCount', 0) + 1
-          && request.resource.data.giftCounts is map
-          && isValidGiftValue(request.resource.data.earningsDiamonds - resource.data.get('earningsDiamonds', 0))
-          && (
-            getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('diamonds', 0)
-            + getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('coins', 0)
-          )
-             == (
-               get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('diamonds', 0)
-               + get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('coins', 0)
-             )
-                - (request.resource.data.earningsDiamonds - resource.data.get('earningsDiamonds', 0))
         );
 
       allow delete: if false;
 
-      // ==================== DATOS PRIVADOS DEL USUARIO (COBRO, DESBLOQUEOS Y TOKENS FCM) ====================
+      // ==================== DATOS PRIVADOS DEL USUARIO ====================
+      // `unlocks` (Likes revelados, Chats y Fotos VIP) es 100% solo lectura para el usuario; solo Admin SDK escribe en él.
       match /private/{docId} {
-        allow read, write: if isOwner(userId) || isAdmin();
+        allow read: if isOwner(userId) || isAdmin();
+        allow write: if docId != 'unlocks' && (isOwner(userId) || isAdmin());
       }
     }
 
@@ -282,29 +251,22 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // ==================== REGISTRO DE REGALOS Y FOTOS EXCLUSIVAS ====================
+    // ==================== REGISTRO DE REGALOS Y FOTOS EXCLUSIVAS (SERVIDOR-ONLY) ====================
     match /giftTransactions/{txId} {
       allow read: if isSignedIn() && (
         resource.data.senderId == request.auth.uid ||
         resource.data.receiverId == request.auth.uid ||
         isAdmin()
       );
-      allow create: if isSignedIn()
-        && request.resource.data.senderId == request.auth.uid
-        && request.resource.data.receiverId != request.auth.uid
-        && isValidGiftValue(request.resource.data.get('diamondsCost', request.resource.data.get('coinsCost', 0)));
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
-    // ==================== PUBLICIDAD RECOMPENSADA (IMPRESIONES) ====================
+    // ==================== PUBLICIDAD RECOMPENSADA (IMPRESIONES SERVIDOR-ONLY) ====================
     match /adImpressions/{impId} {
       allow read: if isSignedIn() && (
         resource.data.userId == request.auth.uid || isAdmin()
       );
-      allow create: if isSignedIn()
-        && request.resource.data.userId == request.auth.uid
-        && request.resource.data.purpose in ['reveal_like', 'unlock_chat'];
-      allow update, delete: if false;
+      allow create, update, delete: if false;
     }
 
     // ==================== REPORTES DE SEGURIDAD ====================

@@ -1,33 +1,42 @@
 import {
-  addDoc,
-  arrayUnion,
   collection,
   doc,
-  increment,
   limit,
   onSnapshot,
   orderBy,
   query,
-  runTransaction,
-  serverTimestamp,
-  setDoc,
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { auth, db } from '../config/firebase';
 import { AD_REWARD_CONFIG, EXCLUSIVE_PHOTO_DEFAULT_COST } from '../config/constants';
-import {
-  buildExclusivePhotoKey,
-  buildMatchId,
-  splitDiamondDeduction,
-  toMillis,
-} from '../utils/formatters';
-import { sendPushNotificationToUser } from './pushNotificationService';
+import { toMillis } from '../utils/formatters';
 
 function getUnlocksRef(uid) {
   return doc(db, 'users', uid, 'private', 'unlocks');
 }
 
+async function callEconomySpend(payload) {
+  const currentUser = auth?.currentUser;
+  if (!currentUser) {
+    throw new Error('Debes iniciar sesión para realizar esta operación.');
+  }
+  const idToken = await currentUser.getIdToken();
+  const res = await fetch('/api/economy/spend', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.error || 'No se pudo completar la operación en el servidor.');
+  }
+  return data;
+}
+
 /**
- * Suscribe de forma estrictamente privada a los desbloqueos (Likes revelados y Chats desbloqueados)
+ * Suscribe de forma estrictamente privada a los desbloqueos (Likes revelados, Chats y Fotos VIP)
  * del usuario autenticado.
  */
 export function subscribeUserUnlocks(uid, callback) {
@@ -73,15 +82,13 @@ export function subscribeUserUnlocks(uid, callback) {
 }
 
 /**
- * Registra un desbloqueo obtenido gratuitamente tras ver un anuncio publicitario completo.
- * También guarda la impresión para métricas del Panel Super Admin.
+ * Registra en el servidor un desbloqueo obtenido gratuitamente tras ver un anuncio completo.
  */
 export async function recordAdRewardUnlock({
   uid,
   purpose,
   targetUid,
   provider = AD_REWARD_CONFIG.provider,
-  estimatedRevenueUSD = Number((AD_REWARD_CONFIG.estimatedAdCpmUSD / 1000).toFixed(4)),
 }) {
   if (!uid || !targetUid) {
     throw new Error('Datos inválidos para registrar la recompensa del anuncio.');
@@ -90,49 +97,16 @@ export async function recordAdRewardUnlock({
     throw new Error('Tipo de recompensa publicitaria no soportado.');
   }
 
-  const unlocksRef = getUnlocksRef(uid);
-  const fieldName = purpose === 'reveal_like' ? 'revealedLikeIds' : 'chatUnlockedUserIds';
-
-  await setDoc(
-    unlocksRef,
-    {
-      [fieldName]: arrayUnion(targetUid),
-      totalAdsWatched: increment(1),
-      updatedAt: serverTimestamp(),
-    },
-    { merge: true }
-  );
-
-  // Registro de auditoría / ingresos estimados de publicidad para el administrador
-  try {
-    await addDoc(collection(db, 'adImpressions'), {
-      userId: uid,
-      targetUserId: targetUid,
-      purpose,
-      provider,
-      estimatedRevenueUSD: Number(Number(estimatedRevenueUSD || 0.005).toFixed(4)),
-      createdAt: serverTimestamp(),
-    });
-  } catch {
-    // No bloquear la experiencia del usuario si las reglas de adImpressions aún no se publican
-  }
-
-  return { unlocked: true, targetUid, purpose };
-}
-
-function buildBalanceUpdate(userData, nextBalances) {
-  const payload = {
-    diamonds: nextBalances.diamonds,
-    updatedAt: serverTimestamp(),
-  };
-  if (Number(userData?.coins || 0) !== nextBalances.coins) {
-    payload.coins = nextBalances.coins;
-  }
-  return payload;
+  return callEconomySpend({
+    action: 'ad_unlock',
+    purpose,
+    targetUid,
+    provider,
+  });
 }
 
 /**
- * Desbloquea un Like específico gastando Diamantes (💎) de forma atómica.
+ * Desbloquea un Like específico gastando Diamantes (💎) de forma autoritativa en el servidor.
  */
 export async function unlockLikeWithDiamonds({
   uid,
@@ -140,47 +114,16 @@ export async function unlockLikeWithDiamonds({
   costDiamonds = AD_REWARD_CONFIG.unlockLikeDiamonds,
 }) {
   if (!uid || !targetUid) throw new Error('Perfil inválido.');
-  const cleanCost = Math.max(1, Math.floor(Number(costDiamonds || AD_REWARD_CONFIG.unlockLikeDiamonds)));
-  const userRef = doc(db, 'users', uid);
-  const unlocksRef = getUnlocksRef(uid);
-
-  await runTransaction(db, async (transaction) => {
-    const [userSnap, unlocksSnap] = await Promise.all([
-      transaction.get(userRef),
-      transaction.get(unlocksRef),
-    ]);
-    if (!userSnap.exists()) throw new Error('Perfil de usuario no encontrado.');
-
-    const existingRevealed = Array.isArray(unlocksSnap.data()?.revealedLikeIds)
-      ? unlocksSnap.data().revealedLikeIds
-      : [];
-    if (existingRevealed.includes(targetUid)) {
-      return;
-    }
-
-    const userData = userSnap.data();
-    const nextBalances = splitDiamondDeduction(userData, cleanCost);
-    if (!nextBalances) {
-      throw new Error(`Necesitas ${cleanCost} 💎 para revelar este Like al instante.`);
-    }
-
-    transaction.update(userRef, buildBalanceUpdate(userData, nextBalances));
-
-    transaction.set(
-      unlocksRef,
-      {
-        revealedLikeIds: Array.from(new Set([...existingRevealed, targetUid])),
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
+  const res = await callEconomySpend({
+    action: 'unlock_like',
+    targetUid,
+    costDiamonds,
   });
-
-  return { unlocked: true, targetUid, costDiamonds: cleanCost };
+  return { unlocked: true, targetUid, costDiamonds: res.costDiamonds ?? costDiamonds };
 }
 
 /**
- * Desbloquea todos los Likes pendientes de una vez con Diamantes (💎).
+ * Desbloquea todos los Likes pendientes de una vez con Diamantes (💎) en el servidor.
  */
 export async function unlockAllLikesWithDiamonds({
   uid,
@@ -189,49 +132,20 @@ export async function unlockAllLikesWithDiamonds({
 }) {
   const cleanIds = Array.from(new Set(targetUids.filter(Boolean)));
   if (!uid || cleanIds.length === 0) throw new Error('No hay Likes pendientes por revelar.');
-  const cleanCost = Math.max(
-    1,
-    Math.floor(Number(costDiamonds || AD_REWARD_CONFIG.unlockAllLikesDiamonds))
-  );
 
-  const userRef = doc(db, 'users', uid);
-  const unlocksRef = getUnlocksRef(uid);
-
-  await runTransaction(db, async (transaction) => {
-    const [userSnap, unlocksSnap] = await Promise.all([
-      transaction.get(userRef),
-      transaction.get(unlocksRef),
-    ]);
-    if (!userSnap.exists()) throw new Error('Perfil de usuario no encontrado.');
-
-    const userData = userSnap.data();
-    const nextBalances = splitDiamondDeduction(userData, cleanCost);
-    if (!nextBalances) {
-      throw new Error(`Necesitas ${cleanCost} 💎 para revelar todos tus Likes al instante.`);
-    }
-
-    const existingRevealed = Array.isArray(unlocksSnap.data()?.revealedLikeIds)
-      ? unlocksSnap.data().revealedLikeIds
-      : [];
-    const merged = Array.from(new Set([...existingRevealed, ...cleanIds]));
-
-    transaction.update(userRef, buildBalanceUpdate(userData, nextBalances));
-
-    transaction.set(
-      unlocksRef,
-      {
-        revealedLikeIds: merged,
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
+  const res = await callEconomySpend({
+    action: 'unlock_all_likes',
+    targetUids: cleanIds,
+    costDiamonds,
   });
-
-  return { unlockedCount: cleanIds.length, costDiamonds: cleanCost };
+  return {
+    unlockedCount: res.unlockedCount ?? cleanIds.length,
+    costDiamonds: res.costDiamonds ?? costDiamonds,
+  };
 }
 
 /**
- * Desbloquea el acceso para enviar mensaje a un perfil sin Match gastando Diamantes (💎) atómicamente.
+ * Desbloquea el acceso para enviar mensaje a un perfil sin Match en el servidor.
  */
 export async function unlockChatWithDiamonds({
   uid,
@@ -239,48 +153,16 @@ export async function unlockChatWithDiamonds({
   costDiamonds = AD_REWARD_CONFIG.unlockChatDiamonds,
 }) {
   if (!uid || !targetUid) throw new Error('Perfil inválido.');
-  const cleanCost = Math.max(1, Math.floor(Number(costDiamonds || AD_REWARD_CONFIG.unlockChatDiamonds)));
-  const userRef = doc(db, 'users', uid);
-  const unlocksRef = getUnlocksRef(uid);
-
-  await runTransaction(db, async (transaction) => {
-    const [userSnap, unlocksSnap] = await Promise.all([
-      transaction.get(userRef),
-      transaction.get(unlocksRef),
-    ]);
-    if (!userSnap.exists()) throw new Error('Perfil de usuario no encontrado.');
-
-    const existingChats = Array.isArray(unlocksSnap.data()?.chatUnlockedUserIds)
-      ? unlocksSnap.data().chatUnlockedUserIds
-      : [];
-    if (existingChats.includes(targetUid)) {
-      return;
-    }
-
-    const userData = userSnap.data();
-    const nextBalances = splitDiamondDeduction(userData, cleanCost);
-    if (!nextBalances) {
-      throw new Error(`Necesitas ${cleanCost} 💎 para abrir este chat sin anuncios.`);
-    }
-
-    transaction.update(userRef, buildBalanceUpdate(userData, nextBalances));
-
-    transaction.set(
-      unlocksRef,
-      {
-        chatUnlockedUserIds: Array.from(new Set([...existingChats, targetUid])),
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
+  const res = await callEconomySpend({
+    action: 'unlock_chat',
+    targetUid,
+    costDiamonds,
   });
-
-  return { unlocked: true, targetUid, costDiamonds: cleanCost };
+  return { unlocked: true, targetUid, costDiamonds: res.costDiamonds ?? costDiamonds };
 }
 
 /**
- * Desbloquea una Foto Exclusiva VIP del álbum de otro perfil pagando Diamantes (15 💎 por defecto)
- * y acredita atómicamente esos mismos Diamantes como ganancia retirable (`earningsDiamonds`) al creador.
+ * Desbloquea una Foto Exclusiva VIP y acredita Diamantes Ganados (`earningsDiamonds`) al creador desde el servidor.
  */
 export async function unlockExclusivePhotoWithDiamonds({
   sender,
@@ -294,97 +176,17 @@ export async function unlockExclusivePhotoWithDiamonds({
     throw new Error('Datos inválidos para desbloquear la Foto Exclusiva VIP.');
   }
 
-  const cleanCost = Math.max(1, Math.floor(Number(costDiamonds || EXCLUSIVE_PHOTO_DEFAULT_COST)));
-  const photoKey = buildExclusivePhotoKey(targetUid, photoUrl);
-  const senderRef = doc(db, 'users', senderUid);
-  const receiverRef = doc(db, 'users', targetUid);
-  const unlocksRef = getUnlocksRef(senderUid);
-  const giftTxRef = doc(collection(db, 'giftTransactions'));
-
-  let alreadyUnlocked = false;
-
-  await runTransaction(db, async (transaction) => {
-    const [senderSnap, receiverSnap, unlocksSnap] = await Promise.all([
-      transaction.get(senderRef),
-      transaction.get(receiverRef),
-      transaction.get(unlocksRef),
-    ]);
-
-    if (!senderSnap.exists() || !receiverSnap.exists()) {
-      throw new Error('El perfil ya no está disponible.');
-    }
-
-    const existingPhotos = Array.isArray(unlocksSnap.data()?.unlockedPhotoKeys)
-      ? unlocksSnap.data().unlockedPhotoKeys
-      : [];
-    if (existingPhotos.includes(photoKey)) {
-      alreadyUnlocked = true;
-      return;
-    }
-
-    const senderData = senderSnap.data();
-    const receiverData = receiverSnap.data();
-    const nextBalances = splitDiamondDeduction(senderData, cleanCost);
-    if (!nextBalances) {
-      throw new Error(
-        `Necesitas ${cleanCost} 💎 para desbloquear esta Foto Exclusiva VIP (o hazte Conoscamosnos PRO para verlas todas gratis).`
-      );
-    }
-
-    const receiverGiftsCount = Number(receiverData.giftsReceivedCount || 0);
-    const receiverEarnings = Number(receiverData.earningsDiamonds || 0);
-    const prevGiftCounts =
-      receiverData.giftCounts && typeof receiverData.giftCounts === 'object'
-        ? { ...receiverData.giftCounts }
-        : {};
-    prevGiftCounts.exclusive_photo = Number(prevGiftCounts.exclusive_photo || 0) + 1;
-
-    transaction.update(senderRef, buildBalanceUpdate(senderData, nextBalances));
-
-    transaction.update(receiverRef, {
-      giftsReceivedCount: receiverGiftsCount + 1,
-      earningsDiamonds: receiverEarnings + cleanCost,
-      giftCounts: prevGiftCounts,
-      updatedAt: serverTimestamp(),
-    });
-
-    transaction.set(
-      unlocksRef,
-      {
-        unlockedPhotoKeys: Array.from(new Set([...existingPhotos, photoKey])),
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
-
-    transaction.set(giftTxRef, {
-      senderId: senderUid,
-      senderName: sender.name || senderData.name || 'Usuario',
-      receiverId: targetUid,
-      receiverName: targetUser.name || receiverData.name || 'Usuario',
-      giftId: 'exclusive_photo',
-      giftName: 'Foto Exclusiva VIP',
-      giftIcon: '📸',
-      photoUrl,
-      coinsCost: cleanCost,
-      diamondsCost: cleanCost,
-      diamondsCredited: cleanCost,
-      matchId: buildMatchId(senderUid, targetUid),
-      createdAt: serverTimestamp(),
-    });
+  const res = await callEconomySpend({
+    action: 'unlock_exclusive_photo',
+    targetUid,
+    photoUrl,
+    costDiamonds,
   });
-
-  if (!alreadyUnlocked) {
-    sendPushNotificationToUser({
-      recipientUid: targetUid,
-      type: 'photo_unlock',
-      title: '📸 ¡Desbloquearon tu Foto Exclusiva VIP!',
-      body: `${sender.name || 'Alguien'} desbloqueó una foto de tu Álbum VIP (+${cleanCost} 💎 retirables).`,
-      link: '/app',
-    });
-  }
-
-  return { unlocked: true, photoKey, costDiamonds: cleanCost };
+  return {
+    unlocked: true,
+    photoKey: res.photoKey,
+    costDiamonds: res.costDiamonds ?? costDiamonds,
+  };
 }
 
 /**
