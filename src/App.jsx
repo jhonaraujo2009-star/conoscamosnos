@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
-import { Flame, LogOut, ShieldAlert } from 'lucide-react';
-import { getIntentionMood, MIN_AGE } from './config/constants';
+import { Coins, Flame, LogOut, Play, ShieldAlert, Sparkles, Tv, X } from 'lucide-react';
+import { AD_REWARD_CONFIG, getIntentionMood, MIN_AGE } from './config/constants';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { subscribeUserUnlocks } from './services/adRewardService';
+import {
+  recordAdRewardUnlock,
+  subscribeUserUnlocks,
+  unlockChatWithCoins,
+} from './services/adRewardService';
+import { triggerMonetagZoneTag } from './services/monetagLoader';
 import { logoutUser } from './services/authService';
 import {
   sendVirtualGift,
@@ -39,6 +44,7 @@ import SafetyCenterModal from './components/profile/SafetyCenterModal';
 import CoinStoreModal from './components/monetization/CoinStoreModal';
 import EarningsWithdrawModal from './components/monetization/EarningsWithdrawModal';
 import GiftNotificationsModal from './components/monetization/GiftNotificationsModal';
+import RewardedAdModal from './components/monetization/RewardedAdModal';
 import BoostModal from './components/home/BoostModal';
 import AdminDashboardPage from './components/admin/AdminDashboardPage';
 import AdminPanelModal from './components/admin/AdminPanelModal';
@@ -111,6 +117,9 @@ function UserAppView({ onSuccess, onError }) {
   const [giftGateTarget, setGiftGateTarget] = useState(null);
   const [sendingGateGiftId, setSendingGateGiftId] = useState(null);
   const [gateGiftAnim, setGateGiftAnim] = useState(null);
+  const [likeChatGateTarget, setLikeChatGateTarget] = useState(null);
+  const [likeChatAdTarget, setLikeChatAdTarget] = useState(null);
+  const [busyLikeChatCoins, setBusyLikeChatCoins] = useState(false);
 
   const [coinStoreOpen, setCoinStoreOpen] = useState(false);
   const [withdrawalsOpen, setWithdrawalsOpen] = useState(false);
@@ -152,6 +161,9 @@ function UserAppView({ onSuccess, onError }) {
     setGiftGateTarget(null);
     setSendingGateGiftId(null);
     setGateGiftAnim(null);
+    setLikeChatGateTarget(null);
+    setLikeChatAdTarget(null);
+    setBusyLikeChatCoins(false);
     setReceivedGifts([]);
     setOptimisticReadMap({});
     setUserUnlocks({ revealedLikeIds: [], chatUnlockedUserIds: [], totalAdsWatched: 0 });
@@ -318,7 +330,7 @@ function UserAppView({ onSuccess, onError }) {
   }, [matches, userProfile?.uid, userProfile?.blockedUsers, optimisticReadMap]);
 
   const handleStartDirectChat = useCallback(
-    async (targetUser) => {
+    async (targetUser, options = {}) => {
       if (!userProfile?.uid || !targetUser) return;
       const targetUid = targetUser.uid || targetUser.id;
       if (!targetUid || targetUid === userProfile.uid) return;
@@ -347,6 +359,19 @@ function UserAppView({ onSuccess, onError }) {
           return;
         }
 
+        // Si es una persona que le dio Like (y no tienen chat todavía), exigir 10 monedas o 1 anuncio antes de chatear
+        const isIncomingLiker = receivedLikes.some((like) => like.fromUserId === targetUid);
+        const isLikeChatUnlocked =
+          Boolean(options.skipLikeChatGate) ||
+          Boolean(existingMatch) ||
+          (userUnlocks?.chatUnlockedUserIds || []).includes(targetUid);
+
+        if (isIncomingLiker && !isLikeChatUnlocked) {
+          setSelectedProfile(null);
+          setLikeChatGateTarget(freshTarget);
+          return;
+        }
+
         const res = await openOrCreateDirectChat({
           currentUser: userProfile,
           targetUser: freshTarget,
@@ -361,8 +386,59 @@ function UserAppView({ onSuccess, onError }) {
         handleError(err.message || 'No se pudo abrir la conversación privada.');
       }
     },
-    [userProfile, matches, handleOpenChatSession, handleError]
+    [userProfile, matches, receivedLikes, userUnlocks, handleOpenChatSession, handleError]
   );
+
+  const handleUnlockLikeChatWithCoins = useCallback(
+    async (target) => {
+      if (!userProfile?.uid || !target || busyLikeChatCoins) return;
+      const targetUid = target.uid || target.id;
+      const cost = AD_REWARD_CONFIG.unlockLikeChatCoins;
+      if (Number(userProfile.coins || 0) < cost) {
+        setLikeChatGateTarget(null);
+        setLikeChatAdTarget(null);
+        handleError(`Necesitas ${cost} monedas. Recarga en la tienda o mira 1 anuncio gratis.`);
+        setCoinStoreOpen(true);
+        return;
+      }
+
+      setBusyLikeChatCoins(true);
+      try {
+        await unlockChatWithCoins({
+          uid: userProfile.uid,
+          targetUid,
+          costCoins: cost,
+        });
+        setLikeChatGateTarget(null);
+        setLikeChatAdTarget(null);
+        handleSuccess(`✨ Chat desbloqueado con ${target.name || 'esta persona'} al instante.`);
+        await handleStartDirectChat(target, { skipLikeChatGate: true });
+      } catch (err) {
+        handleError(err.message || 'No se pudo desbloquear el chat.');
+      } finally {
+        setBusyLikeChatCoins(false);
+      }
+    },
+    [userProfile, busyLikeChatCoins, handleError, handleSuccess, handleStartDirectChat]
+  );
+
+  const handleLikeChatAdCompleted = useCallback(async () => {
+    if (!userProfile?.uid || !likeChatAdTarget) return;
+    const target = likeChatAdTarget;
+    const targetUid = target.uid || target.id;
+    try {
+      await recordAdRewardUnlock({
+        uid: userProfile.uid,
+        purpose: 'unlock_chat',
+        targetUid,
+      });
+      setLikeChatAdTarget(null);
+      handleSuccess(`🎉 ¡Anuncio completado! Chat abierto gratis con ${target.name || 'esta persona'}.`);
+      await handleStartDirectChat(target, { skipLikeChatGate: true });
+    } catch (err) {
+      handleError(err.message || 'No se pudo registrar el desbloqueo del chat.');
+    }
+  }, [userProfile?.uid, likeChatAdTarget, handleSuccess, handleStartDirectChat, handleError]);
 
   const handleSendGiftToUnlockChat = useCallback(
     async (gift) => {
@@ -565,6 +641,98 @@ function UserAppView({ onSuccess, onError }) {
         onClose={() => setGiftGateTarget(null)}
         onSelectGift={handleSendGiftToUnlockChat}
         onOpenCoinStore={() => setCoinStoreOpen(true)}
+      />
+
+      {likeChatGateTarget && (
+        <div className="fixed inset-0 z-[72] bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="w-full max-w-md bg-[#120911] text-white border border-amber-300/20 rounded-t-[32px] sm:rounded-[32px] p-5 space-y-4 shadow-[0_24px_80px_rgba(0,0,0,0.65)] animate-sheet-up">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-300 via-[#FF2E54] to-fuchsia-600 text-white flex items-center justify-center shadow-lg shrink-0">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-amber-300">
+                    Desbloquear mensaje
+                  </span>
+                  <h3 className="font-display text-base font-black text-white leading-tight">
+                    Enviar mensaje a {likeChatGateTarget.name}
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLikeChatGateTarget(null)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-zinc-300 flex items-center justify-center shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              Ya descubriste quién te dio Me Gusta. Elige ver 1 anuncio gratuito para escribirle sin costo o desbloquea el chat al instante con {AD_REWARD_CONFIG.unlockLikeChatCoins} monedas.
+            </p>
+
+            <div className="space-y-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  const target = likeChatGateTarget;
+                  if (AD_REWARD_CONFIG.provider === 'monetag') {
+                    triggerMonetagZoneTag();
+                  }
+                  setLikeChatGateTarget(null);
+                  setLikeChatAdTarget(target);
+                }}
+                className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 text-zinc-950 font-black text-xs sm:text-sm shadow-lg shadow-amber-500/20 hover:brightness-105 active:scale-[0.99] transition flex items-center justify-between"
+              >
+                <span className="flex items-center gap-2">
+                  <Play className="w-4 h-4 fill-zinc-950" />
+                  Ver 1 anuncio y enviar mensaje gratis
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-zinc-950/15 text-[10px] font-black uppercase">
+                  Gratis
+                </span>
+              </button>
+
+              <button
+                type="button"
+                disabled={busyLikeChatCoins}
+                onClick={() => handleUnlockLikeChatWithCoins(likeChatGateTarget)}
+                className="w-full py-3.5 px-4 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/15 text-white font-extrabold text-xs sm:text-sm transition flex items-center justify-between disabled:opacity-60"
+              >
+                <span className="flex items-center gap-2">
+                  <Coins className="w-4 h-4 text-amber-400" />
+                  {busyLikeChatCoins
+                    ? 'Desbloqueando...'
+                    : `Desbloquear chat con ${AD_REWARD_CONFIG.unlockLikeChatCoins} monedas`}
+                </span>
+                <span className="text-[11px] font-bold text-amber-300">
+                  Tienes {userProfile?.coins || 0}
+                </span>
+              </button>
+            </div>
+
+            <div className="flex items-center justify-center gap-1.5 text-[10px] text-zinc-400 font-semibold pt-1">
+              <Tv className="w-3.5 h-3.5 text-amber-300" />
+              Sin suscripciones obligatorias · Tú eliges anuncio gratis o monedas
+            </div>
+          </div>
+        </div>
+      )}
+
+      <RewardedAdModal
+        isOpen={Boolean(likeChatAdTarget)}
+        purpose="unlock_chat"
+        targetName={likeChatAdTarget?.name || 'esta persona'}
+        coinCost={AD_REWARD_CONFIG.unlockLikeChatCoins}
+        onClose={() => setLikeChatAdTarget(null)}
+        onRewardEarned={handleLikeChatAdCompleted}
+        onUseCoinsInstead={() => {
+          if (likeChatAdTarget) {
+            handleUnlockLikeChatWithCoins(likeChatAdTarget);
+          }
+        }}
       />
 
       <GiftAnimationOverlay

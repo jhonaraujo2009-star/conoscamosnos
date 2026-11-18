@@ -21,6 +21,7 @@ import {
   unlockChatWithCoins,
   unlockLikeWithCoins,
 } from '../../services/adRewardService';
+import { triggerMonetagZoneTag } from '../../services/monetagLoader';
 import { getUserById, subscribePopularUsers } from '../../services/userService';
 import {
   formatUserDistanceLabel,
@@ -187,6 +188,10 @@ export default function LikesScreen({
   const likesCount = likerProfiles.length;
   const lockedLikers = likerProfiles.filter((u) => !revealedSet.has(u.uid || u.id));
   const userCoins = Number(currentUser?.coins || 0);
+  const unlockAllCost = Math.min(
+    AD_REWARD_CONFIG.unlockAllLikesCoins,
+    lockedLikers.length * AD_REWARD_CONFIG.unlockLikeCoins
+  );
 
   const handleCardTap = (user) => {
     const uid = user.uid || user.id;
@@ -233,7 +238,7 @@ export default function LikesScreen({
         setChoiceModal(null);
         setActiveAd(null);
         onSuccess?.(`✨ Chat desbloqueado con ${user.name} al instante.`);
-        onStartChat?.(user);
+        onStartChat?.(user, { skipLikeChatGate: true });
       } else {
         await unlockLikeWithCoins({ uid: currentUser.uid, targetUid, costCoins: cost });
         setChoiceModal(null);
@@ -249,7 +254,7 @@ export default function LikesScreen({
 
   const handleUnlockAllLikesWithCoins = async () => {
     if (!currentUser?.uid || lockedLikers.length === 0 || busyCoinAction) return;
-    const cost = AD_REWARD_CONFIG.unlockAllLikesCoins;
+    const cost = unlockAllCost;
     if (userCoins < cost) {
       setChoiceModal(null);
       onError?.(`Necesitas ${cost} monedas para revelar todos los Likes de una vez.`);
@@ -282,7 +287,7 @@ export default function LikesScreen({
       setActiveAd(null);
       if (purpose === 'unlock_chat') {
         onSuccess?.(`🎉 ¡Anuncio completado! Chat abierto gratis con ${user.name}.`);
-        onStartChat?.(user);
+        onStartChat?.(user, { skipLikeChatGate: true });
       } else {
         onSuccess?.(`💘 ¡Revelaste a ${user.name} gratis viendo el anuncio!`);
       }
@@ -354,7 +359,7 @@ export default function LikesScreen({
                   </span>
                 </div>
                 <p className="text-xs text-rose-100/85 leading-relaxed">
-                  Toca cualquier perfil difuminado para revelarlo <strong>gratis viendo 1 anuncio breve</strong> o al instante con tus monedas.
+                  Toca cualquier perfil difuminado que te dio ❤️ en Swipe para desbloquearlo por <strong>{AD_REWARD_CONFIG.unlockLikeCoins} monedas</strong> o <strong>gratis viendo 1 anuncio</strong>.
                 </p>
               </div>
             )}
@@ -554,7 +559,7 @@ export default function LikesScreen({
               className="bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white rounded-full py-3.5 px-3 text-xs font-extrabold shadow-md flex items-center justify-center gap-1.5 active:scale-[0.99] transition-transform disabled:opacity-50"
             >
               <Coins className="w-3.5 h-3.5" />
-              Ver Todos ({AD_REWARD_CONFIG.unlockAllLikesCoins} 🪙)
+              Ver Todos ({unlockAllCost} 🪙)
             </button>
           </div>
         ) : (
@@ -621,11 +626,14 @@ export default function LikesScreen({
             </div>
 
             <div className="p-5 space-y-3 bg-[#F4F4F6]">
-              {/* Opción 1: Anuncio Publicitario Gratis */}
+              {/* Opción 1: Anuncio Publicitario Gratis (Monetag zona 311878 solo para quien no paga 10 monedas) */}
               <button
                 type="button"
                 onClick={() => {
                   const target = choiceModal;
+                  if (AD_REWARD_CONFIG.provider === 'monetag') {
+                    triggerMonetagZoneTag();
+                  }
                   setChoiceModal(null);
                   setActiveAd({ purpose: target.mode, user: target.user });
                 }}
@@ -640,14 +648,16 @@ export default function LikesScreen({
                       <p className="text-sm font-extrabold text-zinc-900">
                         {choiceModal.mode === 'unlock_chat'
                           ? 'Enviar mensaje gratis'
-                          : 'Ver perfil gratis'}
+                          : 'Desbloquear foto y perfil gratis'}
                       </p>
                       <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[9.5px] font-black uppercase">
                         $0
                       </span>
                     </div>
                     <p className="text-[11px] text-zinc-500 mt-0.5">
-                      Mira 1 anuncio publicitario corto ({AD_REWARD_CONFIG.adDurationSeconds}s) y desbloquea sin gastar monedas.
+                      {choiceModal.mode === 'unlock_chat'
+                        ? `¿No tienes ${AD_REWARD_CONFIG.unlockLikeChatCoins} monedas? Mira 1 anuncio (${AD_REWARD_CONFIG.adDurationSeconds}s) para abrir el chat.`
+                        : `¿No tienes ${AD_REWARD_CONFIG.unlockLikeCoins} monedas? Mira 1 anuncio (${AD_REWARD_CONFIG.adDurationSeconds}s) y descubre quién te dio ❤️.`}
                     </p>
                   </div>
                 </div>
@@ -697,7 +707,7 @@ export default function LikesScreen({
                   className="w-full py-3 rounded-full bg-zinc-900 text-white text-xs font-extrabold hover:bg-zinc-800 transition flex items-center justify-center gap-1.5"
                 >
                   <Crown className="w-3.5 h-3.5 text-amber-400" />
-                  Revelar TODOS los {lockedLikers.length} Likes por {AD_REWARD_CONFIG.unlockAllLikesCoins} monedas
+                  Revelar TODOS los {lockedLikers.length} Likes por {unlockAllCost} monedas
                 </button>
               )}
             </div>

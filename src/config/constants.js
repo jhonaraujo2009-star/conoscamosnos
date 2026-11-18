@@ -181,15 +181,16 @@ export const ENABLE_DEMO_PAYMENTS = import.meta.env.VITE_ENABLE_DEMO_PAYMENTS ==
  * - Permite desbloquear Likes y enviar mensajes gratis viendo publicidad, generando ingresos a la plataforma.
  */
 export const AD_REWARD_CONFIG = {
-  provider: import.meta.env.VITE_AD_PROVIDER || 'preview',
+  provider: import.meta.env.VITE_AD_PROVIDER || 'monetag',
   adDurationSeconds: Math.max(5, Number(import.meta.env.VITE_AD_DURATION_SECONDS || 8)),
   adsenseClient: import.meta.env.VITE_ADSENSE_CLIENT || '',
-  monetagZoneId: import.meta.env.VITE_MONETAG_ZONE_ID || '',
+  monetagZoneId: import.meta.env.VITE_MONETAG_ZONE_ID || '311878',
+  monetagScriptSrc: import.meta.env.VITE_MONETAG_SCRIPT_SRC || 'https://quge5.com/88/tag.min.js',
   adsterraDirectLink: import.meta.env.VITE_ADSTERRA_DIRECT_LINK || '',
   customSponsorUrl: import.meta.env.VITE_CUSTOM_SPONSOR_URL || '',
-  unlockLikeCoins: 15,
-  unlockAllLikesCoins: 45,
-  unlockLikeChatCoins: 20,
+  unlockLikeCoins: 10,
+  unlockAllLikesCoins: 30,
+  unlockLikeChatCoins: 10,
 };
 
 export const LOOKING_FOR_OPTIONS = [

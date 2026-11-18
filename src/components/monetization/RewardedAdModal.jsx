@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { AD_REWARD_CONFIG } from '../../config/constants';
+import { triggerMonetagZoneTag } from '../../services/monetagLoader';
 
 const SPONSOR_SLIDES = [
   {
@@ -61,6 +62,11 @@ export default function RewardedAdModal({
     setClaiming(false);
     setSdkState('running');
 
+    // Integración nativa Monetag Tag (zona 311878) bajo demanda solo al ver anuncio gratis
+    if (provider === 'monetag') {
+      triggerMonetagZoneTag();
+    }
+
     // Integración nativa Google H5 Games Ad Placement API (AdSense / Ad Manager Rewarded)
     if (provider === 'adsense_h5' && typeof window !== 'undefined' && typeof window.adBreak === 'function') {
       setSdkState('sdk_waiting');
@@ -91,7 +97,7 @@ export default function RewardedAdModal({
     if (!isOpen) return;
     const handleVisibility = () => {
       // Si el proveedor abrió un enlace externo patrocinado (Adsterra/Monetag), no penalizar cambio de pestaña
-      if (sdkState === 'external_opened') return;
+      if (sdkState === 'external_opened' || provider === 'monetag') return;
       setPaused(document.visibilityState !== 'visible');
     };
     document.addEventListener('visibilitychange', handleVisibility);
