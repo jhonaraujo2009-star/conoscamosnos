@@ -88,6 +88,8 @@ export const BOOST_PLANS = [
 ];
 
 export const MAX_PHOTOS = 6;
+export const MAX_EXCLUSIVE_PHOTOS = 2;
+export const EXCLUSIVE_PHOTO_DEFAULT_COST = 15;
 export const MIN_AGE = 18;
 
 export const VIRTUAL_GIFTS = [
@@ -244,6 +246,7 @@ export const AD_REWARD_CONFIG = {
   unlockLikeCoins: 2,
   unlockAllLikesCoins: 10,
   unlockLikeChatCoins: 2,
+  unlockExclusivePhotoDiamonds: 15,
   estimatedAdCpmUSD: 5,
 };
 
@@ -351,6 +354,16 @@ export function resolveAccessPolicy(economyConfig = null) {
       Number(economyConfig?.unlockLikeChatCoins ?? AD_REWARD_CONFIG.unlockLikeChatCoins ?? 2)
     )
   );
+  const unlockExclusivePhotoDiamonds = Math.max(
+    1,
+    Math.floor(
+      Number(
+        economyConfig?.unlockExclusivePhotoDiamonds ??
+          AD_REWARD_CONFIG.unlockExclusivePhotoDiamonds ??
+          15
+      )
+    )
+  );
   const estimatedAdCpmUSD = Math.max(
     0.1,
     Number(economyConfig?.estimatedAdCpmUSD ?? AD_REWARD_CONFIG.estimatedAdCpmUSD ?? 5)
@@ -374,6 +387,7 @@ export function resolveAccessPolicy(economyConfig = null) {
     unlockLikeCoins,
     unlockAllLikesCoins,
     unlockLikeChatCoins,
+    unlockExclusivePhotoDiamonds,
     coinsPerDiamond,
     proPlans,
     estimatedAdCpmUSD,

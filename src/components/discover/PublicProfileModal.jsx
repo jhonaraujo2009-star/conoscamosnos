@@ -8,6 +8,7 @@ import {
   Crown,
   Flag,
   Flame,
+  Gem,
   Gift,
   GraduationCap,
   Heart,
@@ -21,8 +22,13 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { REPORT_REASONS, resolveAccessPolicy } from '../../config/constants';
+import {
+  EXCLUSIVE_PHOTO_DEFAULT_COST,
+  REPORT_REASONS,
+  resolveAccessPolicy,
+} from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
+import { unlockExclusivePhotoWithDiamonds } from '../../services/adRewardService';
 import { sendVirtualGift } from '../../services/chatService';
 import { checkConnectionStatus, sendLike } from '../../services/discoveryService';
 import {
@@ -41,6 +47,8 @@ import {
   getSharedInterests,
   getSpendableDiamonds,
   isBoostActive,
+  isExclusivePhoto,
+  isExclusivePhotoUnlocked,
   isGiftChatUnlocked,
   isProActive,
   isProfileVerified,
@@ -58,6 +66,7 @@ export default function PublicProfileModal({
   onClose,
   onStartChat,
   onOpenCoinStore,
+  onOpenPro,
   onSuccess,
   onError,
 }) {
@@ -123,6 +132,18 @@ export default function PublicProfileModal({
   });
   const photos =
     orderedPhotos.length > 0 ? orderedPhotos : [getPrimaryPhoto(liveTarget, 800, { seed: currentUser?.uid })];
+  const currentPhotoUrl = photos[photoIdx] || photos[0] || '';
+  const exclusiveCostDiamonds =
+    policy.unlockExclusivePhotoDiamonds || EXCLUSIVE_PHOTO_DEFAULT_COST;
+  const currentPhotoIsExclusive = isExclusivePhoto(liveTarget, currentPhotoUrl, photoIdx);
+  const currentPhotoUnlocked = isExclusivePhotoUnlocked({
+    targetUser: liveTarget,
+    photoUrl: currentPhotoUrl,
+    photoIndex: photoIdx,
+    viewerUser: currentUser,
+    userUnlocks,
+    isFreeMode: policy.isFreeMode,
+  });
 
   const online = isUserActuallyOnline(liveTarget);
   const boosted = isBoostActive(liveTarget);
@@ -174,6 +195,42 @@ export default function PublicProfileModal({
     setBusyAction('chat');
     try {
       await onStartChat?.(liveTarget);
+    } finally {
+      setBusyAction('');
+    }
+  };
+
+  const handleUnlockExclusivePhoto = async () => {
+    if (isSelf || !currentPhotoUrl || busyAction === 'unlock_photo') return;
+    const spendable = getSpendableDiamonds(currentUser);
+    if (spendable < exclusiveCostDiamonds) {
+      onError?.(
+        `Necesitas ${exclusiveCostDiamonds} 💎 para desbloquear esta Foto Exclusiva VIP (o hazte Conoscamosnos PRO).`
+      );
+      onClose?.();
+      onOpenCoinStore?.('buy');
+      return;
+    }
+    setBusyAction('unlock_photo');
+    try {
+      await unlockExclusivePhotoWithDiamonds({
+        sender: currentUser,
+        targetUser: liveTarget,
+        photoUrl: currentPhotoUrl,
+        costDiamonds: exclusiveCostDiamonds,
+      });
+      setGiftAnim({
+        giftIcon: '📸',
+        giftName: 'Foto Exclusiva VIP',
+        giftValue: exclusiveCostDiamonds,
+        diamondsCredited: exclusiveCostDiamonds,
+        isReceiver: false,
+      });
+      onSuccess?.(
+        `🔓 ¡Foto Exclusiva VIP de ${liveTarget.name} desbloqueada! (+${exclusiveCostDiamonds} 💎 acreditados a ${liveTarget.name}).`
+      );
+    } catch (err) {
+      onError?.(err.message || 'No se pudo desbloquear la Foto Exclusiva VIP.');
     } finally {
       setBusyAction('');
     }
@@ -243,16 +300,74 @@ export default function PublicProfileModal({
     <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="w-full max-w-md max-h-[94dvh] bg-white rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-2xl animate-sheet-up">
         {/* Photo Carousel */}
-        <div className="relative h-80 sm:h-96 bg-zinc-200 shrink-0">
+        <div className="relative h-80 sm:h-96 bg-zinc-200 shrink-0 overflow-hidden">
           <img
             key={`modal-photo-${photoIdx}`}
             src={optimizeCloudinaryUrl(photos[photoIdx] || getPrimaryPhoto(liveTarget), 1080)}
             alt={liveTarget.name}
-            className="w-full h-full object-cover animate-photo-reveal"
+            className={`w-full h-full object-cover animate-photo-reveal transition duration-300 ${
+              currentPhotoIsExclusive && !currentPhotoUnlocked
+                ? 'blur-2xl scale-110 brightness-75 select-none'
+                : ''
+            }`}
           />
 
           <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/55 to-transparent pointer-events-none" />
           <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/90 via-black/40 to-transparent pointer-events-none" />
+
+          {/* Overlay de Foto Exclusiva VIP Bloqueada */}
+          {currentPhotoIsExclusive && !currentPhotoUnlocked && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-5 text-center bg-black/35 backdrop-blur-xs">
+              <div className="w-full max-w-[270px] rounded-3xl bg-zinc-950/85 border border-rose-300/35 p-4 space-y-2.5 shadow-2xl text-white">
+                <div className="w-11 h-11 mx-auto rounded-2xl bg-gradient-to-br from-[#FF2E54] to-amber-500 flex items-center justify-center shadow-lg">
+                  <Lock className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <span className="px-2.5 py-0.5 rounded-full bg-rose-500/20 border border-rose-300/35 text-rose-200 text-[9.5px] font-black uppercase tracking-wider">
+                    Álbum Exclusivo VIP
+                  </span>
+                  <h4 className="font-display text-sm font-black text-white mt-1">
+                    Foto Exclusiva de {liveTarget.name}
+                  </h4>
+                  <p className="text-[10.5px] text-zinc-300 leading-snug mt-0.5">
+                    Desbloquéala para siempre ({exclusiveCostDiamonds} 💎 van directo a {liveTarget.name}) o mírala gratis siendo PRO.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={busyAction === 'unlock_photo'}
+                  onClick={handleUnlockExclusivePhoto}
+                  className="w-full py-2.5 px-3 rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 text-white text-xs font-black shadow-md hover:brightness-105 disabled:opacity-50 transition flex items-center justify-center gap-1.5"
+                >
+                  <Gem className="w-3.5 h-3.5" />
+                  {busyAction === 'unlock_photo'
+                    ? 'Desbloqueando...'
+                    : `Desbloquear por ${exclusiveCostDiamonds} 💎`}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose?.();
+                    (onOpenPro || (() => onOpenCoinStore?.('pro')))();
+                  }}
+                  className="w-full py-2 px-3 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white text-[11px] font-black shadow hover:brightness-105 transition flex items-center justify-center gap-1"
+                >
+                  <Crown className="w-3.5 h-3.5" />
+                  Ver gratis con Conoscamosnos PRO
+                </button>
+              </div>
+            </div>
+          )}
+
+          {currentPhotoIsExclusive && currentPhotoUnlocked && (
+            <div className="absolute top-16 left-3.5 z-10">
+              <span className="px-2.5 py-1 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white text-[10px] font-black inline-flex items-center gap-1 shadow">
+                <Unlock className="w-3 h-3" /> Foto Exclusiva VIP Desbloqueada
+              </span>
+            </div>
+          )}
 
           {/* Story Indicators */}
           {photos.length > 1 && (

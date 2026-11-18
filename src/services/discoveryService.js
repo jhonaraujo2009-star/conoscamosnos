@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { buildMatchId } from '../utils/formatters';
+import { sendPushNotificationToUser } from './pushNotificationService';
 
 export function subscribeReceivedLikes(currentUid, callback) {
   if (!currentUid || !db) {
@@ -221,6 +222,16 @@ export async function sendLike({
       matchId,
     };
   });
+
+  if (result.matched && !result.alreadyLiked) {
+    sendPushNotificationToUser({
+      recipientUid: toUid,
+      type: 'match',
+      title: `💘 ¡Nuevo Match con ${currentUser.name || 'alguien'}!`,
+      body: 'Se gustaron mutuamente. Entra a Conoscamosnos para enviar el primer mensaje.',
+      link: '/app',
+    });
+  }
 
   return result;
 }

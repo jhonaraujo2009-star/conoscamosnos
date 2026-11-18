@@ -5,9 +5,11 @@ import {
   Camera,
   Crown,
   Flame,
+  Gem,
   Gift,
   Globe,
   Heart,
+  Lock,
   MapPin,
   MessageCircle,
   Quote,
@@ -16,11 +18,13 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Unlock,
   X,
   Zap,
 } from 'lucide-react';
 import {
   COUNTRIES,
+  EXCLUSIVE_PHOTO_DEFAULT_COST,
   getIntentionMood,
   INTERESTED_IN_OPTIONS,
   LOOKING_FOR_OPTIONS,
@@ -28,6 +32,7 @@ import {
   resolveAccessPolicy,
 } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
+import { unlockExclusivePhotoWithDiamonds } from '../../services/adRewardService';
 import { sendTextMessage, sendVirtualGift } from '../../services/chatService';
 import { sendLike, subscribeGivenLikesCount } from '../../services/discoveryService';
 import { fetchDiscoverProfiles } from '../../services/userService';
@@ -42,6 +47,8 @@ import {
   getSharedInterests,
   getSpendableDiamonds,
   isBoostActive,
+  isExclusivePhoto,
+  isExclusivePhotoUnlocked,
   isProActive,
   isProfileVerified,
   optimizeCloudinaryUrl,
@@ -125,6 +132,7 @@ function clearPassedIds(uid) {
 
 export default function DiscoverSwipe({
   currentUser,
+  userUnlocks = null,
   isActive = true,
   scope: controlledScope,
   onScopeChange,
@@ -180,6 +188,7 @@ export default function DiscoverSwipe({
   const [giftPickerOpen, setGiftPickerOpen] = useState(false);
   const [sendingGiftId, setSendingGiftId] = useState(null);
   const [giftAnim, setGiftAnim] = useState(null);
+  const [unlockingPhoto, setUnlockingPhoto] = useState(false);
 
   // Tutorial condicional la primera vez
   const [showTutorial, setShowTutorial] = useState(() => {
@@ -600,6 +609,57 @@ export default function DiscoverSwipe({
   const verified = topCard ? isProfileVerified(topCard) : false;
   const boosted = topCard ? isBoostActive(topCard) : false;
   const topCardIsPro = topCard ? isProActive(topCard) : false;
+  const exclusiveCostDiamonds =
+    accessPolicy.unlockExclusivePhotoDiamonds || EXCLUSIVE_PHOTO_DEFAULT_COST;
+  const currentSwipePhotoUrl = topCardPhotos[photoIdx] || topCardPhotos[0] || '';
+  const currentSwipePhotoIsExclusive = topCard
+    ? isExclusivePhoto(topCard, currentSwipePhotoUrl, photoIdx)
+    : false;
+  const currentSwipePhotoUnlocked = topCard
+    ? isExclusivePhotoUnlocked({
+        targetUser: topCard,
+        photoUrl: currentSwipePhotoUrl,
+        photoIndex: photoIdx,
+        viewerUser: currentUser,
+        userUnlocks,
+        isFreeMode: accessPolicy.isFreeMode,
+      })
+    : true;
+
+  const handleUnlockSwipeExclusivePhoto = async (e) => {
+    e?.stopPropagation?.();
+    if (!topCard || !currentSwipePhotoUrl || unlockingPhoto) return;
+    if (getSpendableDiamonds(currentUser) < exclusiveCostDiamonds) {
+      onError?.(
+        `Necesitas ${exclusiveCostDiamonds} 💎 para desbloquear esta Foto Exclusiva VIP (o hazte Conoscamosnos PRO).`
+      );
+      onOpenCoinStore?.();
+      return;
+    }
+    setUnlockingPhoto(true);
+    try {
+      await unlockExclusivePhotoWithDiamonds({
+        sender: currentUser,
+        targetUser: topCard,
+        photoUrl: currentSwipePhotoUrl,
+        costDiamonds: exclusiveCostDiamonds,
+      });
+      setGiftAnim({
+        giftIcon: '📸',
+        giftName: 'Foto Exclusiva VIP',
+        giftValue: exclusiveCostDiamonds,
+        diamondsCredited: exclusiveCostDiamonds,
+        isReceiver: false,
+      });
+      onSuccess?.(
+        `🔓 ¡Foto Exclusiva VIP de ${topCard.name} desbloqueada! (+${exclusiveCostDiamonds} 💎 para ${topCard.name}).`
+      );
+    } catch (err) {
+      onError?.(err.message || 'No se pudo desbloquear la Foto Exclusiva VIP.');
+    } finally {
+      setUnlockingPhoto(false);
+    }
+  };
   const affinity = topCard ? calculateAffinityScore(currentUser, topCard) : null;
   const visibleAge = topCard ? getDisplayAge(topCard) : null;
   const distanceInfo = topCard
@@ -1090,9 +1150,54 @@ export default function DiscoverSwipe({
                 key={`${topCard.uid || topCard.id}-photo-${photoIdx}`}
                 src={optimizeCloudinaryUrl(topCardPhotos[photoIdx], 1080)}
                 alt={`${topCard.name} foto ${photoIdx + 1}`}
-                className="w-full h-full object-cover pointer-events-none animate-photo-reveal"
+                className={`w-full h-full object-cover pointer-events-none animate-photo-reveal transition duration-300 ${
+                  currentSwipePhotoIsExclusive && !currentSwipePhotoUnlocked
+                    ? 'blur-2xl scale-110 brightness-75'
+                    : ''
+                }`}
                 draggable={false}
               />
+
+              {/* Overlay para Foto Exclusiva VIP en Swipe */}
+              {currentSwipePhotoIsExclusive && !currentSwipePhotoUnlocked && (
+                <div className="absolute inset-x-6 top-24 z-30 flex flex-col items-center text-center pointer-events-auto">
+                  <div className="w-full max-w-[270px] rounded-3xl bg-zinc-950/85 border border-rose-300/35 p-4 space-y-2.5 shadow-2xl">
+                    <div className="w-10 h-10 mx-auto rounded-2xl bg-gradient-to-br from-[#FF2E54] to-amber-500 flex items-center justify-center shadow">
+                      <Lock className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-white">
+                        Foto Exclusiva VIP de {topCard.name}
+                      </p>
+                      <p className="text-[10.5px] text-zinc-300 mt-0.5 leading-snug">
+                        Desbloquéala por {exclusiveCostDiamonds} 💎 (van directo a {topCard.name}) o gratis con PRO.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={unlockingPhoto}
+                      onClick={handleUnlockSwipeExclusivePhoto}
+                      className="w-full py-2 px-3 rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 text-white text-xs font-black shadow flex items-center justify-center gap-1.5"
+                    >
+                      <Gem className="w-3.5 h-3.5" />
+                      {unlockingPhoto
+                        ? 'Desbloqueando...'
+                        : `Desbloquear por ${exclusiveCostDiamonds} 💎`}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        (onOpenPro || onOpenCoinStore)?.();
+                      }}
+                      className="w-full py-2 px-3 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white text-[11px] font-black shadow flex items-center justify-center gap-1"
+                    >
+                      <Crown className="w-3.5 h-3.5" />
+                      Ver gratis con PRO
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Viñeta cinematográfica superior e inferior (sin blur dinámico para mantener 60fps) */}
               <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/75 via-black/30 to-transparent pointer-events-none" />

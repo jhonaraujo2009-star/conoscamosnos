@@ -25,6 +25,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { usePwaInstall } from '../../hooks/usePwaInstall';
 import { logoutUser } from '../../services/authService';
 import {
+  disablePushNotifications,
+  enablePushNotifications,
+  getBrowserPushStatus,
+} from '../../services/pushNotificationService';
+import {
   saveUserPayoutAccount,
   subscribeUserPayoutAccount,
   updateUserProfile,
@@ -152,6 +157,30 @@ export default function AccountSettingsModal({
   const diamonds = Number(userProfile.earningsDiamonds || 0);
   const { netPayoutUSD } = calculateWithdrawalBreakdown(diamonds, economyConfig);
   const isDiscoverable = userProfile.discoverable !== false;
+  const pushStatus = getBrowserPushStatus();
+  const pushEnabled = Boolean(
+    userProfile.pushNotificationsEnabled && pushStatus.permission === 'granted'
+  );
+
+  const handleTogglePushNotifications = async () => {
+    if (busySetting === 'pushNotifications') return;
+    setBusySetting('pushNotifications');
+    try {
+      if (pushEnabled) {
+        await disablePushNotifications(userProfile.uid);
+        onSuccess?.('🔕 Notificaciones Push desactivadas en este perfil.');
+      } else {
+        await enablePushNotifications(userProfile.uid);
+        onSuccess?.(
+          '🔔 ¡Notificaciones Push Web (FCM) activadas! Recibirás alertas de Regalos, Matches y Mensajes.'
+        );
+      }
+    } catch (err) {
+      onError?.(err.message || 'No se pudieron activar las notificaciones Push.');
+    } finally {
+      setBusySetting('');
+    }
+  };
 
   const handleToggleSetting = async (field, nextValue) => {
     if (busySetting) return;
@@ -527,6 +556,15 @@ export default function AccountSettingsModal({
               Smart Photos y Visibilidad
             </p>
             <div className="bg-white rounded-3xl px-4 py-2 shadow-card">
+              <SettingsSwitchRow
+                icon={Bell}
+                title="Notificaciones Push Web (FCM)"
+                description="Recibe alertas en tu navegador cuando te envíen un Regalo, un Match o un mensaje nuevo aunque cierres la PWA."
+                checked={pushEnabled}
+                busy={busySetting === 'pushNotifications'}
+                accent="bg-sky-50 text-sky-600"
+                onToggle={handleTogglePushNotifications}
+              />
               <SettingsSwitchRow
                 icon={Crown}
                 title="Solo recibir chat si envían un regalo"

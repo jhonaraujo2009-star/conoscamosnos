@@ -13,8 +13,14 @@ import {
   setDoc,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { AD_REWARD_CONFIG } from '../config/constants';
-import { splitDiamondDeduction, toMillis } from '../utils/formatters';
+import { AD_REWARD_CONFIG, EXCLUSIVE_PHOTO_DEFAULT_COST } from '../config/constants';
+import {
+  buildExclusivePhotoKey,
+  buildMatchId,
+  splitDiamondDeduction,
+  toMillis,
+} from '../utils/formatters';
+import { sendPushNotificationToUser } from './pushNotificationService';
 
 function getUnlocksRef(uid) {
   return doc(db, 'users', uid, 'private', 'unlocks');
@@ -26,7 +32,12 @@ function getUnlocksRef(uid) {
  */
 export function subscribeUserUnlocks(uid, callback) {
   if (!uid || !db) {
-    callback({ revealedLikeIds: [], chatUnlockedUserIds: [], totalAdsWatched: 0 });
+    callback({
+      revealedLikeIds: [],
+      chatUnlockedUserIds: [],
+      unlockedPhotoKeys: [],
+      totalAdsWatched: 0,
+    });
     return () => {};
   }
 
@@ -34,18 +45,29 @@ export function subscribeUserUnlocks(uid, callback) {
     getUnlocksRef(uid),
     (snap) => {
       if (!snap.exists()) {
-        callback({ revealedLikeIds: [], chatUnlockedUserIds: [], totalAdsWatched: 0 });
+        callback({
+          revealedLikeIds: [],
+          chatUnlockedUserIds: [],
+          unlockedPhotoKeys: [],
+          totalAdsWatched: 0,
+        });
         return;
       }
       const data = snap.data() || {};
       callback({
         revealedLikeIds: Array.isArray(data.revealedLikeIds) ? data.revealedLikeIds : [],
         chatUnlockedUserIds: Array.isArray(data.chatUnlockedUserIds) ? data.chatUnlockedUserIds : [],
+        unlockedPhotoKeys: Array.isArray(data.unlockedPhotoKeys) ? data.unlockedPhotoKeys : [],
         totalAdsWatched: Number(data.totalAdsWatched || 0),
       });
     },
     () => {
-      callback({ revealedLikeIds: [], chatUnlockedUserIds: [], totalAdsWatched: 0 });
+      callback({
+        revealedLikeIds: [],
+        chatUnlockedUserIds: [],
+        unlockedPhotoKeys: [],
+        totalAdsWatched: 0,
+      });
     }
   );
 }
@@ -246,6 +268,119 @@ export async function unlockChatWithCoins({
   });
 
   return { unlocked: true, targetUid, costCoins };
+}
+
+/**
+ * Desbloquea una Foto Exclusiva VIP del álbum de otro perfil pagando Diamantes (15 💎 por defecto)
+ * y acredita atómicamente esos mismos Diamantes como ganancia retirable (`earningsDiamonds`) al creador.
+ */
+export async function unlockExclusivePhotoWithDiamonds({
+  sender,
+  targetUser,
+  photoUrl,
+  costDiamonds = EXCLUSIVE_PHOTO_DEFAULT_COST,
+}) {
+  const senderUid = sender?.uid || sender?.id;
+  const targetUid = targetUser?.uid || targetUser?.id;
+  if (!senderUid || !targetUid || !photoUrl || senderUid === targetUid) {
+    throw new Error('Datos inválidos para desbloquear la Foto Exclusiva VIP.');
+  }
+
+  const cleanCost = Math.max(1, Math.floor(Number(costDiamonds || EXCLUSIVE_PHOTO_DEFAULT_COST)));
+  const photoKey = buildExclusivePhotoKey(targetUid, photoUrl);
+  const senderRef = doc(db, 'users', senderUid);
+  const receiverRef = doc(db, 'users', targetUid);
+  const unlocksRef = getUnlocksRef(senderUid);
+  const giftTxRef = doc(collection(db, 'giftTransactions'));
+
+  let alreadyUnlocked = false;
+
+  await runTransaction(db, async (transaction) => {
+    const [senderSnap, receiverSnap, unlocksSnap] = await Promise.all([
+      transaction.get(senderRef),
+      transaction.get(receiverRef),
+      transaction.get(unlocksRef),
+    ]);
+
+    if (!senderSnap.exists() || !receiverSnap.exists()) {
+      throw new Error('El perfil ya no está disponible.');
+    }
+
+    const existingPhotos = Array.isArray(unlocksSnap.data()?.unlockedPhotoKeys)
+      ? unlocksSnap.data().unlockedPhotoKeys
+      : [];
+    if (existingPhotos.includes(photoKey)) {
+      alreadyUnlocked = true;
+      return;
+    }
+
+    const senderData = senderSnap.data();
+    const receiverData = receiverSnap.data();
+    const nextBalances = splitDiamondDeduction(senderData, cleanCost);
+    if (!nextBalances) {
+      throw new Error(
+        `Necesitas ${cleanCost} 💎 para desbloquear esta Foto Exclusiva VIP (o hazte Conoscamosnos PRO para verlas todas gratis).`
+      );
+    }
+
+    const receiverGiftsCount = Number(receiverData.giftsReceivedCount || 0);
+    const receiverEarnings = Number(receiverData.earningsDiamonds || 0);
+    const prevGiftCounts =
+      receiverData.giftCounts && typeof receiverData.giftCounts === 'object'
+        ? { ...receiverData.giftCounts }
+        : {};
+    prevGiftCounts.exclusive_photo = Number(prevGiftCounts.exclusive_photo || 0) + 1;
+
+    transaction.update(senderRef, {
+      diamonds: nextBalances.diamonds,
+      coins: nextBalances.coins,
+      updatedAt: serverTimestamp(),
+    });
+
+    transaction.update(receiverRef, {
+      giftsReceivedCount: receiverGiftsCount + 1,
+      earningsDiamonds: receiverEarnings + cleanCost,
+      giftCounts: prevGiftCounts,
+      updatedAt: serverTimestamp(),
+    });
+
+    transaction.set(
+      unlocksRef,
+      {
+        unlockedPhotoKeys: Array.from(new Set([...existingPhotos, photoKey])),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    transaction.set(giftTxRef, {
+      senderId: senderUid,
+      senderName: sender.name || senderData.name || 'Usuario',
+      receiverId: targetUid,
+      receiverName: targetUser.name || receiverData.name || 'Usuario',
+      giftId: 'exclusive_photo',
+      giftName: 'Foto Exclusiva VIP',
+      giftIcon: '📸',
+      photoUrl,
+      coinsCost: cleanCost,
+      diamondsCost: cleanCost,
+      diamondsCredited: cleanCost,
+      matchId: buildMatchId(senderUid, targetUid),
+      createdAt: serverTimestamp(),
+    });
+  });
+
+  if (!alreadyUnlocked) {
+    sendPushNotificationToUser({
+      recipientUid: targetUid,
+      type: 'photo_unlock',
+      title: '📸 ¡Desbloquearon tu Foto Exclusiva VIP!',
+      body: `${sender.name || 'Alguien'} desbloqueó una foto de tu Álbum VIP (+${cleanCost} 💎 retirables).`,
+      link: '/app',
+    });
+  }
+
+  return { unlocked: true, photoKey, costDiamonds: cleanCost };
 }
 
 /**

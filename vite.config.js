@@ -46,8 +46,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        globIgnores: ['sw.js', 'ad-viewer.html'],
-        navigateFallbackDenylist: [/^\/ad-viewer\.html/, /^\/api\//],
+        globIgnores: ['sw.js', 'firebase-messaging-sw.js', 'ad-viewer.html'],
+        navigateFallbackDenylist: [/^\/ad-viewer\.html/, /^\/firebase-messaging-sw\.js/, /^\/api\//],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/res\.cloudinary\.com\/.*/i,
@@ -69,7 +69,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           react: ['react', 'react-dom'],
-          firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore'],
+          firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/messaging'],
           icons: ['lucide-react'],
         },
       },

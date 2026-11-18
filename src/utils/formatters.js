@@ -19,6 +19,39 @@ export function isProActive(user) {
   return toMillis(user.proExpiresAt) > Date.now();
 }
 
+export function buildExclusivePhotoKey(targetUid, photoUrl) {
+  if (!targetUid || !photoUrl) return '';
+  return `${String(targetUid).trim()}::${String(photoUrl).trim()}`;
+}
+
+export function isExclusivePhoto(targetUser, photoUrl, photoIndex = 0) {
+  if (!targetUser || !photoUrl || photoIndex === 0) return false;
+  const list = Array.isArray(targetUser.exclusivePhotoUrls)
+    ? targetUser.exclusivePhotoUrls
+    : [];
+  return list.includes(photoUrl);
+}
+
+export function isExclusivePhotoUnlocked({
+  targetUser,
+  photoUrl,
+  photoIndex = 0,
+  viewerUser,
+  userUnlocks,
+  isFreeMode = false,
+}) {
+  if (!isExclusivePhoto(targetUser, photoUrl, photoIndex)) return true;
+  const targetUid = targetUser?.uid || targetUser?.id;
+  const viewerUid = viewerUser?.uid || viewerUser?.id;
+  if (targetUid && viewerUid && targetUid === viewerUid) return true;
+  if (isFreeMode || isProActive(viewerUser)) return true;
+  const key = buildExclusivePhotoKey(targetUid, photoUrl);
+  const unlockedList = Array.isArray(userUnlocks?.unlockedPhotoKeys)
+    ? userUnlocks.unlockedPhotoKeys
+    : [];
+  return Boolean(key && unlockedList.includes(key));
+}
+
 export function getSpendableDiamonds(user) {
   if (!user) return 0;
   return Math.max(
@@ -381,13 +414,16 @@ export function getOrderedPhotos(user, viewerSeed = '', { respectSmart = true } 
     return clean;
   }
 
+  const exclusiveSet = new Set(
+    Array.isArray(user?.exclusivePhotoUrls) ? user.exclusivePhotoUrls : []
+  );
   const bestUrl = typeof user.smartBestPhotoUrl === 'string' ? user.smartBestPhotoUrl : '';
-  if (bestUrl && clean.includes(bestUrl)) {
+  if (bestUrl && clean.includes(bestUrl) && !exclusiveSet.has(bestUrl)) {
     return [bestUrl, ...clean.filter((url) => url !== bestUrl)];
   }
 
   const leadIdx = stableHashIndex(`${user.uid || user.id || ''}:${viewerSeed}`, clean.length);
-  if (leadIdx === 0) return clean;
+  if (leadIdx === 0 || exclusiveSet.has(clean[leadIdx])) return clean;
   return [clean[leadIdx], ...clean.filter((_, i) => i !== leadIdx)];
 }
 

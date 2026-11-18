@@ -192,6 +192,8 @@ export default function ChatRoom({
       await sendTextMessage({
         matchId: match.id,
         senderId: currentUser.uid,
+        senderName: currentUser.name || 'Alguien',
+        recipientId: peerId,
         text: clean,
       });
     } catch (err) {
@@ -211,6 +213,8 @@ export default function ChatRoom({
       await sendTextMessage({
         matchId: match.id,
         senderId: currentUser.uid,
+        senderName: currentUser.name || 'Alguien',
+        recipientId: peerId,
         text: draft,
       });
     } catch (err) {
@@ -234,6 +238,8 @@ export default function ChatRoom({
       await sendImageMessage({
         matchId: match.id,
         senderId: currentUser.uid,
+        senderName: currentUser.name || 'Alguien',
+        recipientId: peerId,
         imageUrl: url,
       });
     } catch (err) {

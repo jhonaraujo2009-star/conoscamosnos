@@ -14,6 +14,7 @@ import {
   Heart,
   Home,
   Loader2,
+  Lock,
   Pencil,
   Plus,
   Quote,
@@ -22,18 +23,22 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  Unlock,
   X,
 } from 'lucide-react';
 import {
   COUNTRIES,
   ECONOMY_CONFIG,
+  EXCLUSIVE_PHOTO_DEFAULT_COST,
   GENDERS,
   INTERESTED_IN_OPTIONS,
   INTERESTS_CATALOG,
   LIFESTYLE_OPTIONS,
   LOOKING_FOR_OPTIONS,
+  MAX_EXCLUSIVE_PHOTOS,
   MAX_PHOTOS,
   MIN_AGE,
+  resolveAccessPolicy,
 } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
 import { getUserCloudinaryFolder, uploadImageToCloudinary } from '../../services/cloudinaryService';
@@ -82,6 +87,8 @@ export default function ProfileScreen({
 }) {
   const { economyConfig } = useAuth();
   const liveEconomy = economyConfig || ECONOMY_CONFIG;
+  const accessPolicy = useMemo(() => resolveAccessPolicy(liveEconomy), [liveEconomy]);
+  const exclusiveCostDiamonds = accessPolicy.unlockExclusivePhotoDiamonds || EXCLUSIVE_PHOTO_DEFAULT_COST;
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -109,7 +116,11 @@ export default function ProfileScreen({
   const [lifestyle, setLifestyle] = useState(userProfile?.lifestyle || '');
   const [interests, setInterests] = useState(userProfile?.interests || []);
   const [photos, setPhotos] = useState(userProfile?.photos || []);
+  const [exclusivePhotoUrls, setExclusivePhotoUrls] = useState(
+    userProfile?.exclusivePhotoUrls || []
+  );
   const [prompts, setPrompts] = useState(userProfile?.prompts || ['', '']);
+  const [togglingExclusiveUrl, setTogglingExclusiveUrl] = useState('');
 
   useEffect(() => {
     if (!userProfile?.uid) return;
@@ -127,6 +138,7 @@ export default function ProfileScreen({
     setLifestyle(userProfile.lifestyle || '');
     setInterests(userProfile.interests || []);
     setPhotos(userProfile.photos || []);
+    setExclusivePhotoUrls(userProfile.exclusivePhotoUrls || []);
     setPrompts(
       Array.isArray(userProfile.prompts) && userProfile.prompts.length >= 2
         ? userProfile.prompts.slice(0, 2)
@@ -262,6 +274,7 @@ export default function ProfileScreen({
         lifestyle,
         interests,
         photos,
+        exclusivePhotoUrls,
         prompts,
       });
       setEditorOpen(false);
@@ -270,6 +283,42 @@ export default function ProfileScreen({
       onError?.(err.message || 'No se pudo actualizar tu perfil.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleQuickToggleExclusive = async (e, url, idx) => {
+    e.stopPropagation();
+    if (!isOwnerSession || idx === 0 || !url || togglingExclusiveUrl) return;
+    const currentList = Array.isArray(userProfile?.exclusivePhotoUrls)
+      ? userProfile.exclusivePhotoUrls
+      : [];
+    const isCurrentlyExclusive = currentList.includes(url);
+    if (!isCurrentlyExclusive && currentList.length >= MAX_EXCLUSIVE_PHOTOS) {
+      onError?.(
+        `Puedes marcar máximo ${MAX_EXCLUSIVE_PHOTOS} fotos de tu galería como Exclusivas VIP (${exclusiveCostDiamonds} 💎).`
+      );
+      return;
+    }
+    const nextList = isCurrentlyExclusive
+      ? currentList.filter((u) => u !== url)
+      : [...currentList, url];
+
+    setTogglingExclusiveUrl(url);
+    try {
+      setExclusivePhotoUrls(nextList);
+      await updateUserProfile(userProfile.uid, {
+        photos: userPhotos,
+        exclusivePhotoUrls: nextList,
+      });
+      onSuccess?.(
+        isCurrentlyExclusive
+          ? 'Foto cambiada a pública en tu galería.'
+          : `🔒 Foto marcada como Exclusiva VIP (Desbloqueable por ${exclusiveCostDiamonds} 💎 para ti o gratis con PRO).`
+      );
+    } catch (err) {
+      onError?.(err.message || 'No se pudo actualizar la foto exclusiva.');
+    } finally {
+      setTogglingExclusiveUrl('');
     }
   };
 
@@ -707,20 +756,29 @@ export default function ProfileScreen({
                 if (url) {
                   const likeCount = Number(photoLikeCounts[url] || 0);
                   const isTop = Boolean(userProfile?.smartPhotos && bestPhotoUrl === url);
+                  const isExclusive =
+                    idx > 0 &&
+                    Array.isArray(userProfile?.exclusivePhotoUrls) &&
+                    userProfile.exclusivePhotoUrls.includes(url);
                   return (
-                    <button
+                    <div
                       key={idx}
-                      type="button"
                       onClick={() => setEditorOpen(true)}
-                      className="aspect-[3/4] rounded-2xl overflow-hidden bg-zinc-100 relative group border border-zinc-200/60"
+                      className={`aspect-[3/4] rounded-2xl overflow-hidden bg-zinc-100 relative group border cursor-pointer ${
+                        isExclusive ? 'border-[#FF2E54] ring-2 ring-rose-200' : 'border-zinc-200/60'
+                      }`}
                     >
                       <img
                         src={optimizeCloudinaryUrl(url, 320)}
                         alt={`Foto ${idx + 1}`}
                         className="w-full h-full object-cover group-hover:scale-[1.03] transition duration-300"
                       />
-                      <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-black/55 to-transparent pointer-events-none" />
-                      {isTop ? (
+                      <div className="absolute inset-x-0 bottom-0 h-11 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
+                      {isExclusive ? (
+                        <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-[8.5px] font-black text-white leading-none shadow inline-flex items-center gap-0.5">
+                          <Lock className="w-2.5 h-2.5" /> VIP {exclusiveCostDiamonds} 💎
+                        </span>
+                      ) : isTop ? (
                         <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-[9px] font-black text-white leading-none shadow">
                           TOP
                         </span>
@@ -729,13 +787,42 @@ export default function ProfileScreen({
                           Principal
                         </span>
                       ) : null}
+
+                      {isOwnerSession && idx > 0 && (
+                        <button
+                          type="button"
+                          disabled={togglingExclusiveUrl === url}
+                          onClick={(e) => handleQuickToggleExclusive(e, url, idx)}
+                          className={`absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-full text-[8.5px] font-black inline-flex items-center gap-0.5 shadow transition ${
+                            isExclusive
+                              ? 'bg-[#FF2E54] text-white'
+                              : 'bg-white/95 text-zinc-900 hover:bg-rose-50 hover:text-[#FF2E54]'
+                          }`}
+                          title={
+                            isExclusive
+                              ? 'Quitar de Fotos Exclusivas VIP'
+                              : `Marcar como Foto Exclusiva VIP (+${exclusiveCostDiamonds} 💎 para ti)`
+                          }
+                        >
+                          {isExclusive ? (
+                            <>
+                              <Lock className="w-2.5 h-2.5" /> Exclusiva
+                            </>
+                          ) : (
+                            <>
+                              <Unlock className="w-2.5 h-2.5 text-[#FF2E54]" /> Hacer VIP
+                            </>
+                          )}
+                        </button>
+                      )}
+
                       {likeCount > 0 && (
                         <span className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded-full bg-black/65 backdrop-blur-sm text-[9px] font-extrabold text-white leading-none flex items-center gap-0.5">
                           <Heart className="w-2.5 h-2.5 fill-[#FF2E54] text-[#FF2E54]" />
                           {likeCount}
                         </span>
                       )}
-                    </button>
+                    </div>
                   );
                 }
                 const isNextSlot = idx === userPhotos.length;
@@ -1041,6 +1128,9 @@ export default function ProfileScreen({
                   <PhotoUploader
                     photos={photos}
                     onChange={setPhotos}
+                    exclusivePhotoUrls={exclusivePhotoUrls}
+                    onExclusiveChange={setExclusivePhotoUrls}
+                    exclusiveCostDiamonds={exclusiveCostDiamonds}
                     onError={onError}
                     smartPhotos={Boolean(userProfile?.smartPhotos)}
                     photoLikeCounts={photoLikeCounts}

@@ -15,6 +15,10 @@ import {
   subscribeUserMatches,
 } from './services/chatService';
 import {
+  enablePushNotifications,
+  showLocalServiceWorkerNotification,
+} from './services/pushNotificationService';
+import {
   checkConnectionStatus,
   openOrCreateDirectChat,
   subscribeReceivedLikes,
@@ -184,7 +188,12 @@ function UserAppView({ onSuccess, onError }) {
     setBusyLikeChatCoins(false);
     setReceivedGifts([]);
     setOptimisticReadMap({});
-    setUserUnlocks({ revealedLikeIds: [], chatUnlockedUserIds: [], totalAdsWatched: 0 });
+    setUserUnlocks({
+      revealedLikeIds: [],
+      chatUnlockedUserIds: [],
+      unlockedPhotoKeys: [],
+      totalAdsWatched: 0,
+    });
     seenGiftIdsRef.current = new Set();
     giftsLoadedRef.current = false;
     try {
@@ -238,17 +247,32 @@ function UserAppView({ onSuccess, onError }) {
           );
           list.forEach((g) => seenGiftIdsRef.current.add(g.id));
           if (freshGift) {
-            handleSuccess(
-              `${freshGift.giftIcon || '🎁'} ¡${freshGift.senderName || 'Alguien'} te regaló ${
-                freshGift.giftName || 'un regalo'
-              } (+${freshGift.diamondsCredited || 0} 💎)!`
-            );
+            const giftTitle = `${freshGift.giftIcon || '🎁'} ¡${freshGift.senderName || 'Alguien'} te envió ${
+              freshGift.giftName || 'un regalo'
+            }!`;
+            const giftBody = `Sumaste +${freshGift.diamondsCredited || 0} 💎 retirables en tu bóveda.`;
+            handleSuccess(`${giftTitle} (+${freshGift.diamondsCredited || 0} 💎)`);
+            showLocalServiceWorkerNotification({
+              title: giftTitle,
+              body: giftBody,
+              tag: `gift_${freshGift.id}`,
+            });
           }
         }
         setReceivedGifts(list);
       },
       (err) => console.error('Error suscribiendo regalos recibidos:', err)
     );
+
+    if (
+      userProfile.pushNotificationsEnabled &&
+      typeof window !== 'undefined' &&
+      'Notification' in window &&
+      Notification.permission === 'granted'
+    ) {
+      enablePushNotifications(userProfile.uid).catch(() => {});
+    }
+
     return () => {
       unsubMatches();
       unsubLikes();
@@ -570,6 +594,7 @@ function UserAppView({ onSuccess, onError }) {
           <DiscoverSwipe
             key={userProfile.uid}
             currentUser={userProfile}
+            userUnlocks={userUnlocks}
             isActive={activeTab === 'swipe'}
             scope={swipeScope}
             onScopeChange={setSwipeScope}
@@ -674,7 +699,8 @@ function UserAppView({ onSuccess, onError }) {
         userUnlocks={userUnlocks}
         onClose={() => setSelectedProfile(null)}
         onStartChat={handleStartDirectChat}
-        onOpenCoinStore={() => openCoinStore('buy')}
+        onOpenCoinStore={(sec) => openCoinStore(sec)}
+        onOpenPro={() => openCoinStore('pro')}
         onSuccess={handleSuccess}
         onError={handleError}
       />

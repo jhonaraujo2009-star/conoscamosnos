@@ -1,10 +1,12 @@
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import { getMessaging } from 'firebase-admin/messaging';
 
 let appInstance = null;
 let firestoreInstance = null;
 let authInstance = null;
+let messagingInstance = null;
 
 /**
  * Inicializa Firebase Admin SDK v14+ en modo modular ESM (Vercel Functions y Express).
@@ -66,6 +68,14 @@ export function getAdminAuth() {
   }
   authInstance = getAuth(getAdminApp());
   return authInstance;
+}
+
+export function getAdminMessaging() {
+  if (messagingInstance) {
+    return messagingInstance;
+  }
+  messagingInstance = getMessaging(getAdminApp());
+  return messagingInstance;
 }
 
 export { FieldValue };

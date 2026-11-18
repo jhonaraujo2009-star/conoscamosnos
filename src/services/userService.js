@@ -16,7 +16,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { MAX_PHOTOS, MIN_AGE } from '../config/constants';
+import { MAX_EXCLUSIVE_PHOTOS, MAX_PHOTOS, MIN_AGE } from '../config/constants';
 import {
   isBoostActive,
   isProActive,
@@ -72,6 +72,21 @@ export async function updateUserProfile(uid, updates) {
   if (updates.lookingFor) sanitized.lookingFor = updates.lookingFor;
   if (Array.isArray(updates.interests)) sanitized.interests = updates.interests;
   if (Array.isArray(updates.photos)) sanitized.photos = updates.photos.slice(0, MAX_PHOTOS);
+  if (Array.isArray(updates.exclusivePhotoUrls)) {
+    const basePhotos = Array.isArray(updates.photos) ? updates.photos : null;
+    const primaryPhoto = basePhotos?.[0] || null;
+    sanitized.exclusivePhotoUrls = Array.from(
+      new Set(
+        updates.exclusivePhotoUrls.filter(
+          (url) =>
+            typeof url === 'string' &&
+            url.trim().length > 0 &&
+            url !== primaryPhoto &&
+            (!basePhotos || basePhotos.includes(url))
+        )
+      )
+    ).slice(0, MAX_EXCLUSIVE_PHOTOS);
+  }
   if (Array.isArray(updates.prompts)) sanitized.prompts = updates.prompts.slice(0, 4);
   if (typeof updates.height === 'string') sanitized.height = updates.height.trim();
   if (typeof updates.job === 'string') sanitized.job = updates.job.trim();
@@ -83,6 +98,9 @@ export async function updateUserProfile(uid, updates) {
   if (typeof updates.hideDistance === 'boolean') sanitized.hideDistance = updates.hideDistance;
   if (typeof updates.hideOnlineStatus === 'boolean') sanitized.hideOnlineStatus = updates.hideOnlineStatus;
   if (typeof updates.discoverable === 'boolean') sanitized.discoverable = updates.discoverable;
+  if (typeof updates.pushNotificationsEnabled === 'boolean') {
+    sanitized.pushNotificationsEnabled = updates.pushNotificationsEnabled;
+  }
   if (typeof updates.requireGiftToChat === 'boolean') {
     sanitized.requireGiftToChat = updates.requireGiftToChat;
   }

@@ -13,6 +13,7 @@ import {
 import { db } from '../config/firebase';
 import { ECONOMY_CONFIG } from '../config/constants';
 import { buildMatchId, splitDiamondDeduction, toMillis } from '../utils/formatters';
+import { sendPushNotificationToUser } from './pushNotificationService';
 
 export function subscribeUserMatches(userId, callback, onError) {
   if (!userId) {
@@ -88,11 +89,17 @@ export async function markChatAsRead(matchId, userId) {
   }
 }
 
-export async function sendTextMessage({ matchId, senderId, text }) {
+export async function sendTextMessage({ matchId, senderId, senderName = '', recipientId = '', text }) {
   const cleanText = text.trim();
   if (!cleanText || !matchId || !senderId) return;
 
   const nowMs = Date.now();
+  const resolvedRecipientId =
+    recipientId ||
+    String(matchId || '')
+      .split('_')
+      .find((id) => id && id !== senderId) ||
+    '';
 
   await addDoc(collection(db, 'matches', matchId, 'messages'), {
     senderId,
@@ -110,12 +117,28 @@ export async function sendTextMessage({ matchId, senderId, text }) {
     [`lastReadBy.${senderId}`]: serverTimestamp(),
     [`lastReadByClientMs.${senderId}`]: nowMs,
   });
+
+  if (resolvedRecipientId) {
+    sendPushNotificationToUser({
+      recipientUid: resolvedRecipientId,
+      type: 'message',
+      title: `💬 Mensaje de ${senderName || 'Conoscamosnos'}`,
+      body: cleanText.slice(0, 120),
+      link: '/app',
+    });
+  }
 }
 
-export async function sendImageMessage({ matchId, senderId, imageUrl }) {
+export async function sendImageMessage({ matchId, senderId, senderName = '', recipientId = '', imageUrl }) {
   if (!imageUrl || !matchId || !senderId) return;
 
   const nowMs = Date.now();
+  const resolvedRecipientId =
+    recipientId ||
+    String(matchId || '')
+      .split('_')
+      .find((id) => id && id !== senderId) ||
+    '';
 
   await addDoc(collection(db, 'matches', matchId, 'messages'), {
     senderId,
@@ -134,6 +157,16 @@ export async function sendImageMessage({ matchId, senderId, imageUrl }) {
     [`lastReadBy.${senderId}`]: serverTimestamp(),
     [`lastReadByClientMs.${senderId}`]: nowMs,
   });
+
+  if (resolvedRecipientId) {
+    sendPushNotificationToUser({
+      recipientUid: resolvedRecipientId,
+      type: 'message',
+      title: `📷 ${senderName || 'Alguien'} te envió una foto`,
+      body: 'Abre el chat privado en Conoscamosnos para verla.',
+      link: '/app',
+    });
+  }
 }
 
 /**
@@ -289,6 +322,14 @@ export async function sendVirtualGift({
       clientCreatedAt: nowMs,
       createdAt: serverTimestamp(),
     });
+  });
+
+  sendPushNotificationToUser({
+    recipientUid: receiverId,
+    type: 'gift',
+    title: `${gift.icon || '🎁'} ¡Recibiste un regalo en Conoscamosnos!`,
+    body: `${sender.name || 'Alguien'} te envió ${gift.name} (+${diamondsToCredit} 💎 retirables).`,
+    link: '/app',
   });
 
   return { giftTxId: giftTxRef.id, diamondsCredited: diamondsToCredit, matchId: resolvedMatchId };

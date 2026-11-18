@@ -50,14 +50,10 @@ service cloud.firestore {
         : 0.006;
     }
 
-    function economyCoinsPerDiamond() {
-      return exists(/databases/$(database)/documents/appConfig/economy)
-        ? get(/databases/$(database)/documents/appConfig/economy).data.get('coinsPerDiamond', 2)
-        : 2;
-    }
-
+    // Valores permitidos para acreditar ganancias a un creador:
+    // Regalos (10, 25, 50, 150, 500 💎) y Foto Exclusiva VIP (15 💎)
     function isValidGiftValue(amount) {
-      return amount in [10, 25, 50, 150, 500];
+      return amount in [10, 15, 25, 50, 150, 500];
     }
 
     function isValidBoostCost(spent) {
@@ -85,7 +81,7 @@ service cloud.firestore {
         + (resource.data.get('coins', 0) - request.resource.data.get('coins', 0));
     }
 
-    // ==================== USERS ====================
+    // ==================== USERS (BLINDAJE ANTI-ALTERACIÓN DE DIAMANTES) ====================
     match /users/{userId} {
       allow read: if isSignedIn();
 
@@ -102,13 +98,15 @@ service cloud.firestore {
         && request.resource.data.likesCount == 0
         && request.resource.data.giftsReceivedCount == 0
         && request.resource.data.isBoosted == false
+        && request.resource.data.get('isPro', false) == false
         && request.resource.data.get('isBanned', false) == false
         && request.resource.data.get('verifiedBadge', false) == false
         && request.resource.data.get('accountStatus', 'active') == 'active';
 
       allow update: if isAdmin()
         || (
-          // Actualización del propio dueño (nunca puede auto-aprobar Check Azul ni quitarse un baneo)
+          // 1. Actualización del propio dueño:
+          // PROHIBIDO aumentarse diamantes, monedas, ganancias, Check Azul o rol.
           isOwner(userId)
           && resource.data.get('isBanned', false) == false
           && request.resource.data.get('isBanned', false) == false
@@ -125,7 +123,7 @@ service cloud.firestore {
           && request.resource.data.get('giftCounts', {}) == resource.data.get('giftCounts', {})
           && (
             (
-              // Operación estándar: perfil, reserva de retiro o gasto válido de monedas (nunca auto-recarga gratis)
+              // 1A. Edición de perfil, solicitud de retiro o gasto válido de Diamantes (el saldo NUNCA puede subir)
               (
                 (
                   request.resource.data.earningsDiamonds == resource.data.earningsDiamonds
@@ -138,8 +136,8 @@ service cloud.firestore {
                      == (resource.data.earningsDiamonds + resource.data.get('pendingWithdrawalDiamonds', 0))
                 )
               )
-              && request.resource.data.coins <= resource.data.coins
-              && request.resource.data.coins >= 0
+              && request.resource.data.get('coins', 0) <= resource.data.get('coins', 0)
+              && request.resource.data.get('coins', 0) >= 0
               && request.resource.data.get('diamonds', 0) <= resource.data.get('diamonds', 0)
               && request.resource.data.get('diamonds', 0) >= 0
               && (
@@ -152,48 +150,23 @@ service cloud.firestore {
               )
             )
             || (
-              // Canje atómico de diamantes ganados por regalos -> diamantes disponibles para usar en la app (1:1)
+              // 1B. Traspaso interno estricto 1:1 de Diamantes Ganados (earningsDiamonds) -> Diamantes Disponibles (diamonds)
+              // La suma total (diamonds + earningsDiamonds) se conserva exactamente igual (imposible multiplicar saldo)
               boostFieldsUnchanged()
               && proFieldsUnchanged()
-              && request.resource.data.coins == resource.data.coins
+              && request.resource.data.get('coins', 0) == resource.data.get('coins', 0)
               && request.resource.data.earningsDiamonds < resource.data.earningsDiamonds
               && request.resource.data.earningsDiamonds >= 0
               && request.resource.data.get('pendingWithdrawalDiamonds', 0) == resource.data.get('pendingWithdrawalDiamonds', 0)
               && request.resource.data.get('diamonds', 0) > resource.data.get('diamonds', 0)
               && (request.resource.data.get('diamonds', 0) - resource.data.get('diamonds', 0))
-                 <= (resource.data.earningsDiamonds - request.resource.data.earningsDiamonds) * economyCoinsPerDiamond()
+                 == (resource.data.earningsDiamonds - request.resource.data.earningsDiamonds)
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['earningsDiamonds', 'diamonds', 'updatedAt'])
-            )
-            || (
-              // Canje atómico de diamantes comprados (diamonds) -> monedas internas (compatibilidad)
-              boostFieldsUnchanged()
-              && proFieldsUnchanged()
-              && request.resource.data.earningsDiamonds == resource.data.earningsDiamonds
-              && request.resource.data.get('pendingWithdrawalDiamonds', 0) == resource.data.get('pendingWithdrawalDiamonds', 0)
-              && request.resource.data.get('diamonds', 0) < resource.data.get('diamonds', 0)
-              && request.resource.data.get('diamonds', 0) >= 0
-              && request.resource.data.coins > resource.data.coins
-              && (request.resource.data.coins - resource.data.coins)
-                 <= (resource.data.get('diamonds', 0) - request.resource.data.get('diamonds', 0)) * economyCoinsPerDiamond()
-              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['diamonds', 'coins', 'updatedAt'])
-            )
-            || (
-              // Canje atómico de diamantes ganados por regalos -> monedas internas (compatibilidad)
-              boostFieldsUnchanged()
-              && proFieldsUnchanged()
-              && request.resource.data.get('diamonds', 0) == resource.data.get('diamonds', 0)
-              && request.resource.data.earningsDiamonds < resource.data.earningsDiamonds
-              && request.resource.data.earningsDiamonds >= 0
-              && request.resource.data.get('pendingWithdrawalDiamonds', 0) == resource.data.get('pendingWithdrawalDiamonds', 0)
-              && request.resource.data.coins > resource.data.coins
-              && (request.resource.data.coins - resource.data.coins)
-                 <= (resource.data.earningsDiamonds - request.resource.data.earningsDiamonds) * economyCoinsPerDiamond()
-              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['earningsDiamonds', 'coins', 'updatedAt'])
             )
           )
         )
         || (
-          // Otro usuario enviando un Like real nuevo (+1 likesCount vinculado a creación de likes/{from}_{to})
+          // 2. Otro usuario enviando un Like real nuevo (+1 likesCount vinculado a creación de likes/{from}_{to})
           isSignedIn()
           && request.auth.uid != userId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'updatedAt'])
@@ -202,7 +175,8 @@ service cloud.firestore {
           && existsAfter(/databases/$(database)/documents/likes/$(request.auth.uid + '_' + userId))
         )
         || (
-          // Otro usuario enviando un Regalo: exige descuento atómico exacto en Diamantes disponibles del emisor
+          // 3. Otro usuario enviando un Regalo Virtual o desbloqueando una Foto Exclusiva VIP (15 💎):
+          // Exige prueba atómica (get vs getAfter) de que al emisor se le descontó EXACTAMENTE esa misma cantidad de sus Diamantes comprados.
           isSignedIn()
           && request.auth.uid != userId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['giftsReceivedCount', 'earningsDiamonds', 'giftCounts', 'updatedAt'])
@@ -222,9 +196,7 @@ service cloud.firestore {
 
       allow delete: if false;
 
-      // ==================== DATOS PRIVADOS DEL USUARIO (COBRO Y DESBLOQUEOS) ====================
-      // Estrictamente privados por uid: cuentas de Binance/Zinli/Pago Móvil y desbloqueos de anuncios/monedas.
-      // Ningún otro usuario puede leer ni escribir estos documentos.
+      // ==================== DATOS PRIVADOS DEL USUARIO (COBRO, DESBLOQUEOS Y TOKENS FCM) ====================
       match /private/{docId} {
         allow read, write: if isOwner(userId) || isAdmin();
       }
@@ -245,7 +217,6 @@ service cloud.firestore {
     }
 
     // ==================== MATCHES & CHAT PRIVADO 1-A-1 ====================
-    // Privacidad estricta: únicamente los 2 participantes del chat pueden leer o enviar mensajes.
     match /matches/{matchId} {
       allow read: if isSignedIn() && (
         resource == null ||
@@ -315,7 +286,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // ==================== REGISTRO DE REGALOS ====================
+    // ==================== REGISTRO DE REGALOS Y FOTOS EXCLUSIVAS ====================
     match /giftTransactions/{txId} {
       allow read: if isSignedIn() && (
         resource.data.senderId == request.auth.uid ||
@@ -354,7 +325,6 @@ service cloud.firestore {
     }
 
     // ==================== CONFIGURACIÓN GLOBAL DE LA APP ====================
-    // Lectura para usuarios autenticados (precios vigentes de diamantes/paquetes), escritura exclusiva SUPER_ADMIN.
     match /appConfig/{configId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();

@@ -1,6 +1,10 @@
 import { useRef, useState } from 'react';
-import { Camera, Heart, Loader2, Sparkles, Star, Trash2 } from 'lucide-react';
-import { MAX_PHOTOS } from '../../config/constants';
+import { Camera, Gem, Heart, Loader2, Lock, Sparkles, Star, Trash2, Unlock } from 'lucide-react';
+import {
+  EXCLUSIVE_PHOTO_DEFAULT_COST,
+  MAX_EXCLUSIVE_PHOTOS,
+  MAX_PHOTOS,
+} from '../../config/constants';
 import { isCloudinaryConfigured } from '../../config/cloudinary';
 import { useAuth } from '../../contexts/AuthContext';
 import { getUserCloudinaryFolder, uploadImageToCloudinary } from '../../services/cloudinaryService';
@@ -9,6 +13,9 @@ import { optimizeCloudinaryUrl } from '../../utils/formatters';
 export default function PhotoUploader({
   photos = [],
   onChange,
+  exclusivePhotoUrls = [],
+  onExclusiveChange,
+  exclusiveCostDiamonds = EXCLUSIVE_PHOTO_DEFAULT_COST,
   onError,
   smartPhotos = false,
   photoLikeCounts = {},
@@ -18,6 +25,8 @@ export default function PhotoUploader({
   const inputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+
+  const safeExclusive = Array.isArray(exclusivePhotoUrls) ? exclusivePhotoUrls : [];
 
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
@@ -50,7 +59,15 @@ export default function PhotoUploader({
   };
 
   const handleRemove = (index) => {
-    onChange(photos.filter((_, i) => i !== index));
+    const removedUrl = photos[index];
+    const nextPhotos = photos.filter((_, i) => i !== index);
+    onChange(nextPhotos);
+    if (onExclusiveChange && removedUrl) {
+      const primaryNext = nextPhotos[0] || '';
+      onExclusiveChange(
+        safeExclusive.filter((u) => u !== removedUrl && u !== primaryNext)
+      );
+    }
   };
 
   const handleSetPrimary = (index) => {
@@ -59,14 +76,39 @@ export default function PhotoUploader({
     const [chosen] = next.splice(index, 1);
     next.unshift(chosen);
     onChange(next);
+    if (onExclusiveChange && chosen) {
+      onExclusiveChange(safeExclusive.filter((u) => u !== chosen));
+    }
+  };
+
+  const handleToggleExclusive = (url, index) => {
+    if (!onExclusiveChange || index === 0 || !url) return;
+    const isCurrentlyExclusive = safeExclusive.includes(url);
+    if (isCurrentlyExclusive) {
+      onExclusiveChange(safeExclusive.filter((u) => u !== url));
+      return;
+    }
+    if (safeExclusive.length >= MAX_EXCLUSIVE_PHOTOS) {
+      onError?.(
+        `Puedes marcar máximo ${MAX_EXCLUSIVE_PHOTOS} fotos de tu galería como Exclusivas VIP (${exclusiveCostDiamonds} 💎).`
+      );
+      return;
+    }
+    onExclusiveChange([...safeExclusive, url]);
   };
 
   return (
     <div className="space-y-2.5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <span className="text-xs font-extrabold uppercase tracking-wider text-zinc-500">
           Galería ({photos.length}/{MAX_PHOTOS} fotos)
         </span>
+        {onExclusiveChange && (
+          <span className="text-[11px] font-extrabold text-[#FF2E54] inline-flex items-center gap-1">
+            <Gem className="w-3 h-3" />
+            Álbum VIP: {safeExclusive.length}/{MAX_EXCLUSIVE_PHOTOS} fotos ({exclusiveCostDiamonds} 💎 c/u)
+          </span>
+        )}
         {!isCloudinaryConfigured && (
           <span className="text-[11px] font-bold text-amber-600">
             Configura Cloudinary en .env
@@ -78,10 +120,13 @@ export default function PhotoUploader({
         {Array.from({ length: MAX_PHOTOS }).map((_, idx) => {
           const url = photos[idx];
           if (url) {
+            const isExclusive = idx > 0 && safeExclusive.includes(url);
             return (
               <div
                 key={`${url}-${idx}`}
-                className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-zinc-100 border border-zinc-200 shadow-sm group"
+                className={`relative aspect-[3/4] rounded-2xl overflow-hidden bg-zinc-100 border shadow-sm group ${
+                  isExclusive ? 'border-[#FF2E54] ring-2 ring-rose-200' : 'border-zinc-200'
+                }`}
               >
                 <img
                   src={optimizeCloudinaryUrl(url, 400)}
@@ -94,7 +139,12 @@ export default function PhotoUploader({
                     Principal
                   </span>
                 )}
-                {smartPhotos && bestPhotoUrl === url && (
+                {isExclusive && (
+                  <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-[9.5px] font-black text-white shadow inline-flex items-center gap-1">
+                    <Lock className="w-2.5 h-2.5" /> {exclusiveCostDiamonds} 💎
+                  </span>
+                )}
+                {!isExclusive && smartPhotos && bestPhotoUrl === url && (
                   <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-[10px] font-extrabold text-white shadow flex items-center gap-0.5">
                     <Sparkles className="w-2.5 h-2.5" /> Top
                   </span>
@@ -106,6 +156,28 @@ export default function PhotoUploader({
                   </span>
                 )}
                 <div className="absolute bottom-1.5 right-1.5 flex gap-1">
+                  {idx !== 0 && onExclusiveChange && (
+                    <button
+                      type="button"
+                      onClick={() => handleToggleExclusive(url, idx)}
+                      className={`p-1.5 rounded-full shadow transition ${
+                        isExclusive
+                          ? 'bg-[#FF2E54] text-white'
+                          : 'bg-white/95 text-rose-600 hover:bg-rose-500 hover:text-white'
+                      }`}
+                      title={
+                        isExclusive
+                          ? 'Quitar de Fotos Exclusivas VIP'
+                          : `Marcar como Foto Exclusiva VIP (${exclusiveCostDiamonds} 💎 para ti)`
+                      }
+                    >
+                      {isExclusive ? (
+                        <Lock className="w-3.5 h-3.5" />
+                      ) : (
+                        <Unlock className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  )}
                   {idx !== 0 && (
                     <button
                       type="button"
@@ -159,6 +231,12 @@ export default function PhotoUploader({
           );
         })}
       </div>
+
+      {onExclusiveChange && photos.length > 1 && (
+        <p className="text-[11px] text-zinc-500 leading-snug">
+          💡 Toca el candado en las fotos #2 a #6 para marcarlas como <strong>Exclusivas VIP ({exclusiveCostDiamonds} 💎 o Gratis con PRO)</strong>. Cada vez que alguien desbloquee tu foto con Diamantes, recibes los <strong>+{exclusiveCostDiamonds} 💎</strong> en tus ganancias retirables.
+        </p>
+      )}
 
       <input
         ref={inputRef}
