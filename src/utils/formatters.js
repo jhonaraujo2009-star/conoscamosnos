@@ -184,6 +184,17 @@ export function formatUSD(amount) {
   }).format(Number(amount || 0));
 }
 
+export function formatDiamondRateUSD(rate) {
+  const num = Number(rate || 0);
+  if (!Number.isFinite(num)) return '$0.000';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 4,
+  }).format(num);
+}
+
 export function calculateWithdrawalBreakdown(diamonds, config = ECONOMY_CONFIG) {
   const safeDiamonds = Math.max(0, Math.floor(Number(diamonds || 0)));
   const baseRate = Number(config?.baseDiamondValueUSD ?? ECONOMY_CONFIG.baseDiamondValueUSD);
@@ -199,13 +210,9 @@ export function calculateWithdrawalBreakdown(diamonds, config = ECONOMY_CONFIG) 
   };
 }
 
-export function calculateGiftEconomics(coinCost, config = ECONOMY_CONFIG) {
-  const coins = Math.max(0, Math.floor(Number(coinCost || 0)));
-  const diamonds = coins * Number(config?.diamondsPerCoin ?? ECONOMY_CONFIG.diamondsPerCoin);
-  return {
-    coins,
-    ...calculateWithdrawalBreakdown(diamonds, config),
-  };
+export function calculateGiftEconomics(diamondCost, config = ECONOMY_CONFIG) {
+  const diamonds = Math.max(0, Math.floor(Number(diamondCost || 0)));
+  return calculateWithdrawalBreakdown(diamonds, config);
 }
 
 export const INTEREST_ICONS = {

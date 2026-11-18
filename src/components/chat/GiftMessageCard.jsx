@@ -22,12 +22,9 @@ export default function GiftMessageCard({ message, isMine }) {
 
           <p className="font-display text-sm font-extrabold text-zinc-900">{message.giftName}</p>
 
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/95 border border-amber-200 text-[11px] font-extrabold text-amber-800 shadow-sm">
-            <span>{message.giftValue} 🪙</span>
-            <span className="text-zinc-300">•</span>
-            <span className="text-sky-600 flex items-center gap-0.5">
-              +{diamonds} <Gem className="w-3 h-3" />
-            </span>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-50 border border-sky-200 text-[11px] font-extrabold text-sky-700 shadow-sm">
+            <Gem className="w-3.5 h-3.5 text-sky-500" />
+            <span>{isMine ? `${diamonds} 💎` : `+${diamonds} 💎`}</span>
           </div>
 
           {!isMine && (

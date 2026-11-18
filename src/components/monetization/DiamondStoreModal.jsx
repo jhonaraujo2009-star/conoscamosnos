@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  BadgeCheck,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -16,12 +15,9 @@ import {
   Loader2,
   MessageCircle,
   QrCode,
-  RotateCcw,
   Sparkles,
   Tv,
   Wallet,
-  XCircle,
-  Zap,
 } from 'lucide-react';
 import {
   DIAMOND_PACKAGES,
@@ -57,8 +53,8 @@ const PRO_BENEFITS = [
   },
   {
     icon: Heart,
-    title: 'Mira quién dio Like a tu perfil y qué foto le gustó',
-    desc: 'Toda tu pestaña Likes desbloqueada sin censura ni anuncios.',
+    title: 'Mira quién dio Like a tu foto y Álbumes VIP gratis',
+    desc: 'Toda tu pestaña Likes y Fotos Exclusivas VIP desbloqueadas al instante.',
   },
   {
     icon: Globe,
@@ -90,7 +86,7 @@ function DynamicQrCode({ payload }) {
   );
 }
 
-export default function CoinStoreModal({
+export default function DiamondStoreModal({
   isOpen,
   initialSection = 'buy',
   onClose,
@@ -100,7 +96,9 @@ export default function CoinStoreModal({
 }) {
   const { economyConfig, isSuperAdmin } = useAuth();
   const livePackages =
-    Array.isArray(economyConfig?.coinPackages) && economyConfig.coinPackages.length > 0
+    Array.isArray(economyConfig?.diamondPackages) && economyConfig.diamondPackages.length > 0
+      ? economyConfig.diamondPackages
+      : Array.isArray(economyConfig?.coinPackages) && economyConfig.coinPackages.length > 0
       ? economyConfig.coinPackages
       : DIAMOND_PACKAGES;
   const liveEconomy = economyConfig || ECONOMY_CONFIG;
@@ -230,7 +228,6 @@ export default function CoinStoreModal({
     setActivatingProDiamonds(true);
     try {
       await activateProWithDiamonds({
-        userId: userProfile.uid,
         plan: selectedProPlan,
       });
       onSuccess?.(
@@ -612,14 +609,14 @@ export default function CoinStoreModal({
 
           {storeSection === 'buy' ? (
             <>
-              {/* Explicación de Moneda Única en Diamantes */}
+              {/* Explicación de Sistema Único en Diamantes */}
               <div className="p-3.5 rounded-2xl bg-gradient-to-r from-sky-50 via-white to-rose-50 border border-sky-200/80 flex items-center justify-between gap-2">
                 <div className="text-[11px] text-zinc-700 leading-snug">
-                  <strong className="text-zinc-900">Economía unificada en 💎:</strong> usa tus Diamantes para{' '}
-                  <strong className="text-[#FF2E54]">chatear directo ({policy.unlockLikeChatCoins} 💎)</strong>,{' '}
-                  <strong className="text-amber-700">ver Likes ({policy.unlockLikeCoins} 💎)</strong>, enviar{' '}
+                  <strong className="text-zinc-900">Todo con 💎 Diamantes:</strong> úsalos para{' '}
+                  <strong className="text-[#FF2E54]">chatear directo ({policy.unlockChatDiamonds} 💎)</strong>,{' '}
+                  <strong className="text-amber-700">ver Likes ({policy.unlockLikeDiamonds} 💎)</strong>, fotos VIP, enviar{' '}
                   <strong className="text-sky-700">Regalos</strong>, activar{' '}
-                  <strong className="text-purple-700">Boost VIP</strong> o hacerte{' '}
+                  <strong className="text-purple-700">Boost VIP</strong> o{' '}
                   <strong className="text-rose-700">PRO</strong>.
                 </div>
                 <button
@@ -636,10 +633,10 @@ export default function CoinStoreModal({
               {rulesOpen && (
                 <div className="p-3.5 rounded-2xl bg-white border border-zinc-200/80 text-[11px] text-zinc-600 space-y-1.5 leading-relaxed">
                   <p>
-                    • <strong>Una sola moneda simple (💎):</strong> ya no necesitas cambiar entre monedas y diamantes. Todo funciona directamente con tus Diamantes.
+                    • <strong>Saldo único en Diamantes (💎):</strong> todo funciona directamente con tus Diamantes sin conversiones raras ni otros saldos.
                   </p>
                   <p>
-                    • <strong>Regalos y Retiros Reales:</strong> cuando envías un regalo, la otra persona recibe el conteo en su perfil y suma <strong>Diamantes Ganados</strong> que puede retirar por dinero real en USD.
+                    • <strong>Regalos, Álbum VIP y Retiros Reales:</strong> cuando envías un regalo o desbloqueas una foto exclusiva, la otra persona acumula <strong>Diamantes Ganados</strong> que puede retirar a USD reales.
                   </p>
                 </div>
               )}

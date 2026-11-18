@@ -18,9 +18,9 @@ import { resolveAccessPolicy } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   recordAdRewardUnlock,
-  unlockAllLikesWithCoins,
-  unlockChatWithCoins,
-  unlockLikeWithCoins,
+  unlockAllLikesWithDiamonds,
+  unlockChatWithDiamonds,
+  unlockLikeWithDiamonds,
 } from '../../services/adRewardService';
 import { getUserById, subscribePopularUsers } from '../../services/userService';
 import {
@@ -102,7 +102,7 @@ export default function LikesScreen({
   userUnlocks = { revealedLikeIds: [], chatUnlockedUserIds: [] },
   onSelectProfile,
   onStartChat,
-  onOpenCoinStore,
+  onOpenDiamondStore,
   onOpenPro,
   onGoToSwipe,
   onOpenBoost,
@@ -120,7 +120,7 @@ export default function LikesScreen({
   // Sheet de decisión: Ver Anuncio Gratis vs Diamantes 💎 vs PRO
   const [choiceModal, setChoiceModal] = useState(null); // { mode: 'reveal_like' | 'unlock_chat', user }
   const [activeAd, setActiveAd] = useState(null); // { purpose: 'reveal_like' | 'unlock_chat', user }
-  const [busyCoinAction, setBusyCoinAction] = useState(false);
+  const [busyDiamondAction, setBusyDiamondAction] = useState(false);
 
   const blockedKey = (currentUser?.blockedUsers || []).join(',');
 
@@ -218,10 +218,10 @@ export default function LikesScreen({
 
   const likesCount = likerProfiles.length;
   const lockedLikers = likerProfiles.filter((u) => !revealedSet.has(u.uid || u.id));
-  const userCoins = getSpendableDiamonds(currentUser);
+  const userDiamonds = getSpendableDiamonds(currentUser);
   const unlockAllCost = Math.min(
-    policy.unlockAllLikesCoins,
-    lockedLikers.length * policy.unlockLikeCoins
+    policy.unlockAllLikesDiamonds,
+    lockedLikers.length * policy.unlockLikeDiamonds
   );
 
   const handleCardTap = (user) => {
@@ -246,15 +246,15 @@ export default function LikesScreen({
     setChoiceModal({ mode: 'unlock_chat', user });
   };
 
-  const handleUnlockSingleWithCoins = async (mode, user) => {
-    if (!currentUser?.uid || !user || busyCoinAction || !policy.enableCoinCharges) return;
+  const handleUnlockSingleWithDiamonds = async (mode, user) => {
+    if (!currentUser?.uid || !user || busyDiamondAction || !policy.enableDiamondCharges) return;
     const targetUid = user.uid || user.id;
     const cost =
       mode === 'unlock_chat'
-        ? policy.unlockLikeChatCoins
-        : policy.unlockLikeCoins;
+        ? policy.unlockChatDiamonds
+        : policy.unlockLikeDiamonds;
 
-    if (userCoins < cost) {
+    if (userDiamonds < cost) {
       setChoiceModal(null);
       setActiveAd(null);
       onError?.(
@@ -262,20 +262,20 @@ export default function LikesScreen({
           ? `Necesitas ${cost} 💎. Recarga Diamantes o mira 1 anuncio gratis.`
           : `Necesitas ${cost} 💎. Recarga Diamantes en la tienda para desbloquear.`
       );
-      onOpenCoinStore?.();
+      onOpenDiamondStore?.();
       return;
     }
 
-    setBusyCoinAction(true);
+    setBusyDiamondAction(true);
     try {
       if (mode === 'unlock_chat') {
-        await unlockChatWithCoins({ uid: currentUser.uid, targetUid, costCoins: cost });
+        await unlockChatWithDiamonds({ uid: currentUser.uid, targetUid, costDiamonds: cost });
         setChoiceModal(null);
         setActiveAd(null);
         onSuccess?.(`✨ Chat desbloqueado con ${user.name} al instante.`);
         onStartChat?.(user, { skipLikeChatGate: true });
       } else {
-        await unlockLikeWithCoins({ uid: currentUser.uid, targetUid, costCoins: cost });
+        await unlockLikeWithDiamonds({ uid: currentUser.uid, targetUid, costDiamonds: cost });
         setChoiceModal(null);
         setActiveAd(null);
         onSuccess?.(`💘 ¡Descubriste que le gustas a ${user.name}!`);
@@ -283,29 +283,29 @@ export default function LikesScreen({
     } catch (err) {
       onError?.(err.message || 'No se pudo completar el desbloqueo.');
     } finally {
-      setBusyCoinAction(false);
+      setBusyDiamondAction(false);
     }
   };
 
-  const handleUnlockAllLikesWithCoins = async () => {
-    if (!currentUser?.uid || lockedLikers.length === 0 || busyCoinAction || !policy.enableCoinCharges) return;
+  const handleUnlockAllLikesWithDiamonds = async () => {
+    if (!currentUser?.uid || lockedLikers.length === 0 || busyDiamondAction || !policy.enableDiamondCharges) return;
     const cost = unlockAllCost;
-    if (userCoins < cost) {
+    if (userDiamonds < cost) {
       setChoiceModal(null);
       onError?.(`Necesitas ${cost} 💎 para revelar todos los Likes de una vez.`);
-      onOpenCoinStore?.();
+      onOpenDiamondStore?.();
       return;
     }
-    setBusyCoinAction(true);
+    setBusyDiamondAction(true);
     try {
       const targetUids = lockedLikers.map((u) => u.uid || u.id);
-      await unlockAllLikesWithCoins({ uid: currentUser.uid, targetUids, costCoins: cost });
+      await unlockAllLikesWithDiamonds({ uid: currentUser.uid, targetUids, costDiamonds: cost });
       setChoiceModal(null);
       onSuccess?.(`✨ ¡Revelaste todos tus ${targetUids.length} Likes al instante!`);
     } catch (err) {
       onError?.(err.message || 'No se pudieron revelar tus Likes.');
     } finally {
-      setBusyCoinAction(false);
+      setBusyDiamondAction(false);
     }
   };
 
@@ -359,11 +359,11 @@ export default function LikesScreen({
             )}
             <button
               type="button"
-              onClick={onOpenCoinStore}
+              onClick={onOpenDiamondStore}
               className="px-3 py-1.5 rounded-full bg-white border border-sky-200/80 shadow-sm text-xs font-extrabold text-sky-800 inline-flex items-center gap-1.5 hover:bg-sky-50 transition tabular-nums"
             >
               <Gem className="w-3.5 h-3.5 text-sky-500" />
-              <span>{userCoins} 💎</span>
+              <span>{userDiamonds} 💎</span>
             </button>
           </div>
         </div>
@@ -430,10 +430,10 @@ export default function LikesScreen({
                   )}
                 </div>
                 <p className="text-xs text-rose-100/85 leading-relaxed">
-                  {policy.enableCoinCharges && policy.enableRewardedAds ? (
+                  {policy.enableDiamondCharges && policy.enableRewardedAds ? (
                     <>
                       Toca cualquier perfil difuminado que te dio ❤️ para ver quién es y qué foto tuya le gustó por{' '}
-                      <strong>{policy.unlockLikeCoins} 💎</strong>,{' '}
+                      <strong>{policy.unlockLikeDiamonds} 💎</strong>,{' '}
                       <strong>gratis con 1 anuncio</strong> o con <strong>Conoscamosnos PRO</strong>.
                     </>
                   ) : policy.enableRewardedAds ? (
@@ -444,7 +444,7 @@ export default function LikesScreen({
                   ) : (
                     <>
                       Toca cualquier perfil difuminado que te dio ❤️ para revelarlo al instante por{' '}
-                      <strong>{policy.unlockLikeCoins} 💎</strong> o con <strong>Conoscamosnos PRO</strong>.
+                      <strong>{policy.unlockLikeDiamonds} 💎</strong> o con <strong>Conoscamosnos PRO</strong>.
                     </>
                   )}
                 </p>
@@ -507,11 +507,11 @@ export default function LikesScreen({
 
                           <div className="w-full py-1.5 px-2 rounded-full bg-white/95 text-zinc-900 text-[10px] font-black flex items-center justify-center gap-1 shadow">
                             <Play className="w-3 h-3 fill-[#FF2E54] text-[#FF2E54]" />
-                            {policy.enableRewardedAds && policy.enableCoinCharges
-                              ? `Anuncio o ${policy.unlockLikeCoins} 💎`
+                            {policy.enableRewardedAds && policy.enableDiamondCharges
+                              ? `Anuncio o ${policy.unlockLikeDiamonds} 💎`
                               : policy.enableRewardedAds
                               ? `Ver anuncio (${policy.adDurationSeconds}s)`
-                              : `Revelar ${policy.unlockLikeCoins} 💎`}
+                              : `Revelar ${policy.unlockLikeDiamonds} 💎`}
                           </div>
                         </div>
                       ) : (
@@ -556,7 +556,7 @@ export default function LikesScreen({
                               className={`mt-1.5 w-full py-1.5 rounded-full text-xs font-extrabold flex items-center justify-center gap-1 shadow transition ${
                                 isChatReady
                                   ? 'bg-emerald-500 text-white hover:bg-emerald-600'
-                                  : user.requireGiftToChat
+                                  : user.requireGiftToChat && !proActive
                                   ? 'bg-gradient-to-r from-amber-400 to-orange-500 text-zinc-950'
                                   : 'bg-gradient-to-r from-[#FF2E54] to-rose-500 text-white'
                               }`}
@@ -591,7 +591,7 @@ export default function LikesScreen({
             <p className="text-xs font-medium text-zinc-500 mt-1 max-w-[260px] leading-relaxed">
               {proActive || policy.isFreeMode
                 ? 'Cuando alguien le dé Like a tu foto lo verás aquí totalmente desbloqueado al instante.'
-                : policy.enableRewardedAds && policy.enableCoinCharges
+                : policy.enableRewardedAds && policy.enableDiamondCharges
                 ? 'Cuando alguien te dé Like podrás descubrir quién es y qué foto tuya le gustó gratis viendo 1 anuncio, con Diamantes (💎) o con Conoscamosnos PRO.'
                 : policy.enableRewardedAds
                 ? 'Cuando alguien te dé Like podrás descubrir quién es gratis viendo 1 anuncio.'
@@ -673,8 +673,8 @@ export default function LikesScreen({
 
       {/* Barra de acción inferior */}
       <div className="p-4 pt-2 bg-transparent space-y-2">
-        {subTab === 'likes' && !policy.isFreeMode && !proActive && lockedLikers.length >= 2 && (policy.enableRewardedAds || policy.enableCoinCharges) ? (
-          <div className={`grid gap-2.5 ${policy.enableRewardedAds && policy.enableCoinCharges ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        {subTab === 'likes' && !policy.isFreeMode && !proActive && lockedLikers.length >= 2 && (policy.enableRewardedAds || policy.enableDiamondCharges) ? (
+          <div className={`grid gap-2.5 ${policy.enableRewardedAds && policy.enableDiamondCharges ? 'grid-cols-2' : 'grid-cols-1'}`}>
             {policy.enableRewardedAds && (
               <button
                 type="button"
@@ -685,11 +685,11 @@ export default function LikesScreen({
                 Ver 1 con Anuncio
               </button>
             )}
-            {policy.enableCoinCharges && (
+            {policy.enableDiamondCharges && (
               <button
                 type="button"
-                disabled={busyCoinAction}
-                onClick={handleUnlockAllLikesWithCoins}
+                disabled={busyDiamondAction}
+                onClick={handleUnlockAllLikesWithDiamonds}
                 className="bg-gradient-to-r from-sky-500 to-indigo-500 text-white rounded-full py-3.5 px-3 text-xs font-extrabold shadow-md flex items-center justify-center gap-1.5 active:scale-[0.99] transition-transform disabled:opacity-50"
               >
                 <Gem className="w-3.5 h-3.5" />
@@ -725,13 +725,13 @@ export default function LikesScreen({
         mode={choiceModal?.mode || 'reveal_like'}
         targetUser={choiceModal?.user}
         alreadyLikedMe
-        userCoins={userCoins}
-        coinCost={
+        userDiamonds={userDiamonds}
+        diamondCost={
           choiceModal?.mode === 'unlock_chat'
-            ? policy.unlockLikeChatCoins
-            : policy.unlockLikeCoins
+            ? policy.unlockChatDiamonds
+            : policy.unlockLikeDiamonds
         }
-        busyCoins={busyCoinAction}
+        busyDiamonds={busyDiamondAction}
         lockedLikesCount={lockedLikers.length}
         unlockAllCost={unlockAllCost}
         onClose={() => setChoiceModal(null)}
@@ -740,10 +740,10 @@ export default function LikesScreen({
           setChoiceModal(null);
           setActiveAd({ purpose: target.mode, user: target.user, session: adSession || null });
         }}
-        onUnlockWithCoins={() =>
-          handleUnlockSingleWithCoins(choiceModal.mode, choiceModal.user)
+        onUnlockWithDiamonds={() =>
+          handleUnlockSingleWithDiamonds(choiceModal.mode, choiceModal.user)
         }
-        onUnlockAllLikes={handleUnlockAllLikesWithCoins}
+        onUnlockAllLikes={handleUnlockAllLikesWithDiamonds}
         onOpenPro={onOpenPro}
       />
 
@@ -754,16 +754,16 @@ export default function LikesScreen({
         targetName={activeAd?.user?.name || 'esta persona'}
         targetUser={activeAd?.user}
         adSession={activeAd?.session || null}
-        coinCost={
+        diamondCost={
           activeAd?.purpose === 'unlock_chat'
-            ? policy.unlockLikeChatCoins
-            : policy.unlockLikeCoins
+            ? policy.unlockChatDiamonds
+            : policy.unlockLikeDiamonds
         }
         onClose={() => setActiveAd(null)}
         onRewardEarned={handleAdCompleted}
-        onUseCoinsInstead={() => {
+        onUseDiamondsInstead={() => {
           if (!activeAd) return;
-          handleUnlockSingleWithCoins(activeAd.purpose, activeAd.user);
+          handleUnlockSingleWithDiamonds(activeAd.purpose, activeAd.user);
         }}
       />
     </div>

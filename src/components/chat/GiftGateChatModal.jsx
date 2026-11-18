@@ -1,7 +1,13 @@
 import { BadgeCheck, Crown, Gem, Gift, Lock, Sparkles, X } from 'lucide-react';
 import { ECONOMY_CONFIG, VIRTUAL_GIFTS } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
-import { calculateGiftEconomics, formatUSD, getPrimaryPhoto, isProfileVerified } from '../../utils/formatters';
+import {
+  calculateGiftEconomics,
+  formatDiamondRateUSD,
+  formatUSD,
+  getPrimaryPhoto,
+  isProfileVerified,
+} from '../../utils/formatters';
 
 export default function GiftGateChatModal({
   isOpen,
@@ -10,7 +16,7 @@ export default function GiftGateChatModal({
   sendingGiftId = null,
   onClose,
   onSelectGift,
-  onOpenCoinStore,
+  onOpenDiamondStore,
 }) {
   const { economyConfig } = useAuth();
   if (!isOpen || !targetUser) return null;
@@ -76,7 +82,7 @@ export default function GiftGateChatModal({
               type="button"
               onClick={() => {
                 onClose();
-                onOpenCoinStore?.();
+                onOpenDiamondStore?.();
               }}
               className="px-3.5 py-2 rounded-full bg-zinc-900 text-white text-xs font-extrabold hover:bg-zinc-800 shadow-sm transition shrink-0"
             >
@@ -87,7 +93,7 @@ export default function GiftGateChatModal({
           <div className="px-3.5 py-2.5 rounded-2xl bg-sky-50 border border-sky-200/80 text-[11px] text-sky-900 font-medium flex items-start gap-2">
             <Gem className="w-4 h-4 text-sky-500 shrink-0 mt-0.5" />
             <span>
-              Al enviar <strong>cualquier regalo</strong> (desde 🌹 10 💎), desbloqueas su chat privado al instante y {firstName} recibe <strong>1 💎 retirable</strong> por cada diamante (${liveEconomy.diamondToNetUSDRate.toFixed(3)} USD/💎).
+              Al enviar <strong>cualquier regalo</strong> (desde 🌹 10 💎), desbloqueas su chat privado al instante y {firstName} recibe <strong>1 💎 retirable</strong> por cada diamante ({formatDiamondRateUSD(liveEconomy.diamondToNetUSDRate)} USD/💎).
             </span>
           </div>
 
@@ -104,7 +110,7 @@ export default function GiftGateChatModal({
                   onClick={() => {
                     if (!canAfford) {
                       onClose();
-                      onOpenCoinStore?.();
+                      onOpenDiamondStore?.();
                       return;
                     }
                     onSelectGift?.(gift);

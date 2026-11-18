@@ -50,7 +50,7 @@ export default function GiftAnimationOverlay({ giftEvent, onComplete }) {
         <p className="text-xs text-zinc-600 mt-1">
           {giftEvent.isReceiver
             ? `${giftEvent.senderName || 'Alguien especial'} te envió este regalo`
-            : `Enviado con éxito (${giftEvent.giftValue} monedas)`}
+            : `Enviado con éxito (${giftEvent.giftValue} 💎)`}
         </p>
 
         {giftEvent.isReceiver && (() => {

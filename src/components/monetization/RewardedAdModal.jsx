@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
-  Coins,
   ExternalLink,
   ShieldCheck,
   Sparkles,
@@ -44,16 +43,16 @@ export default function RewardedAdModal({
   targetName = 'esta persona',
   targetUser = null,
   adSession = null, // { mode, token, opened, url, startedAt, windowRef }
-  coinCost,
+  diamondCost,
   onClose,
   onRewardEarned,
-  onUseCoinsInstead,
+  onUseDiamondsInstead,
 }) {
   const { economyConfig } = useAuth();
   const policy = resolveAccessPolicy(economyConfig);
   const duration = policy.adDurationSeconds;
-  const resolvedCoinCost =
-    coinCost ?? (purpose === 'unlock_chat' ? policy.unlockLikeChatCoins : policy.unlockLikeCoins);
+  const resolvedDiamondCost =
+    diamondCost ?? (purpose === 'unlock_chat' ? policy.unlockChatDiamonds : policy.unlockLikeDiamonds);
   const [session, setSession] = useState(adSession);
   const [secondsLeft, setSecondsLeft] = useState(duration);
   const [adState, setAdState] = useState('waiting_open'); // 'waiting_open' | 'blocked' | 'watching' | 'aborted' | 'completed'
@@ -525,14 +524,14 @@ export default function RewardedAdModal({
               </button>
             )}
 
-            {!rewardReady && policy.enableCoinCharges && onUseCoinsInstead && (
+            {!rewardReady && policy.enableDiamondCharges && onUseDiamondsInstead && (
               <button
                 type="button"
-                onClick={onUseCoinsInstead}
+                onClick={onUseDiamondsInstead}
                 className="w-full py-3 rounded-full bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-900 text-xs font-extrabold flex items-center justify-center gap-1.5 transition"
               >
                 <Sparkles className="w-3.5 h-3.5 text-sky-600" />
-                Omitir espera y usar {resolvedCoinCost} 💎 al instante
+                Omitir espera y usar {resolvedDiamondCost} 💎 al instante
               </button>
             )}
           </div>

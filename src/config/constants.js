@@ -2,7 +2,6 @@ export const DIAMOND_PACKAGES = [
   {
     id: 'pack_100',
     diamonds: 100,
-    coins: 100,
     priceUSD: 1.99,
     label: 'Inicio',
     badge: null,
@@ -11,7 +10,6 @@ export const DIAMOND_PACKAGES = [
   {
     id: 'pack_550',
     diamonds: 550,
-    coins: 550,
     priceUSD: 7.99,
     label: 'Popular',
     badge: '+10% Bonus',
@@ -20,7 +18,6 @@ export const DIAMOND_PACKAGES = [
   {
     id: 'pack_1200',
     diamonds: 1200,
-    coins: 1200,
     priceUSD: 14.99,
     label: 'VIP Pro',
     badge: 'Más Vendido',
@@ -29,15 +26,12 @@ export const DIAMOND_PACKAGES = [
   {
     id: 'pack_3000',
     diamonds: 3000,
-    coins: 3000,
     priceUSD: 29.99,
     label: 'Elite Global',
     badge: 'Mejor Valor',
     bonusText: 'Máximo poder en regalos, PRO, chats y Boost',
   },
 ];
-
-export const COIN_PACKAGES = DIAMOND_PACKAGES;
 
 export const PRO_PLANS = [
   {
@@ -64,14 +58,11 @@ export const PRO_PLANS = [
   },
 ];
 
-export const DIAMOND_TO_COIN_PRESETS = [10, 25, 50, 100, 250];
-
 export const BOOST_PLANS = [
   {
     id: 'boost_24h',
     durationHours: 24,
     costDiamonds: 50,
-    costCoins: 50,
     title: 'Boost Express 24h',
     subtitle: 'Aparece primero en el Carrusel VIP de tu país durante 24 horas.',
     badge: 'Rápido',
@@ -80,7 +71,6 @@ export const BOOST_PLANS = [
     id: 'boost_7d',
     durationHours: 24 * 7,
     costDiamonds: 200,
-    costCoins: 200,
     title: 'Boost VIP Semanal (7 días)',
     subtitle: '7 días continuos en Destacados VIP locales y globales.',
     badge: 'Ahorras 42%',
@@ -136,16 +126,13 @@ export const VIRTUAL_GIFTS = [
 ];
 
 /**
- * Modelo económico de ingresos de empresa y retiros de creadores:
- * - El comprador paga a la empresa en dinero real (USD / USDT / Local) al adquirir monedas.
- * - Al recibir regalos, el destinatario acumula 1 Diamante por cada moneda del regalo.
- * - Valor base de referencia por diamante = $0.01 USD.
- * - Reparto: 60% neto para el usuario creador ($0.006 USD/diamante), 40% para la empresa
- *   (cubre comisiones de pasarelas, servidores y ganancia de la plataforma).
+ * Modelo de economía única en Diamantes (💎):
+ * - El usuario adquiere Diamantes disponibles (diamonds) para chats sin Match, Likes, Fotos VIP, Boost, PRO y Regalos.
+ * - Al recibir Regalos o desbloqueos de Fotos Exclusivas VIP, el creador acumula 1:1 en Diamantes Ganados (earningsDiamonds).
+ * - Valor base de referencia por diamante = $0.01 USD (editable en Admin).
+ * - Reparto editable desde Super Admin: por defecto 60% neto para el creador ($0.006 USD/💎), 40% para la plataforma.
  */
 export const ECONOMY_CONFIG = {
-  diamondsPerCoin: 1,
-  coinsPerDiamond: 2, // Tasa sugerida: 1 💎 comprado = 2 🪙 para chatear/desbloquear
   baseDiamondValueUSD: 0.01,
   creatorShareRatio: 0.6,
   platformFeeRatio: 0.4,
@@ -241,11 +228,11 @@ export const AD_REWARD_CONFIG = {
   adsterraDirectLink: import.meta.env.VITE_ADSTERRA_DIRECT_LINK || '',
   customSponsorUrl: import.meta.env.VITE_CUSTOM_SPONSOR_URL || '',
   unlockMode: 'hybrid',
-  enableCoinCharges: true,
+  enableDiamondCharges: true,
   enableRewardedAds: true,
-  unlockLikeCoins: 2,
-  unlockAllLikesCoins: 10,
-  unlockLikeChatCoins: 2,
+  unlockLikeDiamonds: 2,
+  unlockAllLikesDiamonds: 10,
+  unlockChatDiamonds: 2,
   unlockExclusivePhotoDiamonds: 15,
   estimatedAdCpmUSD: 5,
 };
@@ -256,7 +243,7 @@ export const ACCESS_MODE_OPTIONS = [
     label: 'Modo Libre (Gratis)',
     shortLabel: 'Libre',
     description: 'Sin cobrar diamantes ni mostrar anuncios al chatear o ver Likes. Ideal para atraer y retener público nuevo.',
-    enableCoinCharges: false,
+    enableDiamondCharges: false,
     enableRewardedAds: false,
   },
   {
@@ -264,15 +251,15 @@ export const ACCESS_MODE_OPTIONS = [
     label: 'Solo Anuncios',
     shortLabel: 'Solo Ads',
     description: 'Gratis para tus usuarios sin gastar diamantes: desbloquean viendo 1 anuncio Monetag.',
-    enableCoinCharges: false,
+    enableDiamondCharges: false,
     enableRewardedAds: true,
   },
   {
-    id: 'coins_only',
+    id: 'diamonds_only',
     label: 'Solo Diamantes (💎)',
     shortLabel: 'Solo 💎',
     description: 'Desactiva anuncios; para chatear sin Match o descubrir Likes usan Diamantes o membresía PRO.',
-    enableCoinCharges: true,
+    enableDiamondCharges: true,
     enableRewardedAds: false,
   },
   {
@@ -280,52 +267,55 @@ export const ACCESS_MODE_OPTIONS = [
     label: 'Diamantes (💎) o Anuncio',
     shortLabel: 'Híbrido',
     description: 'Cada usuario elige: esperar 1 anuncio gratis, pagar con Diamantes al instante o hacerse PRO.',
-    enableCoinCharges: true,
+    enableDiamondCharges: true,
     enableRewardedAds: true,
   },
 ];
 
-export function deriveUnlockMode(enableCoins, enableAds) {
-  if (!enableCoins && !enableAds) return 'free';
-  if (!enableCoins && enableAds) return 'ads_only';
-  if (enableCoins && !enableAds) return 'coins_only';
+export function deriveUnlockMode(enableDiamonds, enableAds) {
+  if (!enableDiamonds && !enableAds) return 'free';
+  if (!enableDiamonds && enableAds) return 'ads_only';
+  if (enableDiamonds && !enableAds) return 'diamonds_only';
   return 'hybrid';
 }
 
 export function resolveAccessPolicy(economyConfig = null) {
-  const hasExplicitMode = ['free', 'ads_only', 'coins_only', 'hybrid'].includes(
-    economyConfig?.unlockMode
-  );
+  const rawMode =
+    economyConfig?.unlockMode === 'coins_only' ? 'diamonds_only' : economyConfig?.unlockMode;
+  const hasExplicitMode = ['free', 'ads_only', 'diamonds_only', 'hybrid'].includes(rawMode);
 
-  let enableCoinCharges;
+  const hasExplicitDiamondFlag = typeof economyConfig?.enableDiamondCharges === 'boolean';
+  const hasLegacyCoinFlag = typeof economyConfig?.enableCoinCharges === 'boolean';
+
+  let enableDiamondCharges;
   let enableRewardedAds;
   if (
-    typeof economyConfig?.enableCoinCharges === 'boolean' ||
+    hasExplicitDiamondFlag ||
+    hasLegacyCoinFlag ||
     typeof economyConfig?.enableRewardedAds === 'boolean'
   ) {
-    enableCoinCharges =
-      typeof economyConfig?.enableCoinCharges === 'boolean'
-        ? economyConfig.enableCoinCharges
-        : true;
+    enableDiamondCharges = hasExplicitDiamondFlag
+      ? economyConfig.enableDiamondCharges
+      : hasLegacyCoinFlag
+      ? economyConfig.enableCoinCharges
+      : true;
     enableRewardedAds =
       typeof economyConfig?.enableRewardedAds === 'boolean'
         ? economyConfig.enableRewardedAds
         : true;
   } else if (hasExplicitMode) {
-    enableCoinCharges =
-      economyConfig.unlockMode === 'coins_only' || economyConfig.unlockMode === 'hybrid';
-    enableRewardedAds =
-      economyConfig.unlockMode === 'ads_only' || economyConfig.unlockMode === 'hybrid';
+    enableDiamondCharges = rawMode === 'diamonds_only' || rawMode === 'hybrid';
+    enableRewardedAds = rawMode === 'ads_only' || rawMode === 'hybrid';
   } else {
-    enableCoinCharges = AD_REWARD_CONFIG.enableCoinCharges;
+    enableDiamondCharges = AD_REWARD_CONFIG.enableDiamondCharges;
     enableRewardedAds = AD_REWARD_CONFIG.enableRewardedAds;
   }
 
   const unlockMode = hasExplicitMode
-    ? economyConfig.unlockMode
-    : deriveUnlockMode(enableCoinCharges, enableRewardedAds);
+    ? rawMode
+    : deriveUnlockMode(enableDiamondCharges, enableRewardedAds);
 
-  const effectiveCoins = unlockMode === 'coins_only' || unlockMode === 'hybrid';
+  const effectiveDiamonds = unlockMode === 'diamonds_only' || unlockMode === 'hybrid';
   const effectiveAds = unlockMode === 'ads_only' || unlockMode === 'hybrid';
 
   const adDurationSeconds = Math.max(
@@ -338,20 +328,37 @@ export function resolveAccessPolicy(economyConfig = null) {
   const monetagDirectLink = String(
     economyConfig?.monetagDirectLink ?? AD_REWARD_CONFIG.monetagDirectLink ?? ''
   ).trim();
-  const unlockLikeCoins = Math.max(
-    1,
-    Math.floor(Number(economyConfig?.unlockLikeCoins ?? AD_REWARD_CONFIG.unlockLikeCoins ?? 2))
-  );
-  const unlockAllLikesCoins = Math.max(
+  const unlockLikeDiamonds = Math.max(
     1,
     Math.floor(
-      Number(economyConfig?.unlockAllLikesCoins ?? AD_REWARD_CONFIG.unlockAllLikesCoins ?? 10)
+      Number(
+        economyConfig?.unlockLikeDiamonds ??
+          economyConfig?.unlockLikeCoins ??
+          AD_REWARD_CONFIG.unlockLikeDiamonds ??
+          2
+      )
     )
   );
-  const unlockLikeChatCoins = Math.max(
+  const unlockAllLikesDiamonds = Math.max(
     1,
     Math.floor(
-      Number(economyConfig?.unlockLikeChatCoins ?? AD_REWARD_CONFIG.unlockLikeChatCoins ?? 2)
+      Number(
+        economyConfig?.unlockAllLikesDiamonds ??
+          economyConfig?.unlockAllLikesCoins ??
+          AD_REWARD_CONFIG.unlockAllLikesDiamonds ??
+          10
+      )
+    )
+  );
+  const unlockChatDiamonds = Math.max(
+    1,
+    Math.floor(
+      Number(
+        economyConfig?.unlockChatDiamonds ??
+          economyConfig?.unlockLikeChatCoins ??
+          AD_REWARD_CONFIG.unlockChatDiamonds ??
+          2
+      )
     )
   );
   const unlockExclusivePhotoDiamonds = Math.max(
@@ -368,28 +375,28 @@ export function resolveAccessPolicy(economyConfig = null) {
     0.1,
     Number(economyConfig?.estimatedAdCpmUSD ?? AD_REWARD_CONFIG.estimatedAdCpmUSD ?? 5)
   );
-  const coinsPerDiamond = Math.max(
-    1,
-    Math.min(100, Math.floor(Number(economyConfig?.coinsPerDiamond ?? ECONOMY_CONFIG.coinsPerDiamond ?? 1)))
-  );
   const proPlans =
     Array.isArray(economyConfig?.proPlans) && economyConfig.proPlans.length > 0
       ? economyConfig.proPlans
       : PRO_PLANS;
+  const boostPlans =
+    Array.isArray(economyConfig?.boostPlans) && economyConfig.boostPlans.length > 0
+      ? economyConfig.boostPlans
+      : BOOST_PLANS;
 
   return {
     unlockMode,
     isFreeMode: unlockMode === 'free',
-    enableCoinCharges: effectiveCoins,
+    enableDiamondCharges: effectiveDiamonds,
     enableRewardedAds: effectiveAds,
     adDurationSeconds,
     monetagDirectLink,
-    unlockLikeCoins,
-    unlockAllLikesCoins,
-    unlockLikeChatCoins,
+    unlockLikeDiamonds,
+    unlockAllLikesDiamonds,
+    unlockChatDiamonds,
     unlockExclusivePhotoDiamonds,
-    coinsPerDiamond,
     proPlans,
+    boostPlans,
     estimatedAdCpmUSD,
     estimatedRevenuePerAdUSD: Number(Math.max(0.0005, estimatedAdCpmUSD / 1000).toFixed(4)),
   };

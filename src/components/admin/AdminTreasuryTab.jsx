@@ -593,7 +593,9 @@ export default function AdminTreasuryTab({
                       <p className="font-display text-base font-black text-emerald-700 tabular-nums">
                         {formatUSD(w.netPayoutUSD)}
                       </p>
-                      <p className="text-[11px] font-bold text-sky-700">{w.amountDiamonds} 💎</p>
+                      <p className="text-[11px] font-bold text-sky-700">
+                        {w.amountDiamonds} 💎{w.creatorShareRatio ? ` · ${Math.round(w.creatorShareRatio * 100)}%` : ''}
+                      </p>
                     </div>
                   </div>
 
@@ -707,6 +709,7 @@ export default function AdminTreasuryTab({
                       <div className="flex items-center justify-between gap-2 pt-1 text-[11px] flex-wrap">
                         <span className="text-zinc-500">
                           Bruto {formatUSD(w.grossUSD)} · Fee {formatUSD(w.platformFeeUSD)}
+                          {w.creatorShareRatio ? ` · ${Math.round(w.creatorShareRatio * 100)}% creador` : ''}
                         </span>
                         {w.payoutReference && (
                           <AdminCopyButton

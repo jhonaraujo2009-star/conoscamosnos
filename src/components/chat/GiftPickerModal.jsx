@@ -1,7 +1,7 @@
 import { Gem, Gift, Sparkles } from 'lucide-react';
 import { ECONOMY_CONFIG, VIRTUAL_GIFTS } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
-import { calculateGiftEconomics, formatUSD } from '../../utils/formatters';
+import { calculateGiftEconomics, formatDiamondRateUSD, formatUSD } from '../../utils/formatters';
 import LuxuryModalHeader from '../layout/LuxuryModalHeader';
 
 export default function GiftPickerModal({
@@ -11,7 +11,7 @@ export default function GiftPickerModal({
   userDiamonds = 0,
   sendingGiftId = null,
   onSelectGift,
-  onOpenCoinStore,
+  onOpenDiamondStore,
 }) {
   const { economyConfig } = useAuth();
   if (!isOpen) return null;
@@ -41,7 +41,7 @@ export default function GiftPickerModal({
               type="button"
               onClick={() => {
                 onClose();
-                onOpenCoinStore?.();
+                onOpenDiamondStore?.();
               }}
               className="px-3 py-1 rounded-full bg-zinc-900 text-white text-[11px] font-extrabold shadow-sm hover:bg-zinc-800"
             >
@@ -54,7 +54,7 @@ export default function GiftPickerModal({
           <Gem className="w-4 h-4 text-sky-500 shrink-0" />
           <span>
             <strong>Regla clara:</strong> cada <strong>1 💎 regalado</strong> entrega{' '}
-            <strong>1 💎 retirable</strong> (${liveEconomy.diamondToNetUSDRate.toFixed(3)} USD netos en dinero real para quien recibe).
+            <strong>1 💎 retirable</strong> ({formatDiamondRateUSD(liveEconomy.diamondToNetUSDRate)} USD netos en dinero real para quien recibe).
           </span>
         </div>
 
@@ -71,7 +71,7 @@ export default function GiftPickerModal({
                 onClick={() => {
                   if (!canAfford) {
                     onClose();
-                    onOpenCoinStore?.();
+                    onOpenDiamondStore?.();
                     return;
                   }
                   onSelectGift(gift);

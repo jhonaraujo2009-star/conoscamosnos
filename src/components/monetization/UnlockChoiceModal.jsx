@@ -25,14 +25,14 @@ export default function UnlockChoiceModal({
   mode = 'unlock_chat', // 'unlock_chat' | 'reveal_like'
   targetUser,
   alreadyLikedMe = false,
-  userCoins = 0,
-  coinCost,
-  busyCoins = false,
+  userDiamonds = 0,
+  diamondCost,
+  busyDiamonds = false,
   lockedLikesCount = 0,
   unlockAllCost,
   onClose,
   onWatchAd,
-  onUnlockWithCoins,
+  onUnlockWithDiamonds,
   onUnlockAllLikes,
   onOpenPro,
 }) {
@@ -46,11 +46,11 @@ export default function UnlockChoiceModal({
   const isRevealLike = mode === 'reveal_like';
   const duration = policy.adDurationSeconds;
   const resolvedDiamondCost =
-    coinCost ?? (isRevealLike ? policy.unlockLikeCoins : policy.unlockLikeChatCoins);
-  const resolvedAllCost = unlockAllCost ?? policy.unlockAllLikesCoins;
-  const hasEnoughDiamonds = Number(userCoins) >= Number(resolvedDiamondCost);
+    diamondCost ?? (isRevealLike ? policy.unlockLikeDiamonds : policy.unlockChatDiamonds);
+  const resolvedAllCost = unlockAllCost ?? policy.unlockAllLikesDiamonds;
+  const hasEnoughDiamonds = Number(userDiamonds) >= Number(resolvedDiamondCost);
   const showAdOption = policy.enableRewardedAds;
-  const showDiamondOption = policy.enableCoinCharges;
+  const showDiamondOption = policy.enableDiamondCharges;
 
   const handleChooseFreeAd = () => {
     const session = openIsolatedAdViewer({
@@ -193,8 +193,8 @@ export default function UnlockChoiceModal({
           {showDiamondOption && (
             <button
               type="button"
-              disabled={busyCoins}
-              onClick={onUnlockWithCoins}
+              disabled={busyDiamonds}
+              onClick={onUnlockWithDiamonds}
               className="group w-full p-4 rounded-[24px] bg-white border border-sky-200 hover:border-sky-400 text-left transition active:scale-[0.99] disabled:opacity-50 shadow-card"
             >
               <div className="flex items-center justify-between gap-3">
@@ -204,7 +204,7 @@ export default function UnlockChoiceModal({
                   </div>
                   <div className="min-w-0">
                     <p className="font-display text-sm font-black text-zinc-900">
-                      {busyCoins
+                      {busyDiamonds
                         ? 'Desbloqueando al instante...'
                         : showAdOption
                         ? 'Pase directo con Diamantes (Sin anuncios)'
@@ -212,8 +212,8 @@ export default function UnlockChoiceModal({
                     </p>
                     <p className="text-[11px] text-zinc-500 mt-0.5">
                       {hasEnoughDiamonds
-                        ? `Tu saldo: ${userCoins} 💎 · Entrada inmediata`
-                        : `Tienes ${userCoins} 💎 · Toca para recargar ${resolvedDiamondCost} 💎`}
+                        ? `Tu saldo: ${userDiamonds} 💎 · Entrada inmediata`
+                        : `Tienes ${userDiamonds} 💎 · Toca para recargar ${resolvedDiamondCost} 💎`}
                     </p>
                   </div>
                 </div>
@@ -228,7 +228,7 @@ export default function UnlockChoiceModal({
           {showDiamondOption && isRevealLike && lockedLikesCount >= 2 && onUnlockAllLikes && (
             <button
               type="button"
-              disabled={busyCoins}
+              disabled={busyDiamonds}
               onClick={onUnlockAllLikes}
               className="w-full py-3.5 px-4 rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 text-white text-xs font-black hover:brightness-105 transition flex items-center justify-center gap-1.5 shadow-md disabled:opacity-50"
             >

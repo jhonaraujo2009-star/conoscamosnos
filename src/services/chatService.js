@@ -170,9 +170,9 @@ export async function sendImageMessage({ matchId, senderId, senderName = '', rec
 }
 
 /**
- * Transacción atómica de regalo virtual usando Diamantes comprados (sender.diamonds):
- * - Verifica saldo en Diamantes del emisor (los regalos se envían con 💎, no con monedas)
- * - Descuenta Diamantes comprados al emisor
+ * Transacción atómica de regalo virtual usando Diamantes disponibles (sender.diamonds):
+ * - Verifica saldo en Diamantes del emisor
+ * - Descuenta Diamantes al emisor
  * - Suma +1 a giftsReceivedCount y acredita earningsDiamonds retirables en $ USD al receptor
  * - Registra giftTransactions
  * - Crea o actualiza la sala de chat privada 1-a-1 e inserta el mensaje especial type: 'gift'
@@ -234,11 +234,14 @@ export async function sendVirtualGift({
         : {};
     prevGiftCounts[gift.id] = Number(prevGiftCounts[gift.id] || 0) + 1;
 
-    transaction.update(senderRef, {
+    const senderUpdate = {
       diamonds: nextBalances.diamonds,
-      coins: nextBalances.coins,
       updatedAt: serverTimestamp(),
-    });
+    };
+    if (Number(senderData.coins || 0) !== nextBalances.coins) {
+      senderUpdate.coins = nextBalances.coins;
+    }
+    transaction.update(senderRef, senderUpdate);
 
     transaction.update(receiverRef, {
       giftsReceivedCount: receiverGiftsCount + 1,

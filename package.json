@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "PWA mobile-first global de citas, amistad y chat en tiempo real con monetización multimoneda, regalos virtuales y retiros.",
+  "description": "PWA mobile-first global de citas, amistad y chat en tiempo real con economía única en Diamantes (💎), regalos virtuales y retiros.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

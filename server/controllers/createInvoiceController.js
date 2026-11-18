@@ -1,10 +1,10 @@
 import { getAdminAuth, getAdminFirestore } from '../config/firebaseAdmin.js';
 
 const DEFAULT_PACKAGES = [
-  { id: 'pack_100', diamonds: 100, coins: 100, priceUSD: 1.99, label: 'Inicio' },
-  { id: 'pack_550', diamonds: 550, coins: 550, priceUSD: 7.99, label: 'Popular' },
-  { id: 'pack_1200', diamonds: 1200, coins: 1200, priceUSD: 14.99, label: 'VIP Pro' },
-  { id: 'pack_3000', diamonds: 3000, coins: 3000, priceUSD: 29.99, label: 'Elite Global' },
+  { id: 'pack_100', diamonds: 100, priceUSD: 1.99, label: 'Inicio' },
+  { id: 'pack_550', diamonds: 550, priceUSD: 7.99, label: 'Popular' },
+  { id: 'pack_1200', diamonds: 1200, priceUSD: 14.99, label: 'VIP Pro' },
+  { id: 'pack_3000', diamonds: 3000, priceUSD: 29.99, label: 'Elite Global' },
 ];
 
 const DEFAULT_PRO_PLANS = [
@@ -68,7 +68,9 @@ export async function createNowPaymentsInvoice({
     const configSnap = await db.collection('appConfig').doc('economy').get();
     if (configSnap.exists) {
       const cfg = configSnap.data();
-      if (Array.isArray(cfg?.coinPackages) && cfg.coinPackages.length > 0) {
+      if (Array.isArray(cfg?.diamondPackages) && cfg.diamondPackages.length > 0) {
+        packages = cfg.diamondPackages;
+      } else if (Array.isArray(cfg?.coinPackages) && cfg.coinPackages.length > 0) {
         packages = cfg.coinPackages;
       }
       if (Array.isArray(cfg?.proPlans) && cfg.proPlans.length > 0) {
@@ -97,7 +99,7 @@ export async function createNowPaymentsInvoice({
     };
   }
 
-  const safeTarget = isProOrder ? 'pro' : creditTarget === 'coins' ? 'coins' : 'diamonds';
+  const safeTarget = isProOrder ? 'pro' : 'diamonds';
   const cleanOrigin = String(origin || process.env.APP_PUBLIC_URL || 'https://conoscamosnos.vercel.app').replace(/\/$/, '');
   const orderId = `uid:${uid}|pkg:${pkg.id}|target:${safeTarget}`;
   const packageUnits = Number(pkg.diamonds ?? pkg.priceDiamonds ?? pkg.coins ?? 0);
@@ -152,7 +154,6 @@ export async function createNowPaymentsInvoice({
       invoiceUrl: data.invoice_url,
       orderId,
       amountUSD: pkg.priceUSD,
-      coins: packageUnits,
       diamonds: packageUnits,
       proDurationDays: durationDays,
     },

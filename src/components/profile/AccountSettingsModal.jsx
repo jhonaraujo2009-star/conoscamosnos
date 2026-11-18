@@ -3,7 +3,6 @@ import {
   Bell,
   CheckCircle2,
   ChevronRight,
-  Coins,
   Crown,
   Download,
   Eye,
@@ -89,7 +88,7 @@ export default function AccountSettingsModal({
   myReportsCount = 0,
   unreadGiftsCount = 0,
   receivedGiftsCount = 0,
-  onOpenCoinStore,
+  onOpenDiamondStore,
   onOpenWithdrawals,
   onOpenBoost,
   onOpenSafetyCenter,
@@ -307,7 +306,7 @@ export default function AccountSettingsModal({
                 type="button"
                 onClick={() => {
                   onClose();
-                  onOpenCoinStore?.('buy');
+                  onOpenDiamondStore?.('buy');
                 }}
                 className="p-4 rounded-3xl bg-white border border-sky-200/80 shadow-card text-left hover:border-sky-400 transition"
               >
@@ -329,7 +328,7 @@ export default function AccountSettingsModal({
                 type="button"
                 onClick={() => {
                   onClose();
-                  onOpenCoinStore?.('pro');
+                  onOpenDiamondStore?.('pro');
                 }}
                 className="p-4 rounded-3xl bg-gradient-to-br from-rose-50 via-white to-amber-50 border border-rose-200/80 shadow-card text-left hover:border-[#FF2E54] transition"
               >

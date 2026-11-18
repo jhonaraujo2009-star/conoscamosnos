@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Clock, Crown, Gem, Sparkles, Zap } from 'lucide-react';
-import { BOOST_PLANS } from '../../config/constants';
+import { resolveAccessPolicy } from '../../config/constants';
+import { useAuth } from '../../contexts/AuthContext';
 import { activateCountryBoost } from '../../services/monetizationService';
 import {
   formatTimeRemaining,
@@ -13,14 +14,16 @@ export default function BoostModal({
   isOpen,
   onClose,
   userProfile,
-  onOpenCoinStore,
+  onOpenDiamondStore,
   onSuccess,
   onError,
 }) {
+  const { economyConfig } = useAuth();
   const [loadingPlanId, setLoadingPlanId] = useState(null);
 
   if (!isOpen) return null;
 
+  const boostPlans = resolveAccessPolicy(economyConfig).boostPlans;
   const currentlyBoosted = isBoostActive(userProfile);
   const spendableDiamonds = getSpendableDiamonds(userProfile);
 
@@ -29,17 +32,16 @@ export default function BoostModal({
     if (spendableDiamonds < cost) {
       onError?.(`Necesitas ${cost} 💎. Recarga Diamantes en la tienda.`);
       onClose();
-      onOpenCoinStore();
+      onOpenDiamondStore?.();
       return;
     }
 
     setLoadingPlanId(plan.id);
     try {
       await activateCountryBoost({
-        userId: userProfile.uid,
         plan,
       });
-      onSuccess?.(`⚡ ¡Boost VIP activado por ${plan.durationHours === 24 ? '24 horas' : '7 días'}!`);
+      onSuccess?.(`⚡ ¡Boost VIP activado por ${plan.durationHours === 24 ? '24 horas' : `${Math.round(plan.durationHours / 24)} días`}!`);
       onClose();
     } catch (err) {
       onError?.(err.message || 'Error al activar el Boost VIP.');
@@ -83,7 +85,7 @@ export default function BoostModal({
           )}
 
           <div className="space-y-3">
-            {BOOST_PLANS.map((plan) => {
+            {boostPlans.map((plan) => {
               const cost = Number(plan.costDiamonds ?? plan.costCoins ?? 50);
               const enough = spendableDiamonds >= cost;
               const isLoading = loadingPlanId === plan.id;

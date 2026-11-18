@@ -54,7 +54,7 @@ export default function ChatRoom({
   onBack,
   onMarkRead,
   onOpenProfile,
-  onOpenCoinStore,
+  onOpenDiamondStore,
   onSuccess,
   onError,
 }) {
@@ -707,7 +707,7 @@ export default function ChatRoom({
         userDiamonds={getSpendableDiamonds(currentUser)}
         sendingGiftId={sendingGiftId}
         onSelectGift={handleSendGift}
-        onOpenCoinStore={onOpenCoinStore}
+        onOpenDiamondStore={onOpenDiamondStore}
       />
 
       <GiftAnimationOverlay

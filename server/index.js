@@ -1,6 +1,7 @@
 import express from 'express';
 import { createInvoiceExpressHandler } from './controllers/createInvoiceController.js';
 import { sendPushExpressHandler } from './controllers/pushNotificationController.js';
+import { storeActivateExpressHandler } from './controllers/storeActivationController.js';
 import paymentsRouter from './routes/payments.js';
 
 const app = express();
@@ -18,6 +19,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.post('/api/payments/create-invoice', createInvoiceExpressHandler);
+app.post('/api/store/activate', storeActivateExpressHandler);
 app.post('/api/notifications/send', sendPushExpressHandler);
 app.use('/api/webhooks', paymentsRouter);
 

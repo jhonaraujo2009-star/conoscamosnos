@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock,
-  Coins,
   Copy,
   DollarSign,
   Gem,
@@ -16,16 +15,19 @@ import {
 import {
   ECONOMY_CONFIG,
   WITHDRAWAL_PAYOUT_METHODS,
-  resolveAccessPolicy,
 } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
 import { subscribeUserPayoutAccount } from '../../services/userService';
 import {
-  convertDiamondsToCoins,
   requestDiamondsWithdrawal,
   subscribeMyWithdrawals,
+  transferEarningsToDiamonds,
 } from '../../services/withdrawalService';
-import { calculateWithdrawalBreakdown, formatUSD } from '../../utils/formatters';
+import {
+  calculateWithdrawalBreakdown,
+  formatDiamondRateUSD,
+  formatUSD,
+} from '../../utils/formatters';
 import LuxuryModalHeader from '../layout/LuxuryModalHeader';
 import GiftShowcaseCard from './GiftShowcaseCard';
 
@@ -34,9 +36,7 @@ const MIN_SWAP_DIAMONDS = 10;
 export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, onSuccess, onError }) {
   const { economyConfig } = useAuth();
   const liveEconomy = economyConfig || ECONOMY_CONFIG;
-  const coinsPerDiamond = resolveAccessPolicy(liveEconomy).coinsPerDiamond;
   const availableDiamonds = Number(userProfile?.earningsDiamonds || 0);
-  const currentCoins = Number(userProfile?.coins || 0);
   const pendingDiamonds = Number(userProfile?.pendingWithdrawalDiamonds || 0);
   const totalWithdrawnUSD = Number(userProfile?.totalWithdrawnUSD || 0);
 
@@ -122,17 +122,17 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
     }
   };
 
-  const handleSwapToCoins = async (e) => {
+  const handleSwapToDiamonds = async (e) => {
     e.preventDefault();
     if (!userProfile?.uid || swapping) return;
     setSwapping(true);
     try {
-      const res = await convertDiamondsToCoins({
+      const res = await transferEarningsToDiamonds({
         userId: userProfile.uid,
         amountDiamonds: swapAmount,
       });
       onSuccess?.(
-        `💎 Pasaste ${res.convertedDiamonds || swapAmount} 💎 ganados a tu Billetera de Diamantes disponibles.`
+        `💎 Pasaste ${res.transferredDiamonds || swapAmount} 💎 ganados a tu Billetera de Diamantes disponibles.`
       );
     } catch (err) {
       onError?.(err.message || 'No se pudo pasar a tu billetera disponible.');
@@ -161,7 +161,7 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
               <div>
                 <p className="text-[11px] font-extrabold uppercase tracking-wider text-sky-700 flex items-center gap-1">
                   <Gem className="w-3.5 h-3.5 text-sky-500" />
-                  Diamantes Disponibles
+                  Diamantes Ganados (Retirables)
                 </p>
                 <div className="flex items-baseline gap-2 mt-1">
                   <span className="font-display text-3xl font-black text-zinc-900 tabular-nums">
@@ -225,14 +225,15 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
           {rulesOpen && (
             <div className="p-4 rounded-2xl bg-white border border-zinc-200/80 shadow-sm text-[11px] text-zinc-600 space-y-2 leading-relaxed">
               <p>
-                Cada regalo que recibes suma <strong>1 💎 por moneda</strong> (valor base{' '}
+                Cada regalo o desbloqueo de Foto Exclusiva VIP que recibes suma{' '}
+                <strong>Diamantes ganados (💎)</strong> (valor base{' '}
                 {formatUSD(liveEconomy.baseDiamondValueUSD)}/💎). Al retirar a dinero real recibes{' '}
                 <strong>{Math.round(liveEconomy.creatorShareRatio * 100)}% neto</strong> (
-                <strong>${liveEconomy.diamondToNetUSDRate.toFixed(3)} USD/💎</strong>) por Binance
-                Pay, Zinli o Pago Móvil.
+                <strong>{formatDiamondRateUSD(liveEconomy.diamondToNetUSDRate)} USD/💎</strong>) por
+                Binance Pay, Zinli o Pago Móvil.
               </p>
               <p className="text-zinc-500">
-                Únicamente tus <strong>diamantes ganados por regalos</strong> son retirables en USD reales o puedes pasarlos 1:1 a tu <strong>Billetera de Diamantes disponibles (💎)</strong> para activar Conoscamosnos PRO, Boost VIP, chats o regalos.
+                Únicamente tus <strong>diamantes ganados por regalos y Álbum VIP</strong> son retirables en USD reales o puedes pasarlos 1:1 a tu <strong>Billetera de Diamantes disponibles (💎)</strong> para activar Conoscamosnos PRO, Boost VIP, chats o regalos.
               </p>
             </div>
           )}
@@ -416,7 +417,7 @@ export default function EarningsWithdrawModal({ isOpen, onClose, userProfile, on
             </form>
           ) : (
             <form
-              onSubmit={handleSwapToCoins}
+              onSubmit={handleSwapToDiamonds}
               className="space-y-3.5 p-4 rounded-3xl bg-white border border-zinc-200/85 shadow-sm"
             >
               <div className="flex items-center justify-between">

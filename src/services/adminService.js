@@ -12,7 +12,8 @@ import {
 import { db } from '../config/firebase';
 import {
   AD_REWARD_CONFIG,
-  COIN_PACKAGES,
+  BOOST_PLANS,
+  DIAMOND_PACKAGES,
   ECONOMY_CONFIG,
   PRO_PLANS,
   deriveUnlockMode,
@@ -22,8 +23,10 @@ import { toMillis } from '../utils/formatters';
 
 export const DEFAULT_LIVE_ECONOMY = {
   ...ECONOMY_CONFIG,
-  coinPackages: COIN_PACKAGES,
+  creatorSharePercent: Math.round(ECONOMY_CONFIG.creatorShareRatio * 100),
+  diamondPackages: DIAMOND_PACKAGES,
   proPlans: PRO_PLANS,
+  boostPlans: BOOST_PLANS,
   ...resolveAccessPolicy(AD_REWARD_CONFIG),
   paymentChannels: {
     enableZinli: true,
@@ -61,6 +64,7 @@ export function subscribeEconomyConfig(callback) {
       const creatorShareRatio = Number(
         data.creatorShareRatio ?? ECONOMY_CONFIG.creatorShareRatio
       );
+      const creatorSharePercent = Math.round(creatorShareRatio * 100);
       const platformFeeRatio = Number((1 - creatorShareRatio).toFixed(4));
       const diamondToNetUSDRate = Number(
         (baseDiamondValueUSD * creatorShareRatio).toFixed(4)
@@ -69,14 +73,20 @@ export function subscribeEconomyConfig(callback) {
         100,
         Math.floor(Number(data.minWithdrawalDiamonds ?? ECONOMY_CONFIG.minWithdrawalDiamonds))
       );
-      const coinPackages =
-        Array.isArray(data.coinPackages) && data.coinPackages.length > 0
+      const diamondPackages =
+        Array.isArray(data.diamondPackages) && data.diamondPackages.length > 0
+          ? data.diamondPackages
+          : Array.isArray(data.coinPackages) && data.coinPackages.length > 0
           ? data.coinPackages
-          : COIN_PACKAGES;
+          : DIAMOND_PACKAGES;
       const proPlans =
         Array.isArray(data.proPlans) && data.proPlans.length > 0
           ? data.proPlans
           : PRO_PLANS;
+      const boostPlans =
+        Array.isArray(data.boostPlans) && data.boostPlans.length > 0
+          ? data.boostPlans
+          : BOOST_PLANS;
       const accessPolicy = resolveAccessPolicy(data);
       const paymentChannels = {
         ...DEFAULT_LIVE_ECONOMY.paymentChannels,
@@ -90,11 +100,13 @@ export function subscribeEconomyConfig(callback) {
         paymentChannels,
         baseDiamondValueUSD,
         creatorShareRatio,
+        creatorSharePercent,
         platformFeeRatio,
         diamondToNetUSDRate,
         minWithdrawalDiamonds,
-        coinPackages,
+        diamondPackages,
         proPlans,
+        boostPlans,
       });
     },
     () => callback(DEFAULT_LIVE_ECONOMY)
@@ -102,29 +114,31 @@ export function subscribeEconomyConfig(callback) {
 }
 
 /**
- * Super Admin: actualiza el modo global de monetización (Libre / Solo Ads / Solo Monedas / Híbrido),
+ * Super Admin: actualiza el modo global de monetización (Libre / Solo Ads / Solo Diamantes / Híbrido),
  * duración de anuncios, enlace Direct Link de Monetag, tarifas de desbloqueo y canales de pago directo.
  */
 export async function updatePlatformAccessConfig({
   adminId,
   unlockMode,
-  enableCoinCharges,
+  enableDiamondCharges,
   enableRewardedAds,
   adDurationSeconds = 12,
   monetagDirectLink = AD_REWARD_CONFIG.monetagDirectLink,
-  unlockLikeCoins = 10,
-  unlockAllLikesCoins = 30,
-  unlockLikeChatCoins = 10,
+  unlockLikeDiamonds = 2,
+  unlockAllLikesDiamonds = 10,
+  unlockChatDiamonds = 2,
+  unlockExclusivePhotoDiamonds = 15,
   estimatedAdCpmUSD = 5,
   paymentChannels = null,
 }) {
   if (!adminId) throw new Error('Sesión de Super Admin inválida.');
 
-  const resolvedMode = ['free', 'ads_only', 'coins_only', 'hybrid'].includes(unlockMode)
-    ? unlockMode
-    : deriveUnlockMode(Boolean(enableCoinCharges), Boolean(enableRewardedAds));
+  const normalizedInputMode = unlockMode === 'coins_only' ? 'diamonds_only' : unlockMode;
+  const resolvedMode = ['free', 'ads_only', 'diamonds_only', 'hybrid'].includes(normalizedInputMode)
+    ? normalizedInputMode
+    : deriveUnlockMode(Boolean(enableDiamondCharges), Boolean(enableRewardedAds));
 
-  const coinsActive = resolvedMode === 'coins_only' || resolvedMode === 'hybrid';
+  const diamondsActive = resolvedMode === 'diamonds_only' || resolvedMode === 'hybrid';
   const adsActive = resolvedMode === 'ads_only' || resolvedMode === 'hybrid';
 
   const cleanDuration = Math.floor(Number(adDurationSeconds));
@@ -137,20 +151,25 @@ export async function updatePlatformAccessConfig({
     throw new Error('El Direct Link de Monetag debe comenzar con https:// o http://');
   }
 
-  const cleanLikeCoins = Math.max(1, Math.floor(Number(unlockLikeCoins || 10)));
-  const cleanAllLikesCoins = Math.max(1, Math.floor(Number(unlockAllLikesCoins || 30)));
-  const cleanChatCoins = Math.max(1, Math.floor(Number(unlockLikeChatCoins || 10)));
+  const cleanLikeDiamonds = Math.max(1, Math.floor(Number(unlockLikeDiamonds || 2)));
+  const cleanAllLikesDiamonds = Math.max(1, Math.floor(Number(unlockAllLikesDiamonds || 10)));
+  const cleanChatDiamonds = Math.max(1, Math.floor(Number(unlockChatDiamonds || 2)));
+  const cleanExclusivePhotoDiamonds = Math.max(
+    1,
+    Math.floor(Number(unlockExclusivePhotoDiamonds || 15))
+  );
   const cleanCpm = Math.max(0.1, Number(Number(estimatedAdCpmUSD || 5).toFixed(2)));
 
   const payload = {
     unlockMode: resolvedMode,
-    enableCoinCharges: coinsActive,
+    enableDiamondCharges: diamondsActive,
     enableRewardedAds: adsActive,
     adDurationSeconds: cleanDuration,
     monetagDirectLink: cleanDirectLink,
-    unlockLikeCoins: cleanLikeCoins,
-    unlockAllLikesCoins: cleanAllLikesCoins,
-    unlockLikeChatCoins: cleanChatCoins,
+    unlockLikeDiamonds: cleanLikeDiamonds,
+    unlockAllLikesDiamonds: cleanAllLikesDiamonds,
+    unlockChatDiamonds: cleanChatDiamonds,
+    unlockExclusivePhotoDiamonds: cleanExclusivePhotoDiamonds,
     estimatedAdCpmUSD: cleanCpm,
     updatedBy: adminId,
     updatedAt: serverTimestamp(),
@@ -171,57 +190,51 @@ export async function updatePlatformAccessConfig({
 }
 
 /**
- * Super Admin: actualiza el precio de los diamantes y paquetes en appConfig/economy.
+ * Super Admin: actualiza el precio base, % de retiro de creadores y paquetes de Diamantes en appConfig/economy.
  */
 export async function updateEconomyConfig({
   adminId,
   baseDiamondValueUSD,
   creatorShareRatio = 0.6,
   minWithdrawalDiamonds = 500,
-  coinsPerDiamond = 2,
-  coinPackages = COIN_PACKAGES,
+  diamondPackages = DIAMOND_PACKAGES,
 }) {
   const cleanBase = Number(baseDiamondValueUSD);
   const cleanShare = Number(creatorShareRatio);
   const cleanMin = Math.floor(Number(minWithdrawalDiamonds));
-  const cleanExchangeRate = Math.floor(Number(coinsPerDiamond));
 
   if (!Number.isFinite(cleanBase) || cleanBase <= 0 || cleanBase > 5) {
     throw new Error('El precio base por diamante debe ser mayor a $0 y menor o igual a $5.00 USD.');
   }
-  if (!Number.isFinite(cleanShare) || cleanShare < 0.1 || cleanShare > 0.95) {
-    throw new Error('El porcentaje para creadores debe estar entre 10% y 95%.');
+  if (!Number.isFinite(cleanShare) || cleanShare < 0.05 || cleanShare > 0.95) {
+    throw new Error('El porcentaje de retiro para el usuario debe estar entre 5% y 95%.');
   }
   if (!Number.isFinite(cleanMin) || cleanMin < 100) {
     throw new Error('El retiro mínimo debe ser al menos 100 diamantes.');
   }
-  if (!Number.isFinite(cleanExchangeRate) || cleanExchangeRate < 1 || cleanExchangeRate > 100) {
-    throw new Error('La tasa de intercambio debe estar entre 1 y 100 monedas por diamante.');
-  }
 
-  const sanitizedPackages = (Array.isArray(coinPackages) ? coinPackages : COIN_PACKAGES).map(
-    (pkg) => {
-      const units = Math.max(10, Math.floor(Number(pkg.diamonds ?? pkg.coins ?? 0)));
-      return {
-        ...pkg,
-        diamonds: units,
-        coins: units,
-        priceUSD: Number(Math.max(0.5, Number(pkg.priceUSD || 0)).toFixed(2)),
-      };
-    }
-  );
+  const sanitizedPackages = (
+    Array.isArray(diamondPackages) ? diamondPackages : DIAMOND_PACKAGES
+  ).map((pkg) => {
+    const units = Math.max(10, Math.floor(Number(pkg.diamonds ?? pkg.coins ?? 0)));
+    const { coins: _omitLegacyCoins, ...rest } = pkg;
+    return {
+      ...rest,
+      diamonds: units,
+      priceUSD: Number(Math.max(0.5, Number(pkg.priceUSD || 0)).toFixed(2)),
+    };
+  });
 
   await setDoc(
     doc(db, 'appConfig', 'economy'),
     {
-      diamondsPerCoin: 1,
-      coinsPerDiamond: cleanExchangeRate,
       baseDiamondValueUSD: Number(cleanBase.toFixed(4)),
-      creatorShareRatio: Number(cleanShare.toFixed(2)),
-      platformFeeRatio: Number((1 - cleanShare).toFixed(2)),
+      creatorShareRatio: Number(cleanShare.toFixed(4)),
+      creatorSharePercent: Math.round(cleanShare * 100),
+      platformFeeRatio: Number((1 - cleanShare).toFixed(4)),
       diamondToNetUSDRate: Number((cleanBase * cleanShare).toFixed(4)),
       minWithdrawalDiamonds: cleanMin,
-      coinPackages: sanitizedPackages,
+      diamondPackages: sanitizedPackages,
       updatedBy: adminId,
       updatedAt: serverTimestamp(),
     },
@@ -230,9 +243,13 @@ export async function updateEconomyConfig({
 }
 
 /**
- * Super Admin: actualiza planes y precios de la membresía Conoscamosnos PRO en tiempo real.
+ * Super Admin: actualiza planes de Conoscamosnos PRO y Boost VIP en tiempo real.
  */
-export async function updateProPlansConfig({ adminId, proPlans = PRO_PLANS }) {
+export async function updateProPlansConfig({
+  adminId,
+  proPlans = PRO_PLANS,
+  boostPlans = null,
+}) {
   if (!adminId) throw new Error('Sesión de Super Admin inválida.');
   const sanitizedProPlans = (Array.isArray(proPlans) ? proPlans : PRO_PLANS).map((plan) => {
     const durationDays = Math.max(1, Math.min(365, Math.floor(Number(plan.durationDays || 7))));
@@ -246,35 +263,24 @@ export async function updateProPlansConfig({ adminId, proPlans = PRO_PLANS }) {
     };
   });
 
-  await setDoc(
-    doc(db, 'appConfig', 'economy'),
-    {
-      proPlans: sanitizedProPlans,
-      updatedBy: adminId,
-      updatedAt: serverTimestamp(),
-    },
-    { merge: true }
-  );
-}
+  const payload = {
+    proPlans: sanitizedProPlans,
+    updatedBy: adminId,
+    updatedAt: serverTimestamp(),
+  };
 
-/**
- * Super Admin: actualiza la tasa sugerida e editable de intercambio Diamantes comprados -> Monedas.
- */
-export async function updateExchangeConfig({ adminId, coinsPerDiamond = 2 }) {
-  if (!adminId) throw new Error('Sesión de Super Admin inválida.');
-  const cleanRate = Math.floor(Number(coinsPerDiamond));
-  if (!Number.isFinite(cleanRate) || cleanRate < 1 || cleanRate > 100) {
-    throw new Error('La tasa de intercambio debe estar entre 1 y 100 monedas por diamante.');
+  if (Array.isArray(boostPlans) && boostPlans.length > 0) {
+    payload.boostPlans = boostPlans.map((plan) => {
+      const { costCoins: _omitLegacyCostCoins, ...rest } = plan;
+      return {
+        ...rest,
+        durationHours: Math.max(1, Math.min(24 * 30, Math.floor(Number(plan.durationHours || 24)))),
+        costDiamonds: Math.max(10, Math.floor(Number(plan.costDiamonds ?? plan.costCoins ?? 50))),
+      };
+    });
   }
-  await setDoc(
-    doc(db, 'appConfig', 'economy'),
-    {
-      coinsPerDiamond: cleanRate,
-      updatedBy: adminId,
-      updatedAt: serverTimestamp(),
-    },
-    { merge: true }
-  );
+
+  await setDoc(doc(db, 'appConfig', 'economy'), payload, { merge: true });
 }
 
 /**

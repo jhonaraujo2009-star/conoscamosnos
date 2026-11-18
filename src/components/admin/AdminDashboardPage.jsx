@@ -12,7 +12,7 @@ import {
   Settings,
   X,
 } from 'lucide-react';
-import { PRO_PLANS, resolveAccessPolicy } from '../../config/constants';
+import { BOOST_PLANS, DIAMOND_PACKAGES, PRO_PLANS, resolveAccessPolicy } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
 import { subscribeAllAdImpressions } from '../../services/adRewardService';
 import {
@@ -83,7 +83,12 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
   const [proPlansDraft, setProPlansDraft] = useState(
     economyConfig?.proPlans || PRO_PLANS
   );
-  const [packagesDraft, setPackagesDraft] = useState(economyConfig?.coinPackages || []);
+  const [boostPlansDraft, setBoostPlansDraft] = useState(
+    economyConfig?.boostPlans || BOOST_PLANS
+  );
+  const [packagesDraft, setPackagesDraft] = useState(
+    economyConfig?.diamondPackages || economyConfig?.coinPackages || DIAMOND_PACKAGES
+  );
   const [savingConfig, setSavingConfig] = useState(false);
   const [savingProPlans, setSavingProPlans] = useState(false);
 
@@ -100,7 +105,10 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
     setCreatorSharePct(String(Math.round((economyConfig?.creatorShareRatio ?? 0.6) * 100)));
     setMinWithdrawDiamonds(String(economyConfig?.minWithdrawalDiamonds ?? 500));
     setProPlansDraft(economyConfig?.proPlans || PRO_PLANS);
-    setPackagesDraft(economyConfig?.coinPackages || []);
+    setBoostPlansDraft(economyConfig?.boostPlans || BOOST_PLANS);
+    setPackagesDraft(
+      economyConfig?.diamondPackages || economyConfig?.coinPackages || DIAMOND_PACKAGES
+    );
     setAccessDraft(resolveAccessPolicy(economyConfig));
     setChannelsDraft({
       ...DEFAULT_LIVE_ECONOMY.paymentChannels,
@@ -417,10 +425,9 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
         baseDiamondValueUSD: Number(baseDiamondPrice),
         creatorShareRatio: Number(creatorSharePct) / 100,
         minWithdrawalDiamonds: Number(minWithdrawDiamonds),
-        coinsPerDiamond: 1,
-        coinPackages: packagesDraft,
+        diamondPackages: packagesDraft,
       });
-      onSuccess?.('💎 Configuración económica actualizada en tiempo real.');
+      onSuccess?.('💎 Configuración económica y % de retiro actualizados en tiempo real.');
     } catch (err) {
       onError?.(err.message || 'No se pudo guardar la configuración económica.');
     } finally {
@@ -436,10 +443,11 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
       await updateProPlansConfig({
         adminId: userProfile.uid,
         proPlans: proPlansDraft,
+        boostPlans: boostPlansDraft,
       });
-      onSuccess?.('👑 Planes Conoscamosnos PRO actualizados en tiempo real.');
+      onSuccess?.('👑 Planes Conoscamosnos PRO y Boost VIP actualizados en tiempo real.');
     } catch (err) {
-      onError?.(err.message || 'No se pudieron guardar los planes PRO.');
+      onError?.(err.message || 'No se pudieron guardar los planes PRO y Boost.');
     } finally {
       setSavingProPlans(false);
     }
@@ -449,13 +457,14 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
     await updatePlatformAccessConfig({
       adminId: userProfile.uid,
       unlockMode: accessDraft.unlockMode,
-      enableCoinCharges: accessDraft.enableCoinCharges,
+      enableDiamondCharges: accessDraft.enableDiamondCharges,
       enableRewardedAds: accessDraft.enableRewardedAds,
       adDurationSeconds: Number(accessDraft.adDurationSeconds),
       monetagDirectLink: accessDraft.monetagDirectLink,
-      unlockLikeCoins: Number(accessDraft.unlockLikeCoins),
-      unlockAllLikesCoins: Number(accessDraft.unlockAllLikesCoins),
-      unlockLikeChatCoins: Number(accessDraft.unlockLikeChatCoins),
+      unlockLikeDiamonds: Number(accessDraft.unlockLikeDiamonds),
+      unlockAllLikesDiamonds: Number(accessDraft.unlockAllLikesDiamonds),
+      unlockChatDiamonds: Number(accessDraft.unlockChatDiamonds),
+      unlockExclusivePhotoDiamonds: Number(accessDraft.unlockExclusivePhotoDiamonds),
       estimatedAdCpmUSD: Number(accessDraft.estimatedAdCpmUSD),
       paymentChannels: channels,
     });
@@ -666,6 +675,8 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
             onMinWithdrawDiamondsChange={setMinWithdrawDiamonds}
             proPlansDraft={proPlansDraft}
             onProPlansDraftChange={setProPlansDraft}
+            boostPlansDraft={boostPlansDraft}
+            onBoostPlansDraftChange={setBoostPlansDraft}
             savingProPlans={savingProPlans}
             onSaveProPlansConfig={handleSaveProPlansConfig}
             packagesDraft={packagesDraft}

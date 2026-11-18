@@ -65,7 +65,7 @@ export default function PublicProfileModal({
   userUnlocks = null,
   onClose,
   onStartChat,
-  onOpenCoinStore,
+  onOpenDiamondStore,
   onOpenPro,
   onSuccess,
   onError,
@@ -208,7 +208,7 @@ export default function PublicProfileModal({
         `Necesitas ${exclusiveCostDiamonds} 💎 para desbloquear esta Foto Exclusiva VIP (o hazte Conoscamosnos PRO).`
       );
       onClose?.();
-      onOpenCoinStore?.('buy');
+      onOpenDiamondStore?.('buy');
       return;
     }
     setBusyAction('unlock_photo');
@@ -350,7 +350,7 @@ export default function PublicProfileModal({
                   type="button"
                   onClick={() => {
                     onClose?.();
-                    (onOpenPro || (() => onOpenCoinStore?.('pro')))();
+                    (onOpenPro || (() => onOpenDiamondStore?.('pro')))();
                   }}
                   className="w-full py-2 px-3 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white text-[11px] font-black shadow hover:brightness-105 transition flex items-center justify-center gap-1"
                 >
@@ -725,9 +725,9 @@ export default function PublicProfileModal({
         userDiamonds={getSpendableDiamonds(currentUser)}
         sendingGiftId={sendingGiftId}
         onSelectGift={handleSendGift}
-        onOpenCoinStore={() => {
+        onOpenDiamondStore={() => {
           onClose();
-          onOpenCoinStore();
+          onOpenDiamondStore();
         }}
       />
 

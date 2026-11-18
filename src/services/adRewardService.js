@@ -120,15 +120,27 @@ export async function recordAdRewardUnlock({
   return { unlocked: true, targetUid, purpose };
 }
 
+function buildBalanceUpdate(userData, nextBalances) {
+  const payload = {
+    diamonds: nextBalances.diamonds,
+    updatedAt: serverTimestamp(),
+  };
+  if (Number(userData?.coins || 0) !== nextBalances.coins) {
+    payload.coins = nextBalances.coins;
+  }
+  return payload;
+}
+
 /**
  * Desbloquea un Like específico gastando Diamantes (💎) de forma atómica.
  */
-export async function unlockLikeWithCoins({
+export async function unlockLikeWithDiamonds({
   uid,
   targetUid,
-  costCoins = AD_REWARD_CONFIG.unlockLikeCoins,
+  costDiamonds = AD_REWARD_CONFIG.unlockLikeDiamonds,
 }) {
   if (!uid || !targetUid) throw new Error('Perfil inválido.');
+  const cleanCost = Math.max(1, Math.floor(Number(costDiamonds || AD_REWARD_CONFIG.unlockLikeDiamonds)));
   const userRef = doc(db, 'users', uid);
   const unlocksRef = getUnlocksRef(uid);
 
@@ -146,16 +158,13 @@ export async function unlockLikeWithCoins({
       return;
     }
 
-    const nextBalances = splitDiamondDeduction(userSnap.data(), costCoins);
+    const userData = userSnap.data();
+    const nextBalances = splitDiamondDeduction(userData, cleanCost);
     if (!nextBalances) {
-      throw new Error(`Necesitas ${costCoins} 💎 para revelar este Like al instante.`);
+      throw new Error(`Necesitas ${cleanCost} 💎 para revelar este Like al instante.`);
     }
 
-    transaction.update(userRef, {
-      diamonds: nextBalances.diamonds,
-      coins: nextBalances.coins,
-      updatedAt: serverTimestamp(),
-    });
+    transaction.update(userRef, buildBalanceUpdate(userData, nextBalances));
 
     transaction.set(
       unlocksRef,
@@ -167,19 +176,23 @@ export async function unlockLikeWithCoins({
     );
   });
 
-  return { unlocked: true, targetUid, costCoins };
+  return { unlocked: true, targetUid, costDiamonds: cleanCost };
 }
 
 /**
  * Desbloquea todos los Likes pendientes de una vez con Diamantes (💎).
  */
-export async function unlockAllLikesWithCoins({
+export async function unlockAllLikesWithDiamonds({
   uid,
   targetUids = [],
-  costCoins = AD_REWARD_CONFIG.unlockAllLikesCoins,
+  costDiamonds = AD_REWARD_CONFIG.unlockAllLikesDiamonds,
 }) {
   const cleanIds = Array.from(new Set(targetUids.filter(Boolean)));
   if (!uid || cleanIds.length === 0) throw new Error('No hay Likes pendientes por revelar.');
+  const cleanCost = Math.max(
+    1,
+    Math.floor(Number(costDiamonds || AD_REWARD_CONFIG.unlockAllLikesDiamonds))
+  );
 
   const userRef = doc(db, 'users', uid);
   const unlocksRef = getUnlocksRef(uid);
@@ -191,9 +204,10 @@ export async function unlockAllLikesWithCoins({
     ]);
     if (!userSnap.exists()) throw new Error('Perfil de usuario no encontrado.');
 
-    const nextBalances = splitDiamondDeduction(userSnap.data(), costCoins);
+    const userData = userSnap.data();
+    const nextBalances = splitDiamondDeduction(userData, cleanCost);
     if (!nextBalances) {
-      throw new Error(`Necesitas ${costCoins} 💎 para revelar todos tus Likes al instante.`);
+      throw new Error(`Necesitas ${cleanCost} 💎 para revelar todos tus Likes al instante.`);
     }
 
     const existingRevealed = Array.isArray(unlocksSnap.data()?.revealedLikeIds)
@@ -201,11 +215,7 @@ export async function unlockAllLikesWithCoins({
       : [];
     const merged = Array.from(new Set([...existingRevealed, ...cleanIds]));
 
-    transaction.update(userRef, {
-      diamonds: nextBalances.diamonds,
-      coins: nextBalances.coins,
-      updatedAt: serverTimestamp(),
-    });
+    transaction.update(userRef, buildBalanceUpdate(userData, nextBalances));
 
     transaction.set(
       unlocksRef,
@@ -217,18 +227,19 @@ export async function unlockAllLikesWithCoins({
     );
   });
 
-  return { unlockedCount: cleanIds.length, costCoins };
+  return { unlockedCount: cleanIds.length, costDiamonds: cleanCost };
 }
 
 /**
  * Desbloquea el acceso para enviar mensaje a un perfil sin Match gastando Diamantes (💎) atómicamente.
  */
-export async function unlockChatWithCoins({
+export async function unlockChatWithDiamonds({
   uid,
   targetUid,
-  costCoins = AD_REWARD_CONFIG.unlockLikeChatCoins,
+  costDiamonds = AD_REWARD_CONFIG.unlockChatDiamonds,
 }) {
   if (!uid || !targetUid) throw new Error('Perfil inválido.');
+  const cleanCost = Math.max(1, Math.floor(Number(costDiamonds || AD_REWARD_CONFIG.unlockChatDiamonds)));
   const userRef = doc(db, 'users', uid);
   const unlocksRef = getUnlocksRef(uid);
 
@@ -246,16 +257,13 @@ export async function unlockChatWithCoins({
       return;
     }
 
-    const nextBalances = splitDiamondDeduction(userSnap.data(), costCoins);
+    const userData = userSnap.data();
+    const nextBalances = splitDiamondDeduction(userData, cleanCost);
     if (!nextBalances) {
-      throw new Error(`Necesitas ${costCoins} 💎 para abrir este chat sin anuncios.`);
+      throw new Error(`Necesitas ${cleanCost} 💎 para abrir este chat sin anuncios.`);
     }
 
-    transaction.update(userRef, {
-      diamonds: nextBalances.diamonds,
-      coins: nextBalances.coins,
-      updatedAt: serverTimestamp(),
-    });
+    transaction.update(userRef, buildBalanceUpdate(userData, nextBalances));
 
     transaction.set(
       unlocksRef,
@@ -267,7 +275,7 @@ export async function unlockChatWithCoins({
     );
   });
 
-  return { unlocked: true, targetUid, costCoins };
+  return { unlocked: true, targetUid, costDiamonds: cleanCost };
 }
 
 /**
@@ -331,11 +339,7 @@ export async function unlockExclusivePhotoWithDiamonds({
         : {};
     prevGiftCounts.exclusive_photo = Number(prevGiftCounts.exclusive_photo || 0) + 1;
 
-    transaction.update(senderRef, {
-      diamonds: nextBalances.diamonds,
-      coins: nextBalances.coins,
-      updatedAt: serverTimestamp(),
-    });
+    transaction.update(senderRef, buildBalanceUpdate(senderData, nextBalances));
 
     transaction.update(receiverRef, {
       giftsReceivedCount: receiverGiftsCount + 1,

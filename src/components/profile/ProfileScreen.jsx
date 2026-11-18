@@ -4,7 +4,6 @@ import {
   Bell,
   Briefcase,
   CheckCircle2,
-  Coins,
   Crown,
   Eye,
   Flame,
@@ -76,7 +75,7 @@ export default function ProfileScreen({
   receivedGifts = [],
   unreadGiftsCount = 0,
   onPreviewOwnProfile,
-  onOpenCoinStore,
+  onOpenDiamondStore,
   onOpenWithdrawals,
   onOpenBoost,
   onOpenSafetyCenter,
@@ -549,7 +548,7 @@ export default function ProfileScreen({
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => onOpenCoinStore?.('buy')}
+                  onClick={() => onOpenDiamondStore?.('buy')}
                   className="p-2.5 rounded-2xl bg-gradient-to-br from-sky-50/90 to-white border border-sky-200/75 text-left hover:border-sky-300 active:scale-[0.99] transition flex items-center justify-between gap-2"
                 >
                   <div className="flex items-center gap-2 min-w-0">
@@ -572,7 +571,7 @@ export default function ProfileScreen({
 
                 <button
                   type="button"
-                  onClick={() => onOpenCoinStore?.('pro')}
+                  onClick={() => onOpenDiamondStore?.('pro')}
                   className="p-2.5 rounded-2xl bg-gradient-to-br from-rose-50/95 via-white to-amber-50/90 border border-rose-200/80 text-left hover:border-[#FF2E54] active:scale-[0.99] transition flex items-center justify-between gap-2"
                 >
                   <div className="flex items-center gap-2 min-w-0">
@@ -607,7 +606,7 @@ export default function ProfileScreen({
                   </div>
                   <div className="min-w-0">
                     <p className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700">
-                      Ganancias por Regalos
+                      Ganancias (Regalos y Álbum VIP)
                     </p>
                     <p className="font-display text-sm font-black text-zinc-900 tabular-nums leading-tight">
                       {userDiamonds} 💎 <span className="text-emerald-600 text-[10.5px]">(≈ {formatUSD(netPayoutUSD)})</span>
@@ -1399,7 +1398,7 @@ export default function ProfileScreen({
           myReportsCount={myReportsCount}
           unreadGiftsCount={unreadGiftsCount}
           receivedGiftsCount={receivedGifts.length}
-          onOpenCoinStore={onOpenCoinStore}
+          onOpenDiamondStore={onOpenDiamondStore}
           onOpenWithdrawals={onOpenWithdrawals}
           onOpenBoost={onOpenBoost}
           onOpenSafetyCenter={onOpenSafetyCenter}

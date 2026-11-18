@@ -1,10 +1,10 @@
 import { FieldValue, getAdminFirestore } from '../config/firebaseAdmin.js';
 
 const DEFAULT_PACKAGES = [
-  { id: 'pack_100', diamonds: 100, coins: 100, priceUSD: 1.99 },
-  { id: 'pack_550', diamonds: 550, coins: 550, priceUSD: 7.99 },
-  { id: 'pack_1200', diamonds: 1200, coins: 1200, priceUSD: 14.99 },
-  { id: 'pack_3000', diamonds: 3000, coins: 3000, priceUSD: 29.99 },
+  { id: 'pack_100', diamonds: 100, priceUSD: 1.99 },
+  { id: 'pack_550', diamonds: 550, priceUSD: 7.99 },
+  { id: 'pack_1200', diamonds: 1200, priceUSD: 14.99 },
+  { id: 'pack_3000', diamonds: 3000, priceUSD: 29.99 },
 ];
 
 const DEFAULT_PRO_PLANS = [
@@ -13,7 +13,7 @@ const DEFAULT_PRO_PLANS = [
 ];
 
 /**
- * Extrae userId, packageId y tipo de saldo ('diamonds' | 'pro' | 'coins') desde el order_id.
+ * Extrae userId, packageId y tipo de saldo ('diamonds' | 'pro') desde el order_id.
  */
 export function parseOrderMetadata(rawOrderId = '') {
   const text = String(rawOrderId || '').trim();
@@ -29,7 +29,7 @@ export function parseOrderMetadata(rawOrderId = '') {
     return {
       userId: parts.uid || parts.user || '',
       packageId: parts.pkg || parts.pack || '',
-      creditTarget: rawTarget === 'pro' ? 'pro' : rawTarget === 'coins' ? 'coins' : 'diamonds',
+      creditTarget: rawTarget === 'pro' ? 'pro' : 'diamonds',
     };
   }
 
@@ -38,7 +38,7 @@ export function parseOrderMetadata(rawOrderId = '') {
     return {
       userId: (userId || '').trim(),
       packageId: (packageId || '').trim(),
-      creditTarget: target === 'pro' ? 'pro' : target === 'coins' ? 'coins' : 'diamonds',
+      creditTarget: target === 'pro' ? 'pro' : 'diamonds',
     };
   }
 
@@ -54,11 +54,7 @@ function normalizePaymentEvent(payload) {
   const meta = parseOrderMetadata(payload.order_id);
   const amountUSD = Number(payload.price_amount || payload.outcome_amount || 0);
   const resolvedTarget =
-    payload.credit_target === 'pro' || meta.creditTarget === 'pro'
-      ? 'pro'
-      : payload.credit_target === 'coins' || meta.creditTarget === 'coins'
-      ? 'coins'
-      : 'diamonds';
+    payload.credit_target === 'pro' || meta.creditTarget === 'pro' ? 'pro' : 'diamonds';
   return {
     provider: 'nowpayments',
     externalPaymentId: String(payload.payment_id || payload.invoice_id || ''),
@@ -127,7 +123,9 @@ export async function processVerifiedPaymentWebhook({ payload }) {
 
     const economyData = configSnap.exists ? configSnap.data() : {};
     const packages =
-      Array.isArray(economyData?.coinPackages) && economyData.coinPackages.length > 0
+      Array.isArray(economyData?.diamondPackages) && economyData.diamondPackages.length > 0
+        ? economyData.diamondPackages
+        : Array.isArray(economyData?.coinPackages) && economyData.coinPackages.length > 0
         ? economyData.coinPackages
         : DEFAULT_PACKAGES;
     const proPlans =
@@ -155,7 +153,6 @@ export async function processVerifiedPaymentWebhook({ payload }) {
           : 0;
       const baseTimeMs = existingMs > Date.now() ? existingMs : Date.now();
       const newExpiryDate = new Date(baseTimeMs + durationDays * 24 * 60 * 60 * 1000);
-      const refUnits = Math.max(10, Math.floor(Number(matchedPro.priceDiamonds || 250)));
 
       transaction.update(userRef, {
         isPro: true,
@@ -172,7 +169,6 @@ export async function processVerifiedPaymentWebhook({ payload }) {
         packageId: matchedPro.id,
         creditField: 'pro',
         proDurationDays: durationDays,
-        coinsCredited: refUnits,
         diamondsCredited: 0,
         amountUSD: Number(event.amountUSD.toFixed(2)),
         currency: event.currency,
@@ -210,7 +206,7 @@ export async function processVerifiedPaymentWebhook({ payload }) {
       throw new Error('Cantidad de diamantes a acreditar inválida.');
     }
 
-    const creditField = event.creditTarget === 'coins' ? 'coins' : 'diamonds';
+    const creditField = 'diamonds';
     const currentBalance = Number(userData[creditField] || 0);
 
     transaction.update(userRef, {
@@ -225,8 +221,7 @@ export async function processVerifiedPaymentWebhook({ payload }) {
       externalPaymentId: event.externalPaymentId,
       packageId: event.packageId || 'dynamic_rate',
       creditField,
-      coinsCredited: unitsToCredit,
-      diamondsCredited: creditField === 'diamonds' ? unitsToCredit : 0,
+      diamondsCredited: unitsToCredit,
       amountUSD: Number(event.amountUSD.toFixed(2)),
       currency: event.currency,
       rawStatus: event.rawStatus,

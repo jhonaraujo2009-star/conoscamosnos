@@ -50,26 +50,26 @@ export default function AdminOverviewTab({
     accessPolicy?.unlockMode === 'free'
       ? {
           title: 'Modo Libre (Todo Gratis para el público)',
-          desc: 'Chats directos y Likes revelados gratis sin monedas ni anuncios para maximizar retención.',
+          desc: 'Chats directos y Likes revelados gratis sin diamantes ni anuncios para maximizar retención.',
           pill: 'Libre / Gratis',
           pillClass: 'bg-emerald-50 border-emerald-200 text-emerald-700',
         }
       : accessPolicy?.unlockMode === 'ads_only'
       ? {
           title: `Solo Anuncios Monetag (${accessPolicy.adDurationSeconds}s)`,
-          desc: 'Sin cobrar monedas al público; los usuarios desbloquean viendo 1 anuncio.',
+          desc: 'Sin cobrar diamantes al público; los usuarios desbloquean viendo 1 anuncio.',
           pill: 'Solo Anuncios',
           pillClass: 'bg-sky-50 border-sky-200 text-sky-700',
         }
-      : accessPolicy?.unlockMode === 'coins_only'
+      : accessPolicy?.unlockMode === 'diamonds_only'
       ? {
-          title: `Solo Diamantes (${accessPolicy.unlockLikeChatCoins} 💎)`,
+          title: `Solo Diamantes (${accessPolicy.unlockChatDiamonds} 💎)`,
           desc: 'Anuncios desactivados globalmente; desbloqueo inmediato con Diamantes o membresía PRO.',
           pill: 'Solo Diamantes 💎',
           pillClass: 'bg-sky-50 border-sky-200 text-sky-800',
         }
       : {
-          title: `Híbrido: Anuncio (${accessPolicy?.adDurationSeconds || 12}s), ${accessPolicy?.unlockLikeChatCoins || 2} 💎 o PRO`,
+          title: `Híbrido: Anuncio (${accessPolicy?.adDurationSeconds || 12}s), ${accessPolicy?.unlockChatDiamonds || 2} 💎 o PRO`,
           desc: 'Cada usuario elige ver 1 anuncio gratis, usar Diamantes al instante o hacerse Conoscamosnos PRO.',
           pill: 'Diamantes + Ads',
           pillClass: 'bg-rose-50 border-rose-200 text-rose-700',

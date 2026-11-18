@@ -10,20 +10,23 @@ import {
   Unlock,
   Wallet,
   Webhook,
+  Zap,
 } from 'lucide-react';
 import {
   ACCESS_MODE_OPTIONS,
   AD_REWARD_CONFIG,
+  BOOST_PLANS,
   PRO_PLANS,
   VIRTUAL_GIFTS,
   deriveUnlockMode,
 } from '../../config/constants';
+import { formatDiamondRateUSD, formatUSD } from '../../utils/formatters';
 import { AdminCopyButton, AdminSectionCard } from './AdminPrimitives';
 
 const PRESET_ICONS = {
   free: Unlock,
   ads_only: Tv,
-  coins_only: Gem,
+  diamonds_only: Gem,
   hybrid: Sparkles,
 };
 
@@ -62,6 +65,8 @@ export default function AdminSettingsTab({
   onMinWithdrawDiamondsChange,
   proPlansDraft = PRO_PLANS,
   onProPlansDraftChange,
+  boostPlansDraft = BOOST_PLANS,
+  onBoostPlansDraftChange,
   savingProPlans,
   onSaveProPlansConfig,
   packagesDraft,
@@ -99,33 +104,42 @@ export default function AdminSettingsTab({
     };
   }, []);
 
+  const safeCreatorPct = Math.max(5, Math.min(95, Number(creatorSharePct || 60)));
   const previewNetDiamondRate = Number(
-    (Number(baseDiamondPrice || 0) * (Number(creatorSharePct || 60) / 100)).toFixed(4)
+    (Number(baseDiamondPrice || 0) * (safeCreatorPct / 100)).toFixed(4)
   );
-  const platformFeePct = Math.max(5, Math.min(90, 100 - Number(creatorSharePct || 60)));
-  const chatUnlockDiamonds = Math.max(1, Number(accessDraft?.unlockLikeChatCoins || 2));
-  const likeUnlockDiamonds = Math.max(1, Number(accessDraft?.unlockLikeCoins || 2));
+  const platformFeePct = Math.max(0, Math.min(95, 100 - safeCreatorPct));
+  const chatUnlockDiamonds = Math.max(1, Number(accessDraft?.unlockChatDiamonds || 2));
+  const likeUnlockDiamonds = Math.max(1, Number(accessDraft?.unlockLikeDiamonds || 2));
   const safeProPlans =
     Array.isArray(proPlansDraft) && proPlansDraft.length > 0 ? proPlansDraft : PRO_PLANS;
+  const safeBoostPlans =
+    Array.isArray(boostPlansDraft) && boostPlansDraft.length > 0 ? boostPlansDraft : BOOST_PLANS;
+  const minW = Math.max(100, Math.floor(Number(minWithdrawDiamonds || 500)));
+  const minWGrossUSD = minW * Number(baseDiamondPrice || 0.01);
+  const minWCreatorUSD = minW * previewNetDiamondRate;
+  const minWPlatformUSD = Math.max(0, minWGrossUSD - minWCreatorUSD);
 
   const handleSelectPreset = (preset) => {
     onAccessDraftChange((prev) => ({
       ...prev,
       unlockMode: preset.id,
-      enableCoinCharges: preset.enableCoinCharges,
+      enableDiamondCharges: preset.enableDiamondCharges,
       enableRewardedAds: preset.enableRewardedAds,
     }));
   };
 
   const handleToggleSwitch = (field) => {
     onAccessDraftChange((prev) => {
-      const nextCoins = field === 'enableCoinCharges' ? !prev.enableCoinCharges : prev.enableCoinCharges;
-      const nextAds = field === 'enableRewardedAds' ? !prev.enableRewardedAds : prev.enableRewardedAds;
+      const nextDiamonds =
+        field === 'enableDiamondCharges' ? !prev.enableDiamondCharges : prev.enableDiamondCharges;
+      const nextAds =
+        field === 'enableRewardedAds' ? !prev.enableRewardedAds : prev.enableRewardedAds;
       return {
         ...prev,
-        enableCoinCharges: nextCoins,
+        enableDiamondCharges: nextDiamonds,
         enableRewardedAds: nextAds,
-        unlockMode: deriveUnlockMode(nextCoins, nextAds),
+        unlockMode: deriveUnlockMode(nextDiamonds, nextAds),
       };
     });
   };
@@ -142,7 +156,7 @@ export default function AdminSettingsTab({
                 Control Global de Cobros (💎), Anuncios y Retención
               </h2>
               <p className="text-xs text-zinc-600 mt-1 leading-relaxed max-w-2xl">
-                Economía unificada en <strong className="text-sky-700">Diamantes (💎)</strong> sin monedas aparte. Activa <strong className="text-emerald-700">Modo Libre</strong> para retener público nuevo o cambia a <strong className="text-sky-700">Solo Anuncios</strong> / <strong className="text-rose-700">Diamantes + Ads</strong> en 1 clic. Los miembros <strong className="text-[#FF2E54]">Conoscamosnos PRO</strong> tienen chats y Likes ilimitados sin anuncios.
+                Economía única 100% en <strong className="text-sky-700">Diamantes (💎)</strong>. Activa <strong className="text-emerald-700">Modo Libre</strong> para retener público nuevo o cambia a <strong className="text-sky-700">Solo Anuncios</strong> / <strong className="text-rose-700">Diamantes + Ads</strong> en 1 clic. Los miembros <strong className="text-[#FF2E54]">Conoscamosnos PRO</strong> tienen chats, Likes y Fotos VIP ilimitados sin anuncios.
               </p>
             </div>
 
@@ -152,7 +166,7 @@ export default function AdminSettingsTab({
                   ? 'bg-emerald-100 border-emerald-200 text-emerald-800'
                   : accessDraft.unlockMode === 'ads_only'
                   ? 'bg-sky-100 border-sky-200 text-sky-800'
-                  : accessDraft.unlockMode === 'coins_only'
+                  : accessDraft.unlockMode === 'diamonds_only'
                   ? 'bg-amber-100 border-amber-200 text-amber-800'
                   : 'bg-rose-100 border-rose-200 text-rose-800'
               }`}
@@ -203,8 +217,8 @@ export default function AdminSettingsTab({
             <AdminToggleSwitch
               label="Cobrar con Diamantes (💎) por Chats sin Match / Likes"
               description="Si está apagado, no se pedirán Diamantes al público para escribir sin Match o revelar Likes."
-              checked={accessDraft.enableCoinCharges}
-              onToggle={() => handleToggleSwitch('enableCoinCharges')}
+              checked={accessDraft.enableDiamondCharges}
+              onToggle={() => handleToggleSwitch('enableDiamondCharges')}
               accentClass="bg-sky-500"
             />
             <AdminToggleSwitch
@@ -244,9 +258,9 @@ export default function AdminSettingsTab({
                 min="1"
                 max="500"
                 required
-                value={accessDraft.unlockLikeChatCoins}
+                value={accessDraft.unlockChatDiamonds}
                 onChange={(e) =>
-                  onAccessDraftChange((p) => ({ ...p, unlockLikeChatCoins: e.target.value }))
+                  onAccessDraftChange((p) => ({ ...p, unlockChatDiamonds: e.target.value }))
                 }
                 className="w-full px-3 py-2 rounded-xl bg-sky-50/70 border border-sky-200 text-sm font-black text-sky-800 focus:outline-none focus:border-sky-400"
               />
@@ -261,9 +275,9 @@ export default function AdminSettingsTab({
                 min="1"
                 max="500"
                 required
-                value={accessDraft.unlockLikeCoins}
+                value={accessDraft.unlockLikeDiamonds}
                 onChange={(e) =>
-                  onAccessDraftChange((p) => ({ ...p, unlockLikeCoins: e.target.value }))
+                  onAccessDraftChange((p) => ({ ...p, unlockLikeDiamonds: e.target.value }))
                 }
                 className="w-full px-3 py-2 rounded-xl bg-sky-50/70 border border-sky-200 text-sm font-black text-sky-800 focus:outline-none focus:border-sky-400"
               />
@@ -278,11 +292,31 @@ export default function AdminSettingsTab({
                 min="1"
                 max="2000"
                 required
-                value={accessDraft.unlockAllLikesCoins}
+                value={accessDraft.unlockAllLikesDiamonds}
                 onChange={(e) =>
-                  onAccessDraftChange((p) => ({ ...p, unlockAllLikesCoins: e.target.value }))
+                  onAccessDraftChange((p) => ({ ...p, unlockAllLikesDiamonds: e.target.value }))
                 }
                 className="w-full px-3 py-2 rounded-xl bg-sky-50/70 border border-sky-200 text-sm font-black text-sky-800 focus:outline-none focus:border-sky-400"
+              />
+            </div>
+
+            <div>
+              <label className="text-[11px] font-bold text-zinc-600 block mb-1">
+                Foto VIP (💎)
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="500"
+                required
+                value={accessDraft.unlockExclusivePhotoDiamonds}
+                onChange={(e) =>
+                  onAccessDraftChange((p) => ({
+                    ...p,
+                    unlockExclusivePhotoDiamonds: e.target.value,
+                  }))
+                }
+                className="w-full px-3 py-2 rounded-xl bg-rose-50/70 border border-rose-200 text-sm font-black text-rose-800 focus:outline-none focus:border-rose-400"
               />
             </div>
 
@@ -302,12 +336,6 @@ export default function AdminSettingsTab({
                 }
                 className="w-full px-3 py-2 rounded-xl bg-amber-50/70 border border-amber-200 text-sm font-black text-amber-800 focus:outline-none focus:border-amber-400"
               />
-            </div>
-
-            <div className="col-span-2 sm:col-span-3 lg:col-span-1 flex items-end">
-              <div className="w-full px-3 py-2 rounded-xl bg-zinc-50 border border-zinc-200 text-[10.5px] text-zinc-600">
-                Sugerido: <strong className="text-sky-700">1–2 💎</strong> por acción.
-              </div>
             </div>
           </div>
 
@@ -351,7 +379,7 @@ export default function AdminSettingsTab({
               </p>
             </div>
             <span className="px-3 py-1 rounded-full bg-rose-100 border border-rose-200 text-rose-800 text-[11px] font-black shrink-0">
-              Moneda Única: 💎 Diamantes
+              Sistema Único: 💎 Diamantes
             </span>
           </div>
 
@@ -435,7 +463,68 @@ export default function AdminSettingsTab({
             ))}
           </div>
 
-          {/* Tabla de Aproximación Financiera en Tiempo Real (Moneda Única 💎) */}
+          {/* Planes Editables Boost VIP */}
+          <div className="space-y-2">
+            <p className="text-[11px] font-black uppercase tracking-wider text-purple-700 flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-purple-600" />
+              Planes Boost VIP (Destacados del País)
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {safeBoostPlans.map((plan, idx) => (
+                <div
+                  key={plan.id}
+                  className="p-4 rounded-2xl bg-gradient-to-br from-purple-50/85 via-white to-sky-50/70 border border-purple-200 space-y-2.5"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-black text-zinc-900">{plan.title}</p>
+                    {plan.badge && (
+                      <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 text-[9.5px] font-black shrink-0">
+                        {plan.badge}
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-bold text-zinc-600 block mb-0.5">
+                        Duración (horas)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="720"
+                        value={plan.durationHours}
+                        onChange={(e) => {
+                          const next = [...safeBoostPlans];
+                          next[idx] = { ...next[idx], durationHours: Number(e.target.value) };
+                          onBoostPlansDraftChange?.(next);
+                        }}
+                        className="w-full px-2.5 py-1.5 rounded-xl bg-white border border-purple-200 text-xs font-black text-zinc-900"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-zinc-600 block mb-0.5">
+                        Costo en 💎
+                      </label>
+                      <input
+                        type="number"
+                        min="10"
+                        max="10000"
+                        value={plan.costDiamonds ?? plan.costCoins ?? 50}
+                        onChange={(e) => {
+                          const next = [...safeBoostPlans];
+                          next[idx] = { ...next[idx], costDiamonds: Number(e.target.value) };
+                          onBoostPlansDraftChange?.(next);
+                        }}
+                        className="w-full px-2.5 py-1.5 rounded-xl bg-white border border-sky-200 text-xs font-black text-sky-700"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Tabla de Aproximación Financiera en Tiempo Real (Sistema Único 💎) */}
           <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white">
             <table className="w-full text-left border-collapse min-w-[680px]">
               <thead>
@@ -445,7 +534,7 @@ export default function AdminSettingsTab({
                   <th className="py-3 px-3">Precio USD</th>
                   <th className="py-3 px-3">Costo / 💎</th>
                   <th className="py-3 px-3">Alcance en Chats y Likes</th>
-                  <th className="py-3 px-3">Pago Máx. Creador ({creatorSharePct}%)</th>
+                  <th className="py-3 px-3">Pago Máx. Creador ({safeCreatorPct}%)</th>
                   <th className="py-3 px-4 text-right">Margen Plataforma</th>
                 </tr>
               </thead>
@@ -532,21 +621,21 @@ export default function AdminSettingsTab({
             className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#FF2E54] via-rose-500 to-amber-500 text-white font-black text-sm shadow-md shadow-rose-200 hover:brightness-105 disabled:opacity-50 transition flex items-center justify-center gap-2"
           >
             <Save className="w-4 h-4" />
-            {savingProPlans ? 'Guardando planes PRO...' : 'Guardar Planes Conoscamosnos PRO en Vivo'}
+            {savingProPlans ? 'Guardando planes...' : 'Guardar Planes PRO y Boost VIP en Vivo'}
           </button>
         </form>
       </AdminSectionCard>
 
-      {/* 3. Economía y Precios (appConfig/economy) */}
+      {/* 3. Economía, % de Retiro del Usuario y Paquetes (appConfig/economy) */}
       <AdminSectionCard accent="sky" className="p-5 sm:p-6">
         <form onSubmit={onSaveEconomyConfig} className="space-y-5">
           <div>
             <h2 className="font-display text-lg font-black text-zinc-900 flex items-center gap-2">
               <Gem className="w-5 h-5 text-sky-600" />
-              Economía y Paquetes de Diamantes (Tiempo Real)
+              Economía, % de Retiro y Paquetes (💎)
             </h2>
             <p className="text-xs text-zinc-600 mt-1">
-              Los cambios se guardan en <code className="px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 font-mono">appConfig/economy</code> y actualizan la tienda y los retiros al instante.
+              Ajusta el porcentaje que retira el usuario creador en dinero real, el retiro mínimo y los paquetes de Diamantes en tiempo real.
             </p>
           </div>
 
@@ -569,16 +658,16 @@ export default function AdminSettingsTab({
 
             <div>
               <label className="text-[11px] font-bold text-zinc-600 block mb-1">
-                % Neto Creador
+                % Retiro Usuario (Creador)
               </label>
               <input
                 type="number"
-                min="10"
+                min="5"
                 max="95"
                 required
                 value={creatorSharePct}
                 onChange={(e) => onCreatorSharePctChange(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-sm font-black text-zinc-900 focus:outline-none focus:border-sky-400 focus:bg-white"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-sky-50/70 border border-sky-200 text-sm font-black text-sky-900 focus:outline-none focus:border-sky-400 focus:bg-white"
               />
             </div>
 
@@ -598,13 +687,48 @@ export default function AdminSettingsTab({
             </div>
           </div>
 
-          <div className="p-3.5 rounded-2xl bg-sky-50 border border-sky-200 text-xs flex flex-wrap items-center justify-between gap-2">
-            <span className="text-sky-900 font-semibold">
-              Creador recibe: <strong className="text-zinc-950">${previewNetDiamondRate} USD / 💎</strong>
-            </span>
-            <span className="px-2.5 py-0.5 rounded-full bg-white border border-sky-200 text-[10.5px] font-extrabold text-sky-800">
-              Comisión plataforma: {platformFeePct}%
-            </span>
+          {/* Control rápido e interactivo del % de Retiro Usuario vs Comisión Plataforma */}
+          <div className="p-3.5 rounded-2xl bg-gradient-to-r from-sky-50 via-white to-emerald-50 border border-sky-200/85 space-y-3 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sky-950 font-bold">
+                Reparto de retiros: <strong className="text-emerald-700">{safeCreatorPct}% Usuario</strong> · <strong className="text-indigo-700">{platformFeePct}% Plataforma</strong>
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full bg-white border border-sky-200 text-[11px] font-black text-zinc-900 tabular-nums">
+                {formatDiamondRateUSD(previewNetDiamondRate)} / 💎 neto
+              </span>
+            </div>
+
+            <input
+              type="range"
+              min="5"
+              max="95"
+              step="1"
+              value={safeCreatorPct}
+              onChange={(e) => onCreatorSharePctChange(e.target.value)}
+              className="w-full accent-sky-600 cursor-pointer"
+            />
+
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[50, 60, 70, 75, 80].map((pct) => (
+                  <button
+                    key={pct}
+                    type="button"
+                    onClick={() => onCreatorSharePctChange(String(pct))}
+                    className={`px-2.5 py-1 rounded-full text-[10.5px] font-black border transition ${
+                      safeCreatorPct === pct
+                        ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
+                        : 'bg-white text-zinc-700 border-zinc-200 hover:border-sky-300'
+                    }`}
+                  >
+                    {pct}%
+                  </button>
+                ))}
+              </div>
+              <span className="text-[11px] text-zinc-600 font-semibold tabular-nums">
+                Mín. ({minW} 💎): Creador cobra <strong className="text-emerald-700">{formatUSD(minWCreatorUSD)}</strong> · App <strong className="text-indigo-700">{formatUSD(minWPlatformUSD)}</strong>
+              </span>
+            </div>
           </div>
 
           <div className="space-y-2.5">
@@ -633,7 +757,8 @@ export default function AdminSettingsTab({
                         onChange={(e) => {
                           const val = Number(e.target.value);
                           const next = [...packagesDraft];
-                          next[idx] = { ...next[idx], diamonds: val, coins: val };
+                          const { coins: _omitCoins, ...rest } = next[idx];
+                          next[idx] = { ...rest, diamonds: val };
                           onPackagesDraftChange(next);
                         }}
                         className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-sky-200 text-xs font-black text-sky-700 focus:outline-none focus:border-sky-400"
@@ -666,7 +791,7 @@ export default function AdminSettingsTab({
             className="w-full py-3.5 rounded-full bg-gradient-to-r from-sky-500 via-cyan-500 to-emerald-500 text-white font-black text-sm shadow-md shadow-sky-200 hover:brightness-105 disabled:opacity-50 transition flex items-center justify-center gap-2"
           >
             <Save className="w-4 h-4" />
-            {savingConfig ? 'Guardando cambios...' : 'Guardar Paquetes y Economía'}
+            {savingConfig ? 'Guardando cambios...' : 'Guardar % de Retiro y Paquetes'}
           </button>
         </form>
       </AdminSectionCard>

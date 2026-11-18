@@ -147,7 +147,7 @@ export default function DiscoverSwipe({
   onStartChat,
   onOpenChat,
   onOpenBoost,
-  onOpenCoinStore,
+  onOpenDiamondStore,
   onOpenPro,
   onSuccess,
   onError,
@@ -633,7 +633,7 @@ export default function DiscoverSwipe({
       onError?.(
         `Necesitas ${exclusiveCostDiamonds} 💎 para desbloquear esta Foto Exclusiva VIP (o hazte Conoscamosnos PRO).`
       );
-      onOpenCoinStore?.();
+      onOpenDiamondStore?.();
       return;
     }
     setUnlockingPhoto(true);
@@ -733,7 +733,7 @@ export default function DiscoverSwipe({
 
               <button
                 type="button"
-                onClick={onOpenPro || onOpenCoinStore}
+                onClick={onOpenPro || onOpenDiamondStore}
                 className={`h-9 px-3 rounded-full border text-xs font-extrabold flex items-center gap-1 hover:brightness-110 transition ${
                   proActive
                     ? 'bg-gradient-to-r from-[#FF2E54] to-amber-500 border-amber-300/60 text-white shadow'
@@ -885,7 +885,7 @@ export default function DiscoverSwipe({
                   type="button"
                   onClick={() => {
                     setShowFiltersModal(false);
-                    (onOpenPro || onOpenCoinStore)?.();
+                    (onOpenPro || onOpenDiamondStore)?.();
                   }}
                   className="px-2 py-0.5 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white text-[9.5px] font-black"
                 >
@@ -902,7 +902,7 @@ export default function DiscoverSwipe({
                   if (val && !proActive && !accessPolicy.isFreeMode) {
                     onError?.('👑 Activa Conoscamosnos PRO para viajar a cualquier país con Modo Pasaporte.');
                     setShowFiltersModal(false);
-                    (onOpenPro || onOpenCoinStore)?.();
+                    (onOpenPro || onOpenDiamondStore)?.();
                     return;
                   }
                   setPassportCountryCode(val);
@@ -923,7 +923,7 @@ export default function DiscoverSwipe({
                   if (!proActive && !accessPolicy.isFreeMode) {
                     onError?.('👑 Filtro exclusivo Conoscamosnos PRO: Ver solo perfiles con Check Azul.');
                     setShowFiltersModal(false);
-                    (onOpenPro || onOpenCoinStore)?.();
+                    (onOpenPro || onOpenDiamondStore)?.();
                     return;
                   }
                   setOnlyVerified((v) => !v);
@@ -944,7 +944,7 @@ export default function DiscoverSwipe({
                   if (!proActive && !accessPolicy.isFreeMode) {
                     onError?.('👑 Filtro exclusivo Conoscamosnos PRO: Ver solo personas En Línea ahora.');
                     setShowFiltersModal(false);
-                    (onOpenPro || onOpenCoinStore)?.();
+                    (onOpenPro || onOpenDiamondStore)?.();
                     return;
                   }
                   setOnlyOnline((v) => !v);
@@ -1188,7 +1188,7 @@ export default function DiscoverSwipe({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        (onOpenPro || onOpenCoinStore)?.();
+                        (onOpenPro || onOpenDiamondStore)?.();
                       }}
                       className="w-full py-2 px-3 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white text-[11px] font-black shadow flex items-center justify-center gap-1"
                     >
@@ -1405,11 +1405,11 @@ export default function DiscoverSwipe({
                   title={
                     accessPolicy.isFreeMode
                       ? 'Enviar mensaje privado gratis (Modo Libre activo)'
-                      : accessPolicy.enableCoinCharges && accessPolicy.enableRewardedAds
-                      ? `Enviar mensaje (Gratis con Match · Directo: ${accessPolicy.unlockLikeChatCoins} monedas o 1 anuncio)`
+                      : accessPolicy.enableDiamondCharges && accessPolicy.enableRewardedAds
+                      ? `Enviar mensaje (Gratis con Match · Directo: ${accessPolicy.unlockChatDiamonds} 💎 o 1 anuncio)`
                       : accessPolicy.enableRewardedAds
                       ? 'Enviar mensaje (Gratis con Match · Directo: 1 anuncio)'
-                      : `Enviar mensaje (Gratis con Match · Directo: ${accessPolicy.unlockLikeChatCoins} monedas)`
+                      : `Enviar mensaje (Gratis con Match · Directo: ${accessPolicy.unlockChatDiamonds} 💎)`
                   }
                   aria-label="Chatear"
                 >
@@ -1623,9 +1623,9 @@ export default function DiscoverSwipe({
         userDiamonds={getSpendableDiamonds(currentUser)}
         sendingGiftId={sendingGiftId}
         onSelectGift={handleSendGift}
-        onOpenCoinStore={() => {
+        onOpenDiamondStore={() => {
           setGiftPickerOpen(false);
-          onOpenCoinStore?.();
+          onOpenDiamondStore?.();
         }}
       />
 

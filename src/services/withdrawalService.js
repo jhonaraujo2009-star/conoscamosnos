@@ -68,6 +68,8 @@ export async function requestDiamondsWithdrawal({
       countryCode: user.country?.code || 'GLOBAL',
       countryFlag: user.country?.flag || '🌎',
       amountDiamonds: cleanAmount,
+      creatorShareRatio: Number(economyConfig?.creatorShareRatio ?? ECONOMY_CONFIG.creatorShareRatio),
+      diamondToNetUSDRate: Number(economyConfig?.diamondToNetUSDRate ?? ECONOMY_CONFIG.diamondToNetUSDRate),
       grossUSD: breakdown.grossUSD,
       platformFeeUSD: breakdown.platformFeeUSD,
       netPayoutUSD: breakdown.netPayoutUSD,
@@ -207,16 +209,15 @@ export async function rejectWithdrawalRequest({
   });
 }
 
-async function runDiamondToCoinsSwap({
-  userId,
-  balanceField,
-  creditField = 'diamonds',
-  amountDiamonds,
-  minAmount = 1,
-}) {
+/**
+ * Permite al receptor de regalos pasar sus Diamantes Ganados (earningsDiamonds) a su Billetera
+ * de Diamantes Disponibles (diamonds, 1:1) para activar Conoscamosnos PRO, Boost VIP, Chats o Regalos
+ * sin tener que esperar un retiro en efectivo.
+ */
+export async function transferEarningsToDiamonds({ userId, amountDiamonds }) {
   const cleanAmount = Math.floor(Number(amountDiamonds || 0));
-  if (cleanAmount < minAmount) {
-    throw new Error(`El canje mínimo es de ${minAmount} ${minAmount === 1 ? 'diamante' : 'diamantes'}.`);
+  if (cleanAmount < 10) {
+    throw new Error('El traspaso mínimo es de 10 diamantes.');
   }
 
   const userRef = doc(db, 'users', userId);
@@ -228,53 +229,22 @@ async function runDiamondToCoinsSwap({
     }
 
     const data = userSnap.data();
-    const available = Number(data[balanceField] || 0);
-    const currentCredit = Number(data[creditField] || 0);
+    const availableEarnings = Number(data.earningsDiamonds || 0);
+    const currentSpendable = Number(data.diamonds || 0);
 
-    if (available < cleanAmount) {
-      throw new Error('No tienes suficientes diamantes disponibles para este canje.');
+    if (availableEarnings < cleanAmount) {
+      throw new Error('No tienes suficientes diamantes ganados disponibles para este traspaso.');
     }
 
     transaction.update(userRef, {
-      [balanceField]: available - cleanAmount,
-      [creditField]: currentCredit + cleanAmount,
+      earningsDiamonds: availableEarnings - cleanAmount,
+      diamonds: currentSpendable + cleanAmount,
       updatedAt: serverTimestamp(),
     });
 
     return {
-      convertedDiamonds: cleanAmount,
+      transferredDiamonds: cleanAmount,
       diamondsAdded: cleanAmount,
-      coinsAdded: cleanAmount,
-      coinsPerDiamond: 1,
-      converted: cleanAmount,
     };
-  });
-}
-
-/**
- * Compatibilidad para pasar saldo comprado entre campos si fuera necesario.
- */
-export async function convertPurchasedDiamondsToCoins({ userId, amountDiamonds }) {
-  return runDiamondToCoinsSwap({
-    userId,
-    balanceField: 'diamonds',
-    creditField: 'coins',
-    amountDiamonds,
-    minAmount: 1,
-  });
-}
-
-/**
- * Permite al receptor de regalos pasar sus Diamantes Ganados (earningsDiamonds) a su Billetera
- * de Diamantes Disponibles (diamonds, 1:1) para activar Conoscamosnos PRO, Boost VIP, Chats o Regalos
- * sin tener que esperar un retiro en efectivo.
- */
-export async function convertDiamondsToCoins({ userId, amountDiamonds }) {
-  return runDiamondToCoinsSwap({
-    userId,
-    balanceField: 'earningsDiamonds',
-    creditField: 'diamonds',
-    amountDiamonds,
-    minAmount: 10,
   });
 }
