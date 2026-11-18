@@ -4,10 +4,9 @@ import paymentsRouter from './routes/payments.js';
 
 const app = express();
 
-// Seguridad básica y parseo compatible con NowPayments (JSON) y Payeer (urlencoded)
+// Seguridad básica y parseo JSON para callbacks IPN y facturas de NowPayments
 app.disable('x-powered-by');
 app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 app.get('/api/health', (_req, res) => {
   res.json({

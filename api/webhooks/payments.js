@@ -2,23 +2,16 @@ import { verifyWebhookSignature } from '../../server/middleware/verifyPaymentSig
 import { processVerifiedPaymentWebhook } from '../../server/controllers/paymentWebhookController.js';
 
 /**
- * Parseo seguro para NowPayments (application/json) y Payeer (application/x-www-form-urlencoded).
+ * Parseo seguro para callbacks JSON de NowPayments.
  */
 async function parseWebhookBody(request) {
-  const contentType = (request.headers.get('content-type') || '').toLowerCase();
   const rawText = await request.text();
   if (!rawText) return {};
-
-  if (contentType.includes('application/x-www-form-urlencoded')) {
-    const params = new URLSearchParams(rawText);
-    return Object.fromEntries(params.entries());
-  }
 
   try {
     return JSON.parse(rawText);
   } catch {
-    const params = new URLSearchParams(rawText);
-    return Object.fromEntries(params.entries());
+    return {};
   }
 }
 
@@ -27,7 +20,7 @@ export async function GET() {
     {
       ok: true,
       endpoint: '/api/webhooks/payments',
-      providers: ['nowpayments', 'payeer'],
+      providers: ['nowpayments'],
     },
     { status: 200 }
   );
@@ -35,7 +28,7 @@ export async function GET() {
 
 /**
  * Vercel Serverless Function (Node.js Runtime) — POST /api/webhooks/payments
- * Recibe callbacks de NowPayments / Payeer, valida firma criptográfica y acredita saldo atómicamente en Firestore.
+ * Recibe callbacks IPN de NowPayments, valida la firma HMAC-SHA512 y acredita saldo atómicamente en Firestore.
  */
 export async function POST(request) {
   try {
@@ -50,17 +43,7 @@ export async function POST(request) {
     }
 
     // 2. Acreditación atómica e idempotente en Firestore Admin SDK
-    const result = await processVerifiedPaymentWebhook({
-      provider: verification.provider,
-      payload,
-    });
-
-    if (result.textResponse) {
-      return new Response(result.textResponse, {
-        status: result.statusCode,
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-      });
-    }
+    const result = await processVerifiedPaymentWebhook({ payload });
 
     return Response.json(result.body, { status: result.statusCode });
   } catch (err) {

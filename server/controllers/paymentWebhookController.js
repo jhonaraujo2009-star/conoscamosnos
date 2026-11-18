@@ -43,55 +43,34 @@ export function parseOrderMetadata(rawOrderId = '') {
 }
 
 /**
- * Normaliza los payloads de NowPayments y Payeer a una estructura uniforme verificada.
+ * Normaliza los payloads IPN de NowPayments a una estructura uniforme verificada.
  */
-function normalizePaymentEvent(provider, payload) {
-  if (provider === 'nowpayments') {
-    const status = String(payload.payment_status || '').toLowerCase();
-    const settled = status === 'finished' || status === 'confirmed';
-    const meta = parseOrderMetadata(payload.order_id);
-    const amountUSD = Number(payload.price_amount || payload.outcome_amount || 0);
-    return {
-      provider: 'nowpayments',
-      externalPaymentId: String(payload.payment_id || payload.invoice_id || ''),
-      rawStatus: status,
-      isSettled: settled,
-      userId: payload.user_id || meta.userId,
-      packageId: payload.package_id || meta.packageId,
-      creditTarget: payload.credit_target === 'diamonds' ? 'diamonds' : meta.creditTarget,
-      amountUSD,
-      currency: String(payload.price_currency || payload.pay_currency || 'USD').toUpperCase(),
-      payeerAckText: null,
-    };
-  }
-
-  // Payeer Merchant IPN
-  const status = String(payload.m_status || '').toLowerCase();
-  const settled = status === 'success';
-  const meta = parseOrderMetadata(payload.m_orderid);
-  const amountUSD = Number(payload.m_amount || 0);
+function normalizePaymentEvent(payload) {
+  const status = String(payload.payment_status || '').toLowerCase();
+  const settled = status === 'finished' || status === 'confirmed';
+  const meta = parseOrderMetadata(payload.order_id);
+  const amountUSD = Number(payload.price_amount || payload.outcome_amount || 0);
   return {
-    provider: 'payeer',
-    externalPaymentId: String(payload.m_operation_id || payload.m_orderid || ''),
+    provider: 'nowpayments',
+    externalPaymentId: String(payload.payment_id || payload.invoice_id || ''),
     rawStatus: status,
     isSettled: settled,
-    userId: meta.userId,
-    packageId: meta.packageId,
-    creditTarget: meta.creditTarget,
+    userId: payload.user_id || meta.userId,
+    packageId: payload.package_id || meta.packageId,
+    creditTarget: payload.credit_target === 'diamonds' ? 'diamonds' : meta.creditTarget,
     amountUSD,
-    currency: String(payload.m_curr || 'USD').toUpperCase(),
-    payeerAckText: `${payload.m_orderid || ''}|success`,
+    currency: String(payload.price_currency || payload.pay_currency || 'USD').toUpperCase(),
   };
 }
 
 /**
  * Procesa de forma atómica e idempotente el pago verificado:
  * - Consulta precios vigentes desde appConfig/economy en Firestore.
- * - Impide doble acreditación usando ID determinista paymentTransactions/{provider}_{externalPaymentId}.
+ * - Impide doble acreditación usando ID determinista paymentTransactions/nowpayments_{externalPaymentId}.
  * - Acredita el saldo al usuario (coins o earningsDiamonds según la orden) en una única transacción.
  */
-export async function processVerifiedPaymentWebhook({ provider, payload }) {
-  const event = normalizePaymentEvent(provider, payload);
+export async function processVerifiedPaymentWebhook({ payload }) {
+  const event = normalizePaymentEvent(payload);
 
   if (!event.externalPaymentId) {
     return { statusCode: 400, body: { ok: false, error: 'Falta identificador único de transacción.' } };
@@ -107,7 +86,6 @@ export async function processVerifiedPaymentWebhook({ provider, payload }) {
     return {
       statusCode: 200,
       body: { ok: true, ignored: true, status: event.rawStatus },
-      textResponse: event.provider === 'payeer' ? `${payload.m_orderid || ''}|error` : null,
     };
   }
 
@@ -211,7 +189,6 @@ export async function processVerifiedPaymentWebhook({ provider, payload }) {
   return {
     statusCode: 200,
     body: { ok: true, ...outcome },
-    textResponse: event.payeerAckText,
   };
 }
 
@@ -221,13 +198,9 @@ export async function processVerifiedPaymentWebhook({ provider, payload }) {
 export async function paymentWebhookExpressHandler(req, res) {
   try {
     const result = await processVerifiedPaymentWebhook({
-      provider: req.paymentProvider,
       payload: req.body,
     });
 
-    if (result.textResponse) {
-      return res.status(result.statusCode).type('text/plain').send(result.textResponse);
-    }
     return res.status(result.statusCode).json(result.body);
   } catch (err) {
     console.error('[PaymentWebhook] Error procesando webhook:', err);

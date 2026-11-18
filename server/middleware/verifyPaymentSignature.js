@@ -53,49 +53,8 @@ export function verifyNowPaymentsSignature(payload, receivedSig, ipnSecret) {
 }
 
 /**
- * Verifica firma oficial de Payeer Merchant Status Webhook (SHA-256 en mayúsculas).
- * Campos oficiales: m_operation_id:m_operation_ps:m_operation_date:m_operation_pay_date:m_shop:m_orderid:m_amount:m_curr:m_desc:m_status:SECRET_KEY
- */
-export function verifyPayeerSignature(payload, secretKey, expectedShopId = '') {
-  if (!secretKey) {
-    return { valid: false, reason: 'PAYEER_SECRET_KEY no está configurado en el servidor.' };
-  }
-  const receivedSign = payload?.m_sign;
-  if (!receivedSign) {
-    return { valid: false, reason: 'Falta firma m_sign en el callback de Payeer.' };
-  }
-  if (expectedShopId && String(payload.m_shop || '') !== String(expectedShopId)) {
-    return { valid: false, reason: 'm_shop no coincide con el comercio configurado.' };
-  }
-
-  const hashParts = [
-    payload.m_operation_id ?? '',
-    payload.m_operation_ps ?? '',
-    payload.m_operation_date ?? '',
-    payload.m_operation_pay_date ?? '',
-    payload.m_shop ?? '',
-    payload.m_orderid ?? '',
-    payload.m_amount ?? '',
-    payload.m_curr ?? '',
-    payload.m_desc ?? '',
-    payload.m_status ?? '',
-    secretKey,
-  ];
-
-  const expectedSign = crypto
-    .createHash('sha256')
-    .update(hashParts.join(':'))
-    .digest('hex')
-    .toUpperCase();
-
-  if (!safeCompareHex(receivedSign, expectedSign)) {
-    return { valid: false, reason: 'Firma SHA-256 de Payeer inválida.' };
-  }
-  return { valid: true, provider: 'payeer' };
-}
-
-/**
  * Verificador unificado agnóstico del runtime (funciona igual en Vercel Functions y Express).
+ * Valida únicamente callbacks oficiales firmados de NowPayments (HMAC-SHA512).
  */
 export function verifyWebhookSignature({ headers = {}, payload = {} }) {
   const normalizedHeaders = {};
@@ -104,21 +63,13 @@ export function verifyWebhookSignature({ headers = {}, payload = {} }) {
   });
 
   const nowSig = normalizedHeaders['x-nowpayments-sig'];
-  if (nowSig || payload?.payment_id !== undefined) {
+  if (nowSig || payload?.payment_id !== undefined || payload?.invoice_id !== undefined) {
     return verifyNowPaymentsSignature(payload, nowSig, process.env.NOWPAYMENTS_IPN_SECRET);
-  }
-
-  if (payload?.m_operation_id !== undefined || payload?.m_sign !== undefined) {
-    return verifyPayeerSignature(
-      payload,
-      process.env.PAYEER_SECRET_KEY,
-      process.env.PAYEER_SHOP_ID
-    );
   }
 
   return {
     valid: false,
-    reason: 'Proveedor de pago no reconocido o cabecera de firma ausente (NowPayments / Payeer).',
+    reason: 'Cabecera de firma criptográfica x-nowpayments-sig ausente o payload no reconocido.',
   };
 }
 

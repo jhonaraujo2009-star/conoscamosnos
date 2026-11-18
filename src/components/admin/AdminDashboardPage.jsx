@@ -1452,15 +1452,15 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
               </button>
             </form>
 
-            {/* Tarjeta de Integración de API Webhooks (NowPayments / Payeer) */}
+            {/* Tarjeta de Integración de API Webhooks (NowPayments) */}
             <section className="rounded-3xl p-6 bg-[#12101D] border border-white/10 space-y-4">
               <div>
                 <h2 className="font-display text-lg font-black text-white flex items-center gap-2">
                   <Webhook className="w-5 h-5 text-amber-400" />
-                  API de Webhooks (NowPayments / Payeer)
+                  API de Webhooks (NowPayments)
                 </h2>
                 <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
-                  Configura esta URL como Callback / IPN en tu panel de <strong>NowPayments</strong> o <strong>Payeer</strong>. El middleware valida la firma criptográfica (<code className="text-amber-300">HMAC-SHA512</code> / <code className="text-amber-300">SHA-256</code>) antes de acreditar saldo en Firestore.
+                  Configura esta URL como Callback / IPN en tu panel de <strong>NowPayments</strong>. El middleware valida la firma criptográfica (<code className="text-amber-300">HMAC-SHA512</code>) antes de acreditar saldo en Firestore.
                 </p>
               </div>
 
@@ -1486,9 +1486,8 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
               <div className="space-y-2 text-xs text-zinc-300">
                 <p className="font-extrabold text-white">Variables de entorno requeridas en Vercel / Servidor:</p>
                 <ul className="space-y-1.5 text-[11px] font-mono text-zinc-400 bg-black/30 p-3.5 rounded-2xl border border-white/5">
+                  <li><span className="text-amber-300">NOWPAYMENTS_API_KEY</span>=...</li>
                   <li><span className="text-amber-300">NOWPAYMENTS_IPN_SECRET</span>=...</li>
-                  <li><span className="text-amber-300">PAYEER_SHOP_ID</span>=...</li>
-                  <li><span className="text-amber-300">PAYEER_SECRET_KEY</span>=...</li>
                   <li><span className="text-sky-300">FIREBASE_SERVICE_ACCOUNT_JSON</span>=&#123;...&#125;</li>
                 </ul>
                 <p className="text-[11px] text-zinc-400 leading-relaxed pt-1">

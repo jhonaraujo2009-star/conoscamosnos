@@ -6,7 +6,7 @@ const router = Router();
 
 /**
  * POST /api/webhooks/payments
- * Recibe callbacks firmados de NowPayments (JSON) y Payeer (x-www-form-urlencoded / JSON).
+ * Recibe callbacks firmados IPN de NowPayments (JSON con firma HMAC-SHA512).
  */
 router.post(
   '/payments',
