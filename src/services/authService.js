@@ -10,10 +10,20 @@ import { auth, db, googleProvider } from '../config/firebase';
 import { COUNTRIES } from '../config/constants';
 import { buildUserBaseFolder } from './cloudinaryService';
 
+export const SUPER_ADMIN_EMAIL = 'jhonaraujo2009@gmail.com';
+
+export function isVerifiedSuperAdminAccount(firebaseUser) {
+  return Boolean(
+    firebaseUser?.emailVerified &&
+      String(firebaseUser?.email || '').trim().toLowerCase() === SUPER_ADMIN_EMAIL
+  );
+}
+
 export async function ensureUserDocument(firebaseUser, extra = {}) {
   if (!firebaseUser) return null;
   const userRef = doc(db, 'users', firebaseUser.uid);
   const snap = await getDoc(userRef);
+  const isOwnerSuperAdmin = isVerifiedSuperAdminAccount(firebaseUser);
 
   if (!snap.exists()) {
     const defaultCountry = COUNTRIES[0];
@@ -24,7 +34,7 @@ export async function ensureUserDocument(firebaseUser, extra = {}) {
       age: 18,
       gender: 'Mujer',
       interestedIn: 'Todos',
-      role: 'user',
+      role: isOwnerSuperAdmin ? 'SUPER_ADMIN' : 'user',
       accountStatus: 'active',
       isBanned: false,
       verifiedBadge: false,
@@ -71,6 +81,9 @@ export async function ensureUserDocument(firebaseUser, extra = {}) {
   };
   if (!snap.data()?.cloudinaryFolder) {
     updates.cloudinaryFolder = buildUserBaseFolder(firebaseUser.uid);
+  }
+  if (isOwnerSuperAdmin && snap.data()?.role !== 'SUPER_ADMIN') {
+    updates.role = 'SUPER_ADMIN';
   }
   await updateDoc(userRef, updates);
   return { id: snap.id, ...snap.data(), ...updates };

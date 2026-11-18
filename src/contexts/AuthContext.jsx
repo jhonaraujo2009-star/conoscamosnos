@@ -3,7 +3,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from '../config/firebase';
 import { DEFAULT_LIVE_ECONOMY, subscribeEconomyConfig } from '../services/adminService';
-import { ensureUserDocument } from '../services/authService';
+import { ensureUserDocument, isVerifiedSuperAdminAccount } from '../services/authService';
 import { updatePresence } from '../services/userService';
 
 const AuthContext = createContext(null);
@@ -121,7 +121,8 @@ export function AuthProvider({ children }) {
     return () => unsub();
   }, [firebaseUser?.uid]);
 
-  const isSuperAdmin = isSuperAdminRole(userProfile?.role);
+  const isSuperAdmin =
+    isSuperAdminRole(userProfile?.role) || isVerifiedSuperAdminAccount(firebaseUser);
   const isBanned = Boolean(
     userProfile?.isBanned ||
       userProfile?.accountStatus === 'banned' ||
