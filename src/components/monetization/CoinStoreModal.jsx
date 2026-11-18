@@ -7,6 +7,7 @@ import {
   Coins,
   Copy,
   CreditCard,
+  Download,
   ExternalLink,
   ImagePlus,
   Info,
@@ -65,7 +66,7 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
   const selectedPkg = livePackages.find((p) => p.id === selectedPkgId) || livePackages[0];
   const [activeTab, setActiveTab] = useState('auto'); // 'auto' | 'direct'
   const [rulesOpen, setRulesOpen] = useState(false);
-  const [qrOpen, setQrOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(Boolean(DIRECT_PAYMENT_METHODS[0]?.qrImageUrl));
   const [simulating, setSimulating] = useState(false);
   const [creatingInvoice, setCreatingInvoice] = useState(false);
 
@@ -410,7 +411,11 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
                     <button
                       key={method.id}
                       type="button"
-                      onClick={() => setSelectedMethod(method)}
+                      onClick={() => {
+                        setSelectedMethod(method);
+                        setQrOpen(Boolean(method.qrImageUrl));
+                        setCopied(false);
+                      }}
                       className={`p-3 rounded-2xl border text-left transition ${
                         active
                           ? 'bg-emerald-50 border-emerald-400 text-zinc-900 shadow-sm'
@@ -468,22 +473,34 @@ export default function CoinStoreModal({ isOpen, onClose, userProfile, onSuccess
                 </div>
 
                 {qrOpen && (
-                  <div className="flex flex-col items-center py-2 border-t border-zinc-100">
+                  <div className="flex flex-col items-center py-2.5 border-t border-zinc-100">
                     {selectedMethod.qrImageUrl ? (
-                      <div className="p-2.5 bg-white rounded-2xl border border-zinc-200 shadow-sm">
-                        <img
-                          src={selectedMethod.qrImageUrl}
-                          alt={`QR oficial de ${selectedMethod.name}`}
-                          className="w-44 h-44 object-contain rounded-xl"
-                        />
-                      </div>
+                      <>
+                        <div className="p-2.5 bg-white rounded-2xl border border-zinc-200 shadow-sm">
+                          <img
+                            src={selectedMethod.qrImageUrl}
+                            alt={`QR oficial de ${selectedMethod.name}`}
+                            className="w-52 max-h-80 object-contain rounded-xl"
+                          />
+                        </div>
+                        <a
+                          href={selectedMethod.qrImageUrl}
+                          download={`${selectedMethod.id}-qr.png`}
+                          className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-[11px] font-bold transition"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          Guardar imagen QR
+                        </a>
+                      </>
                     ) : (
                       <DynamicQrCode
                         payload={`${selectedMethod.qrPrefix}${selectedMethod.accountValue}&amount=${selectedPkg.priceUSD}`}
                       />
                     )}
                     <span className="text-[10px] font-semibold text-zinc-400 mt-1.5">
-                      QR de cobro para {selectedMethod.name}
+                      {selectedMethod.qrImageUrl
+                        ? `QR oficial de ${selectedMethod.name}`
+                        : `QR de cobro para ${selectedMethod.name}`}
                     </span>
                   </div>
                 )}

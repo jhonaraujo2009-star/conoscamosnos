@@ -140,7 +140,7 @@ export const DIRECT_PAYMENT_METHODS = [
     extraInstructions:
       'Abre tu app Zinli, toca Enviar dinero en USD a este correo (o escanea el QR oficial) y adjunta tu captura con el número de referencia.',
     qrPrefix: 'zinli://pay?to=',
-    qrImageUrl: import.meta.env.VITE_ZINLI_QR_URL || '',
+    qrImageUrl: import.meta.env.VITE_ZINLI_QR_URL || '/zinli-qr.png',
   },
   {
     id: 'pago_movil',
