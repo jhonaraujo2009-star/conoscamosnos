@@ -1,17 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  AlertCircle,
   CheckCircle2,
   Coins,
   ExternalLink,
-  PauseCircle,
-  RefreshCw,
   ShieldCheck,
   Sparkles,
   Tv,
   X,
 } from 'lucide-react';
 import { AD_REWARD_CONFIG } from '../../config/constants';
-import { triggerMonetagZoneTag } from '../../services/monetagLoader';
+import { openIsolatedAdViewer, subscribeAdViewerSession } from '../../services/monetagLoader';
 import { getPrimaryPhoto, triggerHaptic } from '../../utils/formatters';
 
 function playCompletionChime() {
@@ -26,7 +25,7 @@ function playCompletionChime() {
       osc.type = 'sine';
       osc.frequency.setValueAtTime(freq, now + idx * 0.11);
       gain.gain.setValueAtTime(0.0001, now + idx * 0.11);
-      gain.gain.exponentialRampToValueAtTime(0.06, now + idx * 0.11 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.05, now + idx * 0.11 + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.11 + 0.28);
       osc.connect(gain);
       gain.connect(ctx.destination);
@@ -43,76 +42,107 @@ export default function RewardedAdModal({
   purpose = 'reveal_like', // 'reveal_like' | 'unlock_chat'
   targetName = 'esta persona',
   targetUser = null,
+  adSession = null, // { token, opened, url, windowRef }
   coinCost = AD_REWARD_CONFIG.unlockLikeCoins,
   onClose,
   onRewardEarned,
   onUseCoinsInstead,
 }) {
-  const duration = Math.max(3, Number(AD_REWARD_CONFIG.adDurationSeconds || 8));
-  const provider = AD_REWARD_CONFIG.provider;
-
+  const duration = Math.max(5, Number(AD_REWARD_CONFIG.adDurationSeconds || 8));
+  const [session, setSession] = useState(adSession);
   const [secondsLeft, setSecondsLeft] = useState(duration);
-  const [paused, setPaused] = useState(false);
-  const [rewardReady, setRewardReady] = useState(false);
-  const [sdkState, setSdkState] = useState('running'); // 'running' | 'external_opened' | 'sdk_waiting' | 'completed' | 'dismissed'
+  const [adState, setAdState] = useState('waiting_open'); // 'waiting_open' | 'blocked' | 'watching' | 'aborted' | 'completed'
+  const [sponsorClicked, setSponsorClicked] = useState(false);
   const [claiming, setClaiming] = useState(false);
 
   const rewardedRef = useRef(false);
-  const completedFeedbackDoneRef = useRef(false);
+  const soundPlayedRef = useRef(false);
+  const sponsorStartedAtRef = useRef(0);
   const originalTitleRef = useRef('');
 
-  // Inicializar cada vez que abre
   useEffect(() => {
     if (!isOpen) return;
     rewardedRef.current = false;
-    completedFeedbackDoneRef.current = false;
-    setSecondsLeft(duration);
-    setPaused(false);
-    setRewardReady(false);
+    soundPlayedRef.current = false;
+    sponsorStartedAtRef.current = 0;
+    setSponsorClicked(false);
     setClaiming(false);
-    setSdkState('running');
+    setSecondsLeft(duration);
 
-    if (provider === 'monetag') {
-      triggerMonetagZoneTag();
+    if (adSession) {
+      setSession(adSession);
+      setAdState(adSession.opened ? 'watching' : 'blocked');
+    } else {
+      setSession(null);
+      setAdState('blocked');
     }
+  }, [isOpen, adSession, duration]);
 
-    if (provider === 'adsense_h5' && typeof window !== 'undefined' && typeof window.adBreak === 'function') {
-      setSdkState('sdk_waiting');
-      try {
-        window.adBreak({
-          type: 'reward',
-          name: `conoscamosnos_${purpose}`,
-          beforeReward: (showAdFn) => {
-            showAdFn();
-          },
-          adViewed: () => {
-            setSecondsLeft(0);
-            setRewardReady(true);
-            setSdkState('completed');
-          },
-          adDismissed: () => {
-            setSdkState('dismissed');
-          },
-        });
-      } catch {
-        setSdkState('running');
+  // Suscripción en tiempo real a eventos emitidos por la pestaña aislada /ad-viewer.html
+  useEffect(() => {
+    if (!isOpen || !session?.token) return;
+
+    const unsubscribe = subscribeAdViewerSession(session.token, {
+      onStarted: (data) => {
+        setAdState((prev) => (prev === 'completed' ? prev : 'watching'));
+        if (typeof data.secondsLeft === 'number') {
+          setSecondsLeft(data.secondsLeft);
+        }
+      },
+      onTick: (data) => {
+        setAdState('watching');
+        if (typeof data.secondsLeft === 'number') {
+          setSecondsLeft(Math.max(0, data.secondsLeft));
+        }
+      },
+      onSponsorClicked: () => {
+        sponsorStartedAtRef.current = Date.now();
+        setSponsorClicked(true);
+      },
+      onCompleted: () => {
+        setSecondsLeft(0);
+        setAdState('completed');
+      },
+      onAborted: () => {
+        setAdState((prev) => (prev === 'completed' ? prev : 'aborted'));
+      },
+    });
+
+    return () => unsubscribe();
+  }, [isOpen, session?.token]);
+
+  // Respaldo por si el usuario tocó el patrocinador en ad-viewer.html y fue redirigido a otra web fuera de nuestro origen
+  useEffect(() => {
+    if (!isOpen || !sponsorClicked || adState === 'completed') return;
+    const onReturnFocus = () => {
+      if (document.visibilityState !== 'visible') return;
+      const elapsedSec = Math.floor((Date.now() - sponsorStartedAtRef.current) / 1000);
+      if (sponsorStartedAtRef.current > 0 && elapsedSec >= duration - 1) {
+        setSecondsLeft(0);
+        setAdState('completed');
       }
-    }
-  }, [isOpen, duration, provider, purpose]);
+    };
+    document.addEventListener('visibilitychange', onReturnFocus);
+    window.addEventListener('focus', onReturnFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', onReturnFocus);
+      window.removeEventListener('focus', onReturnFocus);
+    };
+  }, [isOpen, sponsorClicked, adState, duration]);
 
-  // Avisar en el título de la pestaña para que el usuario sepa exactamente cuándo cerrar el anuncio
+  // Título claro en la pestaña para confirmar al usuario cuándo puede cerrar
   useEffect(() => {
     if (typeof document === 'undefined' || !isOpen) return;
     if (!originalTitleRef.current) {
       originalTitleRef.current = document.title;
     }
 
-    if (rewardReady) {
-      document.title = '✅ ¡Listo! Ya puedes cerrar el anuncio — Conoscamosnos';
-    } else if (paused) {
-      document.title = `⏸️ Regresa para continuar (${secondsLeft}s) — Conoscamosnos`;
+    if (adState === 'completed') {
+      document.title = '✅ ¡Listo! Ya puedes entrar — Conoscamosnos';
+    } else if (adState === 'watching') {
+      document.title = `⏳ Viendo anuncio (${secondsLeft}s) — Conoscamosnos`;
     } else {
-      document.title = `⏳ Quedan ${secondsLeft}s — Conoscamosnos`;
+      document.title = originalTitleRef.current;
     }
 
     return () => {
@@ -120,81 +150,50 @@ export default function RewardedAdModal({
         document.title = originalTitleRef.current;
       }
     };
-  }, [isOpen, rewardReady, paused, secondsLeft]);
+  }, [isOpen, adState, secondsLeft]);
 
   useEffect(() => {
-    if (!isOpen && typeof document !== 'undefined' && originalTitleRef.current) {
-      document.title = originalTitleRef.current;
-      originalTitleRef.current = '';
-    }
-  }, [isOpen]);
-
-  // Vibración + tono suave una sola vez al completarse el tiempo del anuncio
-  useEffect(() => {
-    if (isOpen && rewardReady && !completedFeedbackDoneRef.current) {
-      completedFeedbackDoneRef.current = true;
+    if (isOpen && adState === 'completed' && !soundPlayedRef.current) {
+      soundPlayedRef.current = true;
       triggerHaptic([24, 55, 36]);
       playCompletionChime();
     }
-  }, [isOpen, rewardReady]);
-
-  // Pausar solo cuando el usuario está fuera con un proveedor que no abre pestaña externa
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleVisibility = () => {
-      if (sdkState === 'external_opened' || provider === 'monetag') return;
-      setPaused(document.visibilityState !== 'visible');
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [isOpen, sdkState, provider]);
-
-  // Contador regresivo verificado
-  useEffect(() => {
-    if (!isOpen || rewardReady || paused || sdkState === 'sdk_waiting' || sdkState === 'dismissed') {
-      return;
-    }
-    if (secondsLeft <= 0) {
-      setRewardReady(true);
-      setSdkState('completed');
-      return;
-    }
-    const timer = setInterval(() => {
-      setSecondsLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          setRewardReady(true);
-          setSdkState('completed');
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [isOpen, secondsLeft, rewardReady, paused, sdkState]);
+  }, [isOpen, adState]);
 
   if (!isOpen) return null;
 
-  const progressPct = Math.min(100, Math.round(((duration - secondsLeft) / duration) * 100));
+  const rewardReady = adState === 'completed';
+  const progressPct = rewardReady
+    ? 100
+    : adState === 'watching'
+    ? Math.min(99, Math.round(((duration - secondsLeft) / duration) * 100))
+    : 0;
   const ringRadius = 46;
   const ringCircumference = 2 * Math.PI * ringRadius;
   const ringOffset = ringCircumference - (progressPct / 100) * ringCircumference;
 
-  const externalAdUrl =
-    provider === 'adsterra'
-      ? AD_REWARD_CONFIG.adsterraDirectLink
-      : provider === 'custom_url'
-      ? AD_REWARD_CONFIG.customSponsorUrl
-      : '';
+  const handleOpenAdTab = () => {
+    const firstName = (targetUser?.name || targetName || 'esta persona').split(' ')[0];
+    const nextSession = openIsolatedAdViewer({
+      purpose,
+      targetName: firstName,
+      duration,
+    });
+    setSession(nextSession);
+    setSecondsLeft(duration);
+    setSponsorClicked(false);
+    setAdState(nextSession.opened ? 'watching' : 'blocked');
+  };
 
-  const handleOpenSponsorLink = () => {
-    if (provider === 'monetag') {
-      triggerMonetagZoneTag();
-      return;
+  const handleCloseModal = () => {
+    try {
+      if (session?.windowRef && !session.windowRef.closed) {
+        session.windowRef.close();
+      }
+    } catch {
+      // Ignorar si ya cerró
     }
-    if (!externalAdUrl) return;
-    setSdkState('external_opened');
-    window.open(externalAdUrl, '_blank', 'noopener,noreferrer');
+    onClose?.();
   };
 
   const handleClaimReward = async () => {
@@ -215,39 +214,56 @@ export default function RewardedAdModal({
 
   const steps = [
     {
-      label: 'Patrocinador abierto',
-      done: true,
+      label: adState === 'blocked' ? 'Falta abrir la pestaña del anuncio' : 'Pestaña del anuncio abierta',
+      done: adState === 'watching' || rewardReady,
+      active: adState === 'blocked' || adState === 'aborted',
     },
     {
-      label: rewardReady ? `Tiempo verificado (${duration}s)` : `Verificando anuncio (${secondsLeft}s)`,
+      label: rewardReady
+        ? `Tiempo completado (${duration}s)`
+        : adState === 'aborted'
+        ? 'Cerrado antes de completar los 8s'
+        : `Viendo anuncio en su pestaña (${secondsLeft}s)`,
       done: rewardReady,
-      active: !rewardReady,
+      active: adState === 'watching',
     },
     {
-      label: rewardReady ? '¡Ya puedes cerrar el anuncio y entrar!' : 'Cerrar pestaña externa al terminar',
+      label: rewardReady
+        ? '¡Ya puedes cerrar el anuncio y entrar!'
+        : 'Al marcar ✓ Listo, cierra el anuncio',
       done: rewardReady,
       active: false,
     },
   ];
 
   return (
-    <div className="fixed inset-0 z-[75] bg-black/85 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="w-full max-w-md bg-[#0E0913] text-white border border-amber-300/20 rounded-t-[32px] sm:rounded-[32px] overflow-hidden shadow-[0_28px_90px_rgba(0,0,0,0.8)] animate-sheet-up">
-        {/* Top Header */}
-        <div className="relative px-5 py-4 border-b border-white/10 flex items-center justify-between gap-3 bg-gradient-to-r from-[#1D0A16] via-[#260D1E] to-[#120915]">
+    <div className="fixed inset-0 z-[75] bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="w-full max-w-md bg-[#FAF7F9] text-zinc-900 border border-rose-200/70 rounded-t-[32px] sm:rounded-[32px] overflow-hidden shadow-[0_24px_70px_-14px_rgba(15,23,42,0.28)] animate-sheet-up">
+        {/* Cabecera Clara */}
+        <div className="px-5 py-4 border-b border-rose-100 flex items-center justify-between gap-3 bg-gradient-to-r from-[#FFF4F6] via-white to-[#FFF9EE]">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-300 via-amber-400 to-[#FF2E54] text-zinc-950 flex items-center justify-center shrink-0 shadow-md">
+            <div
+              className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
+                rewardReady
+                  ? 'bg-gradient-to-br from-emerald-400 to-teal-500 text-white'
+                  : 'bg-gradient-to-br from-[#FF2E54] to-amber-400 text-white'
+              }`}
+            >
               {rewardReady ? (
-                <CheckCircle2 className="w-5 h-5 stroke-[2.5]" />
+                <CheckCircle2 className="w-5 h-5 stroke-[2.4]" />
               ) : (
-                <Tv className="w-5 h-5 stroke-[2.3]" />
+                <Tv className="w-5 h-5 stroke-[2.2]" />
               )}
             </div>
             <div className="min-w-0">
-              <p className="text-[9.5px] font-black uppercase tracking-[0.16em] text-amber-300">
-                {rewardReady ? 'Verificación Completada' : 'Anuncio Patrocinado'}
+              <p
+                className={`text-[9.5px] font-black uppercase tracking-[0.14em] ${
+                  rewardReady ? 'text-emerald-700' : 'text-[#E11D48]'
+                }`}
+              >
+                {rewardReady ? 'Anuncio Verificado' : 'Publicidad en Pestaña Aparte'}
               </p>
-              <h3 className="font-display text-sm sm:text-base font-black text-white truncate">
+              <h3 className="font-display text-sm sm:text-base font-black text-zinc-900 truncate">
                 {isChatPurpose ? `Desbloqueando chat con ${firstName}` : 'Revelando tu Like secreto'}
               </h3>
             </div>
@@ -255,42 +271,56 @@ export default function RewardedAdModal({
 
           <button
             type="button"
-            onClick={onClose}
-            className="px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/10 text-zinc-200 hover:text-white text-[11px] font-bold flex items-center gap-1 transition shrink-0"
+            onClick={handleCloseModal}
+            className="px-3 py-1.5 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-[11px] font-bold flex items-center gap-1 transition shrink-0"
           >
             <X className="w-3.5 h-3.5" />
-            {rewardReady ? 'Cerrar' : 'Salir'}
+            {rewardReady ? 'Cerrar' : 'Cancelar'}
           </button>
         </div>
 
-        {/* Stage Central */}
+        {/* Cuerpo Blanco Luminoso */}
         <div className="p-5 space-y-4">
           <div
-            className={`relative rounded-[26px] overflow-hidden border p-5 space-y-4 transition-colors duration-500 ${
+            className={`rounded-[26px] border p-5 space-y-4 transition-colors duration-300 shadow-card ${
               rewardReady
-                ? 'bg-gradient-to-br from-[#0F271E] via-[#111E1B] to-[#0D1116] border-emerald-400/40'
-                : 'bg-gradient-to-br from-[#1C0B17] via-[#150A15] to-[#0E0A14] border-amber-300/20'
+                ? 'bg-gradient-to-br from-emerald-50/90 via-white to-teal-50/70 border-emerald-300'
+                : adState === 'aborted' || adState === 'blocked'
+                ? 'bg-gradient-to-br from-amber-50/90 via-white to-rose-50/70 border-amber-300'
+                : 'bg-white border-zinc-200/85'
             }`}
           >
-            {/* Estado superior */}
             <div className="flex items-center justify-between gap-2">
               <span
                 className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1 border ${
                   rewardReady
-                    ? 'bg-emerald-500/20 border-emerald-400/40 text-emerald-300'
-                    : 'bg-amber-400/15 border-amber-300/30 text-amber-200'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                    : adState === 'aborted' || adState === 'blocked'
+                    ? 'bg-amber-50 border-amber-200 text-amber-800'
+                    : 'bg-rose-50 border-rose-200 text-[#E11D48]'
                 }`}
               >
-                <Sparkles className="w-3 h-3" />
-                {rewardReady ? '100% Verificado' : 'Conteo en vivo'}
+                {rewardReady ? (
+                  <>
+                    <CheckCircle2 className="w-3 h-3" /> 100% Verificado
+                  </>
+                ) : adState === 'aborted' || adState === 'blocked' ? (
+                  <>
+                    <AlertCircle className="w-3 h-3" /> Requiere abrir anuncio
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3 h-3" /> En curso
+                  </>
+                )}
               </span>
 
-              <span className="text-[11px] font-extrabold text-zinc-300 tabular-nums">
+              <span className="text-[11px] font-black text-zinc-500 tabular-nums">
                 {progressPct}%
               </span>
             </div>
 
-            {/* Anillo Circular de Progreso SVG */}
+            {/* Anillo Circular SVG */}
             <div className="flex flex-col items-center text-center space-y-3 py-1">
               <div className="relative w-28 h-28 flex items-center justify-center">
                 <svg className="w-28 h-28 -rotate-90" viewBox="0 0 112 112">
@@ -299,7 +329,7 @@ export default function RewardedAdModal({
                     cy="56"
                     r={ringRadius}
                     fill="none"
-                    stroke="rgba(255,255,255,0.1)"
+                    stroke="#f4f4f5"
                     strokeWidth="7"
                   />
                   <circle
@@ -307,43 +337,43 @@ export default function RewardedAdModal({
                     cy="56"
                     r={ringRadius}
                     fill="none"
-                    stroke={rewardReady ? '#34D399' : 'url(#adRingGrad)'}
+                    stroke={rewardReady ? '#10B981' : 'url(#lightAdRing)'}
                     strokeWidth="7"
                     strokeLinecap="round"
                     strokeDasharray={ringCircumference}
                     strokeDashoffset={ringOffset}
-                    className="transition-all duration-700"
+                    className="transition-all duration-500"
                   />
                   <defs>
-                    <linearGradient id="adRingGrad" x1="0" y1="0" x2="1" y2="1">
+                    <linearGradient id="lightAdRing" x1="0" y1="0" x2="1" y2="1">
                       <stop offset="0%" stopColor="#FF2E54" />
-                      <stop offset="100%" stopColor="#FBBF24" />
+                      <stop offset="100%" stopColor="#F59E0B" />
                     </linearGradient>
                   </defs>
                 </svg>
 
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   {rewardReady ? (
-                    <div className="w-16 h-16 rounded-full bg-emerald-400/20 border border-emerald-300/40 flex items-center justify-center">
-                      <CheckCircle2 className="w-9 h-9 text-emerald-300" />
+                    <div className="w-16 h-16 rounded-full bg-emerald-100 border border-emerald-300 flex items-center justify-center">
+                      <CheckCircle2 className="w-9 h-9 text-emerald-600" />
                     </div>
-                  ) : paused ? (
-                    <PauseCircle className="w-9 h-9 text-amber-300" />
+                  ) : adState === 'aborted' || adState === 'blocked' ? (
+                    <AlertCircle className="w-9 h-9 text-amber-500" />
                   ) : avatarSrc ? (
-                    <div className="relative w-16 h-16 rounded-full overflow-hidden border-2 border-white/20">
+                    <div className="relative w-16 h-16 rounded-full overflow-hidden border-2 border-rose-200 shadow-sm">
                       <img
                         src={avatarSrc}
                         alt=""
                         className={`w-full h-full object-cover ${
-                          isChatPurpose ? 'brightness-75' : 'blur-sm scale-110 brightness-75'
+                          isChatPurpose ? 'brightness-90' : 'blur-sm scale-110'
                         }`}
                       />
-                      <span className="absolute inset-0 bg-black/45 flex items-center justify-center font-display text-xl font-black text-white tabular-nums">
+                      <span className="absolute inset-0 bg-black/45 flex items-center justify-center font-display text-lg font-black text-white tabular-nums">
                         {secondsLeft}s
                       </span>
                     </div>
                   ) : (
-                    <span className="font-display text-2xl font-black text-white tabular-nums">
+                    <span className="font-display text-2xl font-black text-zinc-900 tabular-nums">
                       {secondsLeft}s
                     </span>
                   )}
@@ -351,44 +381,48 @@ export default function RewardedAdModal({
               </div>
 
               <div className="space-y-1">
-                <h4 className="font-serif-display text-lg font-bold text-white leading-snug">
+                <h4 className="font-serif-display text-lg font-bold text-zinc-900 leading-snug">
                   {rewardReady
-                    ? '¡Listo! Ya puedes cerrar el anuncio'
-                    : sdkState === 'dismissed'
-                    ? 'Anuncio cerrado antes de tiempo'
-                    : paused
-                    ? 'Regresa a esta ventana para reanudar'
-                    : `Mantén abierto el anuncio ${secondsLeft}s más`}
+                    ? '¡Listo! Ya viste el anuncio'
+                    : adState === 'aborted'
+                    ? 'Cerraste el anuncio antes de tiempo'
+                    : adState === 'blocked'
+                    ? 'Toca para abrir el anuncio'
+                    : `Anuncio abierto — faltan ${secondsLeft}s`}
                 </h4>
 
-                <p className="text-xs text-zinc-300 leading-relaxed max-w-[300px] mx-auto">
+                <p className="text-xs text-zinc-600 leading-relaxed max-w-[300px] mx-auto">
                   {rewardReady
-                    ? 'Tu acceso gratuito ya fue validado. Si tienes otra pestaña del patrocinador abierta, ya puedes cerrarla y entrar.'
-                    : 'Cuando la cuenta regresiva llegue a 0s verás ✅ en esta pantalla y en el título de la pestaña para confirmar que ya terminaste.'}
+                    ? 'Ya cumpliste los 8 segundos verificados. Si todavía tienes abierta la pestaña del anuncio, ya puedes cerrarla y entrar.'
+                    : adState === 'aborted'
+                    ? `Debes mantener abierta la pestaña del anuncio durante ${duration}s para desbloquear gratis.`
+                    : adState === 'blocked'
+                    ? 'Tu navegador bloqueó la pestaña automática. Ábrela con el botón verde de abajo para contar los 8 segundos.'
+                    : 'Mantén abierta la otra pestaña; ahí mismo verás un aviso verde cuando termine el conteo y puedas cerrarla.'}
                 </p>
               </div>
             </div>
 
-            {/* Rastreador visual de 3 pasos */}
-            <div className="space-y-1.5 pt-2 border-t border-white/10">
+            {/* Rastreador en 3 pasos */}
+            <div className="space-y-1.5 pt-2 border-t border-zinc-100">
               {steps.map((st, idx) => (
                 <div
                   key={idx}
                   className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-[11px] font-bold border ${
                     st.done
-                      ? 'bg-emerald-500/15 border-emerald-400/25 text-emerald-200'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
                       : st.active
-                      ? 'bg-amber-400/10 border-amber-300/25 text-amber-200'
-                      : 'bg-white/[0.03] border-white/[0.06] text-zinc-400'
+                      ? 'bg-amber-50 border-amber-200 text-amber-900'
+                      : 'bg-zinc-50 border-zinc-200/70 text-zinc-500'
                   }`}
                 >
                   <span
                     className={`w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center shrink-0 ${
                       st.done
-                        ? 'bg-emerald-400 text-zinc-950'
+                        ? 'bg-emerald-500 text-white'
                         : st.active
-                        ? 'bg-amber-300 text-zinc-950 animate-pulse'
-                        : 'bg-white/10 text-zinc-400'
+                        ? 'bg-amber-400 text-zinc-950 animate-pulse'
+                        : 'bg-zinc-200 text-zinc-600'
                     }`}
                   >
                     {st.done ? '✓' : idx + 1}
@@ -397,24 +431,6 @@ export default function RewardedAdModal({
                 </div>
               ))}
             </div>
-
-            {/* Reintento manual si el bloqueador de pop-ups frenó el anuncio */}
-            {!rewardReady && (provider === 'monetag' || Boolean(externalAdUrl)) && (
-              <button
-                type="button"
-                onClick={handleOpenSponsorLink}
-                className="w-full py-2.5 px-3.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-zinc-200 text-[11px] font-extrabold flex items-center justify-center gap-1.5 transition"
-              >
-                {provider === 'monetag' ? (
-                  <RefreshCw className="w-3.5 h-3.5 text-amber-300" />
-                ) : (
-                  <ExternalLink className="w-3.5 h-3.5 text-amber-300" />
-                )}
-                {provider === 'monetag'
-                  ? '¿No abrió la pestaña del anuncio? Toca aquí'
-                  : 'Abrir patrocinador oficial'}
-              </button>
-            )}
           </div>
 
           {/* CTA Principal */}
@@ -424,7 +440,7 @@ export default function RewardedAdModal({
                 type="button"
                 disabled={claiming}
                 onClick={handleClaimReward}
-                className="w-full py-3.5 rounded-full bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500 text-zinc-950 font-black text-sm shadow-lg shadow-emerald-500/25 hover:brightness-105 active:scale-[0.99] disabled:opacity-60 transition flex items-center justify-center gap-2"
+                className="w-full py-3.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black text-sm shadow-lg shadow-emerald-500/25 hover:brightness-105 active:scale-[0.99] disabled:opacity-60 transition flex items-center justify-center gap-2"
               >
                 <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
                 {claiming
@@ -433,24 +449,35 @@ export default function RewardedAdModal({
                   ? `Abrir chat gratis con ${firstName}`
                   : 'Ver quién te dio Like ahora'}
               </button>
+            ) : adState === 'aborted' || adState === 'blocked' ? (
+              <button
+                type="button"
+                onClick={handleOpenAdTab}
+                className="w-full py-3.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black text-sm shadow-lg shadow-emerald-500/20 hover:brightness-105 active:scale-[0.99] transition flex items-center justify-center gap-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Abrir pestaña del anuncio ({duration}s)
+              </button>
             ) : (
-              <div className="w-full py-3.5 px-4 rounded-full bg-white/[0.06] border border-white/10 text-zinc-300 font-extrabold text-xs flex items-center justify-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-amber-300" />
+              <button
+                type="button"
+                onClick={handleOpenAdTab}
+                className="w-full py-3.5 px-4 rounded-full bg-white border border-zinc-200 hover:bg-zinc-50 text-zinc-700 font-extrabold text-xs flex items-center justify-center gap-2 shadow-card transition"
+              >
+                <ShieldCheck className="w-4 h-4 text-[#FF2E54]" />
                 <span>
-                  {paused
-                    ? 'Vuelve a la pantalla para terminar...'
-                    : `Verificando... espera ${secondsLeft}s para desbloquear`}
+                  Viendo anuncio ({secondsLeft}s) · Toca aquí si no lo ves abierto
                 </span>
-              </div>
+              </button>
             )}
 
             {!rewardReady && onUseCoinsInstead && (
               <button
                 type="button"
                 onClick={onUseCoinsInstead}
-                className="w-full py-3 rounded-full bg-white/[0.04] hover:bg-white/[0.1] border border-amber-300/25 text-amber-200 text-xs font-extrabold flex items-center justify-center gap-1.5 transition"
+                className="w-full py-3 rounded-full bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 text-xs font-extrabold flex items-center justify-center gap-1.5 transition"
               >
-                <Coins className="w-3.5 h-3.5 text-amber-400" />
+                <Coins className="w-3.5 h-3.5 text-amber-600" />
                 Omitir espera y usar {coinCost} monedas al instante
               </button>
             )}

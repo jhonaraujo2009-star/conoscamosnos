@@ -118,6 +118,7 @@ function UserAppView({ onSuccess, onError }) {
   const [gateGiftAnim, setGateGiftAnim] = useState(null);
   const [likeChatGateTarget, setLikeChatGateTarget] = useState(null);
   const [likeChatAdTarget, setLikeChatAdTarget] = useState(null);
+  const [likeChatAdSession, setLikeChatAdSession] = useState(null);
   const [busyLikeChatCoins, setBusyLikeChatCoins] = useState(false);
 
   const [coinStoreOpen, setCoinStoreOpen] = useState(false);
@@ -160,6 +161,7 @@ function UserAppView({ onSuccess, onError }) {
     setGateGiftAnim(null);
     setLikeChatGateTarget(null);
     setLikeChatAdTarget(null);
+    setLikeChatAdSession(null);
     setBusyLikeChatCoins(false);
     setReceivedGifts([]);
     setOptimisticReadMap({});
@@ -394,6 +396,7 @@ function UserAppView({ onSuccess, onError }) {
       if (Number(userProfile.coins || 0) < cost) {
         setLikeChatGateTarget(null);
         setLikeChatAdTarget(null);
+        setLikeChatAdSession(null);
         handleError(`Necesitas ${cost} monedas. Recarga en la tienda o mira 1 anuncio gratis.`);
         setCoinStoreOpen(true);
         return;
@@ -408,6 +411,7 @@ function UserAppView({ onSuccess, onError }) {
         });
         setLikeChatGateTarget(null);
         setLikeChatAdTarget(null);
+        setLikeChatAdSession(null);
         handleSuccess(`✨ Chat desbloqueado con ${target.name || 'esta persona'} al instante.`);
         await handleStartDirectChat(target, { skipLikeChatGate: true });
       } catch (err) {
@@ -430,6 +434,7 @@ function UserAppView({ onSuccess, onError }) {
         targetUid,
       });
       setLikeChatAdTarget(null);
+      setLikeChatAdSession(null);
       handleSuccess(`🎉 ¡Anuncio completado! Chat abierto gratis con ${target.name || 'esta persona'}.`);
       await handleStartDirectChat(target, { skipLikeChatGate: true });
     } catch (err) {
@@ -659,9 +664,10 @@ function UserAppView({ onSuccess, onError }) {
         coinCost={AD_REWARD_CONFIG.unlockLikeChatCoins}
         busyCoins={busyLikeChatCoins}
         onClose={() => setLikeChatGateTarget(null)}
-        onWatchAd={() => {
+        onWatchAd={(adSession) => {
           const target = likeChatGateTarget;
           setLikeChatGateTarget(null);
+          setLikeChatAdSession(adSession || null);
           setLikeChatAdTarget(target);
         }}
         onUnlockWithCoins={() => handleUnlockLikeChatWithCoins(likeChatGateTarget)}
@@ -672,8 +678,12 @@ function UserAppView({ onSuccess, onError }) {
         purpose="unlock_chat"
         targetName={likeChatAdTarget?.name || 'esta persona'}
         targetUser={likeChatAdTarget}
+        adSession={likeChatAdSession}
         coinCost={AD_REWARD_CONFIG.unlockLikeChatCoins}
-        onClose={() => setLikeChatAdTarget(null)}
+        onClose={() => {
+          setLikeChatAdTarget(null);
+          setLikeChatAdSession(null);
+        }}
         onRewardEarned={handleLikeChatAdCompleted}
         onUseCoinsInstead={() => {
           if (likeChatAdTarget) {

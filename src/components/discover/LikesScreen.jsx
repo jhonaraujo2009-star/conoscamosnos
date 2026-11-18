@@ -599,10 +599,10 @@ export default function LikesScreen({
         lockedLikesCount={lockedLikers.length}
         unlockAllCost={unlockAllCost}
         onClose={() => setChoiceModal(null)}
-        onWatchAd={() => {
+        onWatchAd={(adSession) => {
           const target = choiceModal;
           setChoiceModal(null);
-          setActiveAd({ purpose: target.mode, user: target.user });
+          setActiveAd({ purpose: target.mode, user: target.user, session: adSession || null });
         }}
         onUnlockWithCoins={() =>
           handleUnlockSingleWithCoins(choiceModal.mode, choiceModal.user)
@@ -616,6 +616,7 @@ export default function LikesScreen({
         purpose={activeAd?.purpose || 'reveal_like'}
         targetName={activeAd?.user?.name || 'esta persona'}
         targetUser={activeAd?.user}
+        adSession={activeAd?.session || null}
         coinCost={
           activeAd?.purpose === 'unlock_chat'
             ? AD_REWARD_CONFIG.unlockLikeChatCoins

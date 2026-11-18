@@ -46,7 +46,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        globIgnores: ['sw.js'],
+        globIgnores: ['sw.js', 'ad-viewer.html'],
+        navigateFallbackDenylist: [/^\/ad-viewer\.html/, /^\/api\//],
         importScripts: ['/sw.js'],
         runtimeCaching: [
           {
