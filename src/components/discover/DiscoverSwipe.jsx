@@ -1,29 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BadgeCheck,
-  Briefcase,
   Camera,
-  ChevronDown,
   Crown,
   Flame,
   Gem,
   Gift,
   Globe,
-  GraduationCap,
   Heart,
-  Info,
   Lock,
   MapPin,
   MessageCircle,
-  Quote,
   RefreshCw,
-  RotateCcw,
-  Ruler,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   Star,
-  User,
   X,
   Zap,
 } from 'lucide-react';
@@ -43,7 +35,6 @@ import { sendLike } from '../../services/discoveryService';
 import { fetchDiscoverProfiles } from '../../services/userService';
 import {
   calculateAffinityScore,
-  formatInterestWithIcon,
   formatUserDistanceLabel,
   getDisplayAge,
   getOrderedPhotos,
@@ -66,6 +57,10 @@ import ProCrownBadge from '../monetization/ProCrownBadge';
 const TUTORIAL_STORAGE_KEY = 'conoscamosnos_swipe_tutorial_seen_v2';
 const PASS_TTL_MS = 24 * 60 * 60 * 1000;
 const CARD_PHOTO_WIDTH = 800;
+const NEXT_CARD_REST_Y = 44;
+const NEXT_CARD_REST_SCALE = 0.92;
+const NEXT_CARD_REST_OPACITY = 0.55;
+const NEXT_CARD_REST_RADIUS = 24;
 
 const AGE_PRESETS = [
   { label: '18+', min: MIN_AGE, max: 99 },
@@ -110,21 +105,6 @@ function persistPassedId(uid, targetId) {
     localStorage.setItem(getPassedKey(uid), JSON.stringify(map));
   } catch {
     // Ignorar si localStorage no está disponible
-  }
-}
-
-function unpersistPassedId(uid, targetId) {
-  if (!uid || !targetId) return;
-  try {
-    const raw = localStorage.getItem(getPassedKey(uid));
-    if (!raw) return;
-    const map = JSON.parse(raw);
-    if (map && map[targetId]) {
-      delete map[targetId];
-      localStorage.setItem(getPassedKey(uid), JSON.stringify(map));
-    }
-  } catch {
-    // Ignorar
   }
 }
 
@@ -181,10 +161,8 @@ export default function DiscoverSwipe({
   const setAgeRange = onAgeRangeChange ?? setLocalAgeRange;
 
   const [showFiltersModal, setShowFiltersModal] = useState(false);
-  const [bioExpanded, setBioExpanded] = useState(false);
 
   const [cards, setCards] = useState([]);
-  const [history, setHistory] = useState([]);
   const [totalDeckCount, setTotalDeckCount] = useState(0);
   const [photoIdx, setPhotoIdx] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -235,17 +213,18 @@ export default function DiscoverSwipe({
     const el = activeCardRef.current;
     if (el) {
       el.style.transition = withTransition
-        ? 'transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.24s ease-out'
+        ? 'transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.32s ease-out'
         : 'none';
       el.style.transform = 'translate3d(0px, 0px, 0px) rotate(0deg)';
       el.style.opacity = '1';
     }
     if (nextCardRef.current) {
       nextCardRef.current.style.transition = withTransition
-        ? 'transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.24s ease-out'
+        ? 'transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.32s ease-out, border-radius 0.32s cubic-bezier(0.22, 1, 0.36, 1)'
         : 'none';
-      nextCardRef.current.style.transform = 'translate3d(0px, 10px, 0px) scale(0.955)';
-      nextCardRef.current.style.opacity = '0.72';
+      nextCardRef.current.style.transform = `translate3d(0px, ${NEXT_CARD_REST_Y}px, 0px) scale(${NEXT_CARD_REST_SCALE})`;
+      nextCardRef.current.style.opacity = String(NEXT_CARD_REST_OPACITY);
+      nextCardRef.current.style.borderRadius = `${NEXT_CARD_REST_RADIUS}px`;
     }
     if (likeStampRef.current) likeStampRef.current.style.opacity = '0';
     if (nopeStampRef.current) nopeStampRef.current.style.opacity = '0';
@@ -257,9 +236,7 @@ export default function DiscoverSwipe({
       const user = currentUserRef.current;
       if (!user?.uid) return;
       setLoading(true);
-      setHistory([]);
       setPhotoIdx(0);
-      setBioExpanded(false);
       busyRef.current = false;
 
       try {
@@ -348,10 +325,6 @@ export default function DiscoverSwipe({
   const topCard = visibleDeck[0] || null;
   const nextCard = visibleDeck[1] || null;
 
-  useEffect(() => {
-    setBioExpanded(false);
-  }, [topCard?.uid, topCard?.id]);
-
   // Tema romántico adaptativo según lo que busca la persona visible o el filtro activo
   const activeMoodKey =
     intention !== 'Todos'
@@ -424,25 +397,26 @@ export default function DiscoverSwipe({
     setShowTutorial(false);
   };
 
-  const flyOutAndAdvance = useCallback((direction, targetCard, onAfterAdvance) => {
-    setBioExpanded(false);
+  const flyOutAndAdvance = useCallback((direction, _targetCard, onAfterAdvance) => {
     const el = activeCardRef.current;
 
     if (el) {
       if (direction === 'up') {
         el.style.transition =
-          'transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.26s ease-out';
+          'transform 0.34s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.34s ease-out';
         el.style.transform = `translate3d(0px, -${window.innerHeight + 220}px, 0px) scale(1.04)`;
-        el.style.opacity = '0.92';
+        el.style.opacity = '0.9';
         if (superLikeStampRef.current) superLikeStampRef.current.style.opacity = '1';
         if (likeStampRef.current) likeStampRef.current.style.opacity = '0';
         if (nopeStampRef.current) nopeStampRef.current.style.opacity = '0';
       } else {
         const targetX =
           direction === 'right' ? window.innerWidth + 180 : -(window.innerWidth + 180);
-        const targetRot = direction === 'right' ? 18 : -18;
-        el.style.transition = 'transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1)';
-        el.style.transform = `translate3d(${targetX}px, 16px, 0px) rotate(${targetRot}deg)`;
+        const targetRot = direction === 'right' ? 22 : -22;
+        el.style.transition =
+          'transform 0.34s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.34s ease-out';
+        el.style.transform = `translate3d(${targetX}px, 24px, 0px) rotate(${targetRot}deg)`;
+        el.style.opacity = '0.96';
         if (direction === 'right' && likeStampRef.current) {
           likeStampRef.current.style.opacity = '1';
         }
@@ -455,9 +429,10 @@ export default function DiscoverSwipe({
 
     if (nextCardRef.current) {
       nextCardRef.current.style.transition =
-        'transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.24s ease-out';
+        'transform 0.34s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.34s ease-out, border-radius 0.34s cubic-bezier(0.16, 1, 0.3, 1)';
       nextCardRef.current.style.transform = 'translate3d(0px, 0px, 0px) scale(1)';
       nextCardRef.current.style.opacity = '1';
+      nextCardRef.current.style.borderRadius = '0px';
     }
 
     setTimeout(() => {
@@ -468,19 +443,19 @@ export default function DiscoverSwipe({
       }
       if (nextCardRef.current) {
         nextCardRef.current.style.transition = 'none';
-        nextCardRef.current.style.transform = 'translate3d(0px, 10px, 0px) scale(0.955)';
-        nextCardRef.current.style.opacity = '0.72';
+        nextCardRef.current.style.transform = `translate3d(0px, ${NEXT_CARD_REST_Y}px, 0px) scale(${NEXT_CARD_REST_SCALE})`;
+        nextCardRef.current.style.opacity = String(NEXT_CARD_REST_OPACITY);
+        nextCardRef.current.style.borderRadius = `${NEXT_CARD_REST_RADIUS}px`;
       }
       if (likeStampRef.current) likeStampRef.current.style.opacity = '0';
       if (nopeStampRef.current) nopeStampRef.current.style.opacity = '0';
       if (superLikeStampRef.current) superLikeStampRef.current.style.opacity = '0';
 
-      setHistory((prev) => [targetCard, ...prev]);
       setCards((prev) => prev.slice(1));
       setPhotoIdx(0);
       busyRef.current = false;
       onAfterAdvance?.();
-    }, 240);
+    }, 340);
   }, []);
 
   const triggerPass = useCallback(() => {
@@ -566,7 +541,6 @@ export default function DiscoverSwipe({
         setCards((prev) =>
           prev.some((c) => (c.uid || c.id) === targetId) ? prev : [target, ...prev]
         );
-        setHistory((prev) => prev.filter((c) => (c.uid || c.id) !== targetId));
         onError?.(err.message || 'No se pudo enviar el Super Like.');
         if (!superLikeQuota.isPro && err.code === 'SUPER_LIKE_LIMIT_REACHED') {
           (onOpenPro || onOpenDiamondStore)?.();
@@ -586,18 +560,6 @@ export default function DiscoverSwipe({
     onError,
   ]);
 
-  const handleRewind = useCallback(() => {
-    if (history.length === 0 || busyRef.current) return;
-    triggerHaptic(10);
-    setBioExpanded(false);
-    const [lastCard, ...rest] = history;
-    unpersistPassedId(currentUserRef.current?.uid, lastCard.uid || lastCard.id);
-    setHistory(rest);
-    setCards((prev) => [lastCard, ...prev]);
-    setPhotoIdx(0);
-    resetCardDomStyle(false);
-  }, [history, resetCardDomStyle]);
-
   // Navegación por teclado en desktop cuando la pestaña Descubrir está activa
   useEffect(() => {
     if (!isActive || showTutorial || giftPickerOpen || matchPopup) return;
@@ -605,16 +567,13 @@ export default function DiscoverSwipe({
       const tag = e.target?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if (e.key === 'Escape') {
-        if (bioExpanded) {
-          e.preventDefault();
-          setBioExpanded(false);
-        } else if (showFiltersModal) {
+        if (showFiltersModal) {
           e.preventDefault();
           setShowFiltersModal(false);
         }
         return;
       }
-      if (showFiltersModal || bioExpanded) return;
+      if (showFiltersModal) return;
       if (e.key === 'ArrowRight') {
         e.preventDefault();
         triggerLike();
@@ -632,7 +591,6 @@ export default function DiscoverSwipe({
     isActive,
     showTutorial,
     showFiltersModal,
-    bioExpanded,
     giftPickerOpen,
     matchPopup,
     triggerLike,
@@ -699,15 +657,18 @@ export default function DiscoverSwipe({
     }
 
     if (nextCardRef.current) {
-      const progress = isUpSwipe
-        ? Math.min(1, Math.max(0, (-dy - 10) / 110))
-        : Math.min(1, Math.max(0, (Math.abs(dx) - 10) / 110));
-      const scale = 0.955 + 0.045 * progress;
-      const translateY = 10 * (1 - progress);
-      const opacity = 0.72 + 0.28 * progress;
+      const raw = isUpSwipe
+        ? Math.min(1, Math.max(0, (-dy - 10) / 140))
+        : Math.min(1, Math.max(0, (Math.abs(dx) - 10) / 140));
+      const eased = 1 - Math.pow(1 - raw, 2);
+      const scale = NEXT_CARD_REST_SCALE + (1 - NEXT_CARD_REST_SCALE) * eased;
+      const translateY = NEXT_CARD_REST_Y * (1 - eased);
+      const opacity = NEXT_CARD_REST_OPACITY + (1 - NEXT_CARD_REST_OPACITY) * eased;
+      const radius = NEXT_CARD_REST_RADIUS * (1 - eased);
       nextCardRef.current.style.transition = 'none';
       nextCardRef.current.style.transform = `translate3d(0px, ${translateY}px, 0px) scale(${scale})`;
       nextCardRef.current.style.opacity = String(opacity);
+      nextCardRef.current.style.borderRadius = `${radius}px`;
     }
 
     const crossed = isUpSwipe ? dy < -95 : Math.abs(dx) > 90;
@@ -721,7 +682,7 @@ export default function DiscoverSwipe({
   };
 
   const handlePointerDown = (e) => {
-    if (busyRef.current || showTutorial || bioExpanded || showFiltersModal) return;
+    if (busyRef.current || showTutorial || showFiltersModal) return;
     if (e.target.closest('button')) return;
 
     hapticCrossedRef.current = false;
@@ -790,7 +751,6 @@ export default function DiscoverSwipe({
       Math.abs(dy) < 12 &&
       topCardPhotos.length > 1 &&
       activeCardRef.current &&
-      !bioExpanded &&
       !showFiltersModal
     ) {
       const rect = activeCardRef.current.getBoundingClientRect();
@@ -811,9 +771,6 @@ export default function DiscoverSwipe({
     [passportCountryCode]
   );
 
-  const sharedInterests = topCard ? getSharedInterests(currentUser, topCard) : [];
-  const sharedSet = new Set(sharedInterests);
-  const allInterests = topCard && Array.isArray(topCard.interests) ? topCard.interests : [];
   const verified = topCard ? isProfileVerified(topCard) : false;
   const boosted = topCard ? isBoostActive(topCard) : false;
   const topCardIsPro = topCard ? isProActive(topCard) : false;
@@ -874,19 +831,12 @@ export default function DiscoverSwipe({
   const distanceInfo = topCard
     ? formatUserDistanceLabel(topCard, currentUser)
     : { text: '', isHidden: false };
-  const filledPrompts =
-    topCard && Array.isArray(topCard.prompts)
-      ? topCard.prompts.filter((p) => typeof p === 'string' && p.trim().length > 0)
-      : [];
-  const drawerDetails = topCard
-    ? [
-        topCard.lookingFor ? { icon: Flame, label: topCard.lookingFor } : null,
-        topCard.job ? { icon: Briefcase, label: topCard.job } : null,
-        topCard.education ? { icon: GraduationCap, label: topCard.education } : null,
-        topCard.height ? { icon: Ruler, label: topCard.height } : null,
-        topCard.lifestyle ? { icon: Sparkles, label: topCard.lifestyle } : null,
-      ].filter(Boolean)
-    : [];
+
+  const nextVisibleAge = nextCard ? getDisplayAge(nextCard) : null;
+  const nextVerified = nextCard ? isProfileVerified(nextCard) : false;
+  const nextDistanceInfo = nextCard
+    ? formatUserDistanceLabel(nextCard, currentUser)
+    : { text: '', isHidden: false };
 
   const hasCustomFilters =
     scope !== 'global' ||
@@ -903,18 +853,21 @@ export default function DiscoverSwipe({
       style={{ background: mood.backdropStyle }}
       className="flex-1 h-full w-full text-white flex flex-col overflow-hidden select-none relative transition-all duration-700"
     >
-      {/* CABECERA LIMPIA DE UNA FILA: Descubrir + Pasaporte activo (opcional) + PRO · Boost · Filtros */}
-      <header className="shrink-0 px-3.5 py-2 pt-safe z-30 flex items-center justify-between gap-2 bg-[#12050B]">
+      {/* CABECERA FLOTANTE FULL-SCREEN: Descubrir + Pasaporte (opcional) + PRO · Boost · Filtros */}
+      <header
+        style={{ paddingTop: 'max(0.5rem, env(safe-area-inset-top, 0px))' }}
+        className="absolute top-0 inset-x-0 px-3.5 pb-2 z-30 flex items-center justify-between gap-2 bg-transparent pointer-events-none"
+      >
         {/* Izquierda: Emblema de marca + Descubrir + Pasaporte si aplica */}
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="w-7 h-7 rounded-[10px] bg-gradient-to-tr from-[#FF2E54] via-rose-500 to-amber-400 shadow-[0_6px_16px_rgba(255,46,84,0.4)] flex items-center justify-center shrink-0">
+        <div className="flex items-center gap-2 min-w-0 pointer-events-auto">
+          <div className="w-7 h-7 rounded-[10px] bg-gradient-to-tr from-[#FF2E54] via-rose-500 to-amber-400 shadow-[0_6px_16px_rgba(255,46,84,0.45)] flex items-center justify-center shrink-0">
             <Flame className="w-3.5 h-3.5 text-white fill-white" />
           </div>
-          <h1 className="font-display text-[19px] font-black tracking-tight text-white leading-none truncate">
+          <h1 className="font-display text-[19px] font-black tracking-tight text-white leading-none truncate drop-shadow-[0_2px_10px_rgba(0,0,0,0.7)]">
             Descubrir
           </h1>
           {passportCountry && (
-            <span className="shrink-0 px-2 py-0.5 rounded-full bg-white/10 border border-white/15 text-[10.5px] font-bold text-white/90 inline-flex items-center gap-1">
+            <span className="shrink-0 px-2 py-0.5 rounded-full bg-black/40 backdrop-blur-md border border-white/20 text-[10.5px] font-bold text-white inline-flex items-center gap-1 shadow">
               <span>✈️</span>
               <span>{passportCountry.flag}</span>
               <span className="hidden xs:inline truncate max-w-[90px]">{passportCountry.name}</span>
@@ -923,14 +876,14 @@ export default function DiscoverSwipe({
         </div>
 
         {/* Derecha: PRO · Boost · Filtros */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0 pointer-events-auto">
           <button
             type="button"
             onClick={onOpenPro || onOpenDiamondStore}
-            className={`h-8 px-2.5 rounded-full border text-[11px] font-extrabold flex items-center gap-1 hover:brightness-110 active:scale-95 transition ${
+            className={`h-8 px-2.5 rounded-full border text-[11px] font-extrabold flex items-center gap-1 hover:brightness-110 active:scale-95 transition shadow ${
               proActive
                 ? 'bg-gradient-to-r from-[#FF2E54] to-amber-500 border-amber-200/60 text-white shadow-[0_4px_14px_rgba(245,158,11,0.35)]'
-                : 'bg-gradient-to-r from-[#2D141F] to-[#2B1F10] border-amber-300/40 text-amber-200'
+                : 'bg-black/50 backdrop-blur-md border-amber-300/45 text-amber-200'
             }`}
             title="Conoscamosnos PRO"
           >
@@ -941,7 +894,7 @@ export default function DiscoverSwipe({
           <button
             type="button"
             onClick={onOpenBoost}
-            className="h-8 px-2.5 rounded-full bg-purple-500/20 border border-purple-300/35 text-purple-200 text-[11px] font-extrabold flex items-center gap-1 hover:bg-purple-500/30 active:scale-95 transition"
+            className="h-8 px-2.5 rounded-full bg-black/45 backdrop-blur-md border border-purple-300/40 text-purple-200 text-[11px] font-extrabold flex items-center gap-1 hover:bg-purple-500/35 active:scale-95 transition shadow"
             title="Activar Boost VIP"
           >
             <Zap className="w-3.5 h-3.5 fill-purple-300 text-purple-300" />
@@ -951,10 +904,10 @@ export default function DiscoverSwipe({
           <button
             type="button"
             onClick={() => setShowFiltersModal((v) => !v)}
-            className={`relative w-8 h-8 rounded-full flex items-center justify-center border active:scale-95 transition shrink-0 ${
+            className={`relative w-8 h-8 rounded-full flex items-center justify-center border active:scale-95 transition shrink-0 shadow ${
               showFiltersModal || hasCustomFilters
                 ? 'bg-white text-zinc-950 border-white shadow-lg'
-                : 'bg-white/10 text-white border-white/15 hover:bg-white/20'
+                : 'bg-black/45 backdrop-blur-md text-white border-white/25 hover:bg-black/65'
             }`}
             aria-label="Filtros de búsqueda"
             title="Filtros de búsqueda"
@@ -972,9 +925,12 @@ export default function DiscoverSwipe({
         <>
           <div
             onClick={() => setShowFiltersModal(false)}
-            className="fixed inset-0 z-30 bg-black/55 backdrop-blur-sm"
+            className="fixed inset-0 z-[35] bg-black/55 backdrop-blur-sm"
           />
-          <div className="absolute inset-x-3 top-14 mt-safe z-40 max-h-[78dvh] overflow-y-auto no-scrollbar p-4 rounded-[28px] bg-[#140811]/95 backdrop-blur-2xl border border-white/15 space-y-3.5 shadow-[0_24px_60px_rgba(0,0,0,0.8)] animate-sheet-up">
+          <div
+            style={{ top: 'calc(env(safe-area-inset-top, 0px) + 56px)' }}
+            className="absolute inset-x-3 z-40 max-h-[78dvh] overflow-y-auto no-scrollbar p-4 rounded-[28px] bg-[#140811]/95 backdrop-blur-2xl border border-white/15 space-y-3.5 shadow-[0_24px_60px_rgba(0,0,0,0.8)] animate-sheet-up"
+          >
           <div className="flex items-center justify-between">
             <span className="text-xs font-extrabold text-zinc-100 flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
@@ -1186,10 +1142,10 @@ export default function DiscoverSwipe({
             </div>
           </div>
 
-          {/* Intención / Vibra */}
+          {/* ¿Qué buscas? (solo texto limpio sin iconos) */}
           <div className="space-y-1.5">
             <p className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400">
-              Qué buscan
+              ¿Qué buscas?
             </p>
             <div className="flex flex-wrap gap-1.5">
               {['Todos', ...LOOKING_FOR_OPTIONS].map((opt) => {
@@ -1199,13 +1155,12 @@ export default function DiscoverSwipe({
                     key={opt}
                     type="button"
                     onClick={() => setIntention(opt)}
-                    className={`px-3 py-1.5 rounded-full text-[11px] font-bold border transition flex items-center gap-1 ${
+                    className={`px-3 py-1.5 rounded-full text-[11px] font-bold border transition ${
                       intention === opt
                         ? optMood.pillActive
                         : 'bg-white/10 text-zinc-300 border-white/10 hover:text-white'
                     }`}
                   >
-                    <span>{optMood.emoji}</span>
                     <span>{opt}</span>
                   </button>
                 );
@@ -1242,10 +1197,10 @@ export default function DiscoverSwipe({
         </>
       )}
 
-      {/* CONTENEDOR DEL MAZO EDGE-TO-EDGE ESTILO TINDER (Máximo 2 tarjetas en el DOM) */}
-      <div className="flex-1 min-h-0 relative p-0 flex flex-col overflow-hidden bg-zinc-950">
+      {/* CONTENEDOR DEL MAZO FULL-SCREEN EDGE-TO-EDGE ESTILO TINDER (Máximo 2 tarjetas en el DOM) */}
+      <div className="relative z-10 flex-1 h-full min-h-0 p-0 flex flex-col overflow-hidden bg-zinc-950">
         {loading ? (
-          <div className="flex-1 bg-[#12050B] flex flex-col items-center justify-center gap-4 p-6 text-center">
+          <div className="flex-1 bg-[#12050B] flex flex-col items-center justify-center gap-4 p-6 pt-16 text-center">
             <div className="relative flex items-center justify-center">
               <div className="w-24 h-24 rounded-full border border-rose-400/40 animate-ping absolute" />
               <img
@@ -1260,7 +1215,7 @@ export default function DiscoverSwipe({
             </div>
           </div>
         ) : !topCard ? (
-          <div className="flex-1 bg-[#12050B] flex flex-col items-center justify-center p-6 text-center relative overflow-hidden">
+          <div className="flex-1 bg-[#12050B] flex flex-col items-center justify-center p-6 pt-16 text-center relative overflow-hidden">
             <div className="relative flex items-center justify-center mb-5">
               <div className="w-32 h-32 rounded-full border border-rose-400/25 animate-ping absolute" />
               <div className="w-24 h-24 rounded-full border border-rose-400/40 absolute" />
@@ -1317,16 +1272,17 @@ export default function DiscoverSwipe({
           </div>
         ) : (
           <div className="flex-1 relative">
-            {/* TARJETA 2 (Siguiente perfil debajo - edge-to-edge a 60fps) */}
+            {/* TARJETA 2 (Siguiente perfil emergiendo desde abajo estilo stack de Tinder) */}
             {nextCard && (
               <div
                 key={`next-${nextCard.uid || nextCard.id}`}
                 ref={nextCardRef}
                 style={{
-                  transform: 'translate3d(0px, 10px, 0px) scale(0.955)',
-                  opacity: 0.72,
+                  transform: `translate3d(0px, ${NEXT_CARD_REST_Y}px, 0px) scale(${NEXT_CARD_REST_SCALE})`,
+                  opacity: NEXT_CARD_REST_OPACITY,
+                  borderRadius: `${NEXT_CARD_REST_RADIUS}px`,
                 }}
-                className="gpu-card absolute inset-0 overflow-hidden bg-zinc-950 pointer-events-none"
+                className="gpu-card absolute inset-0 z-[1] overflow-hidden bg-zinc-950 pointer-events-none"
               >
                 <img
                   src={getPrimaryPhoto(nextCard, CARD_PHOTO_WIDTH, { seed: currentUser?.uid })}
@@ -1336,11 +1292,38 @@ export default function DiscoverSwipe({
                   className="w-full h-full object-cover"
                   draggable={false}
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#080407] via-[#080407]/45 to-transparent" />
+                <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black/75 via-black/30 to-transparent" />
+                <div className="absolute inset-x-0 bottom-0 h-[46%] bg-gradient-to-t from-[#080407] via-[#080407]/70 to-transparent" />
+                <div className="absolute bottom-[92px] inset-x-4">
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-display text-[32px] sm:text-[34px] font-black text-white tracking-tight truncate leading-none drop-shadow">
+                      {nextCard.name}
+                    </h2>
+                    {nextVisibleAge !== null && (
+                      <span className="font-display text-[26px] font-normal text-white/90 shrink-0 leading-none">
+                        {nextVisibleAge}
+                      </span>
+                    )}
+                    {nextVerified && (
+                      <BadgeCheck className="w-6 h-6 text-sky-400 fill-sky-400 stroke-white shrink-0 drop-shadow" />
+                    )}
+                  </div>
+                  <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-white/90">
+                    {!nextDistanceInfo.isHidden && <span>{nextCard.country?.flag || '🌎'}</span>}
+                    <MapPin className="w-3.5 h-3.5 text-[#FF2E54] shrink-0" />
+                    <span className="truncate">{nextDistanceInfo.text}</span>
+                    {nextCard.job && (
+                      <>
+                        <span className="text-white/40">·</span>
+                        <span className="truncate text-white font-bold">{nextCard.job}</span>
+                      </>
+                    )}
+                  </p>
+                </div>
               </div>
             )}
 
-            {/* TARJETA 1 (Activa Superior - Ancho completo sin recuadro estilo Tinder, cambio de fotos 0ms) */}
+            {/* TARJETA 1 (Activa Superior - Full-screen hasta top:0 estilo Tinder, cambio de fotos fluido) */}
             <div
               key={`top-${topCard.uid || topCard.id}`}
               ref={activeCardRef}
@@ -1348,9 +1331,9 @@ export default function DiscoverSwipe({
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerUp}
-              className="gpu-card touch-none absolute inset-0 overflow-hidden bg-zinc-950 select-none cursor-grab active:cursor-grabbing"
+              className="gpu-card touch-none absolute inset-0 z-[2] overflow-hidden bg-zinc-950 select-none cursor-grab active:cursor-grabbing"
             >
-              {/* Capas de fotos pre-montadas y decodificadas para cambio instantáneo a 0ms */}
+              {/* Capas de fotos pre-montadas con transición suave */}
               {topCardPhotos.map((rawUrl, idx) => {
                 const isCurrent = idx === photoIdx;
                 const isNextPhoto = idx === (photoIdx + 1) % topCardPhotos.length;
@@ -1373,21 +1356,28 @@ export default function DiscoverSwipe({
                     loading="eager"
                     decoding="async"
                     fetchPriority={isCurrent || isNextPhoto ? 'high' : 'low'}
-                    className={`gpu-card absolute inset-0 w-full h-full object-cover pointer-events-none select-none ${
-                      isCurrent ? 'opacity-100 z-[1]' : 'opacity-0 z-0'
-                    } ${photoIsExclusive && !photoUnlocked ? 'blur-2xl scale-110 brightness-75' : ''}`}
+                    className={`gpu-card absolute inset-0 w-full h-full object-cover pointer-events-none select-none transition-[opacity,transform] duration-200 ease-out ${
+                      photoIsExclusive && !photoUnlocked
+                        ? `${isCurrent ? 'opacity-100 z-[1]' : 'opacity-0 z-0'} blur-2xl scale-110 brightness-75`
+                        : isCurrent
+                        ? 'opacity-100 scale-100 z-[1]'
+                        : 'opacity-0 scale-[1.03] z-0'
+                    }`}
                     draggable={false}
                   />
                 );
               })}
 
-              {/* Viñetas sedosas superior e inferior sobre las fotos */}
-              <div className="absolute inset-x-0 top-0 h-28 z-[2] bg-gradient-to-b from-black/65 via-black/20 to-transparent pointer-events-none" />
+              {/* Viñetas sedosas superior (bajo iconos flotantes) e inferior */}
+              <div className="absolute inset-x-0 top-0 h-40 z-[2] bg-gradient-to-b from-black/75 via-black/30 to-transparent pointer-events-none" />
               <div className="absolute inset-x-0 bottom-0 h-[46%] z-[2] bg-gradient-to-t from-[#080407] via-[#080407]/70 to-transparent pointer-events-none" />
 
               {/* Overlay para Foto Exclusiva VIP */}
               {currentSwipePhotoIsExclusive && !currentSwipePhotoUnlocked && (
-                <div className="absolute inset-x-6 top-24 z-30 flex flex-col items-center text-center pointer-events-auto">
+                <div
+                  style={{ top: 'calc(env(safe-area-inset-top, 0px) + 110px)' }}
+                  className="absolute inset-x-6 z-30 flex flex-col items-center text-center pointer-events-auto"
+                >
                   <div className="w-full max-w-[270px] rounded-3xl bg-zinc-950/90 border border-rose-300/35 p-4 space-y-2.5 shadow-2xl">
                     <div className="w-10 h-10 mx-auto rounded-2xl bg-gradient-to-br from-[#FF2E54] to-amber-500 flex items-center justify-center shadow">
                       <Lock className="w-5 h-5 text-white" />
@@ -1429,16 +1419,16 @@ export default function DiscoverSwipe({
               {/* Sellos Neón Diagonales manipulados por ref a 60fps */}
               <div
                 ref={likeStampRef}
-                style={{ opacity: 0 }}
-                className="absolute top-16 left-5 z-30 px-4 py-1.5 rounded-2xl border-[3.5px] border-emerald-400 bg-emerald-950/70 text-emerald-300 font-display font-black text-2xl sm:text-3xl tracking-wider -rotate-12 shadow-[0_0_26px_rgba(52,211,153,0.65)] drop-shadow-[0_0_10px_rgba(52,211,153,0.9)] pointer-events-none"
+                style={{ opacity: 0, top: 'calc(env(safe-area-inset-top, 0px) + 96px)' }}
+                className="absolute left-5 z-30 px-4 py-1.5 rounded-2xl border-[3.5px] border-emerald-400 bg-emerald-950/70 text-emerald-300 font-display font-black text-2xl sm:text-3xl tracking-wider -rotate-12 shadow-[0_0_26px_rgba(52,211,153,0.65)] drop-shadow-[0_0_10px_rgba(52,211,153,0.9)] pointer-events-none"
               >
                 ME GUSTA
               </div>
 
               <div
                 ref={nopeStampRef}
-                style={{ opacity: 0 }}
-                className="absolute top-16 right-5 z-30 px-4 py-1.5 rounded-2xl border-[3.5px] border-[#FF2E54] bg-rose-950/70 text-[#FF4D6D] font-display font-black text-2xl sm:text-3xl tracking-wider rotate-12 shadow-[0_0_26px_rgba(255,46,84,0.65)] drop-shadow-[0_0_10px_rgba(255,46,84,0.9)] pointer-events-none"
+                style={{ opacity: 0, top: 'calc(env(safe-area-inset-top, 0px) + 96px)' }}
+                className="absolute right-5 z-30 px-4 py-1.5 rounded-2xl border-[3.5px] border-[#FF2E54] bg-rose-950/70 text-[#FF4D6D] font-display font-black text-2xl sm:text-3xl tracking-wider rotate-12 shadow-[0_0_26px_rgba(255,46,84,0.65)] drop-shadow-[0_0_10px_rgba(255,46,84,0.9)] pointer-events-none"
               >
                 PASAR
               </div>
@@ -1454,8 +1444,11 @@ export default function DiscoverSwipe({
                 </span>
               </div>
 
-              {/* Barra superior estilo "Historias" + badges ligeros + Corona PRO a la derecha */}
-              <div className="absolute top-3 inset-x-3.5 z-20 space-y-2.5 pointer-events-none">
+              {/* Barra superior estilo "Historias" + badges ligeros debajo del header flotante */}
+              <div
+                style={{ top: 'calc(env(safe-area-inset-top, 0px) + 54px)' }}
+                className="absolute inset-x-3.5 z-20 space-y-2 pointer-events-none"
+              >
                 {topCardPhotos.length > 1 && (
                   <div className="flex gap-1.5 pointer-events-auto">
                     {topCardPhotos.map((_, idx) => (
@@ -1507,9 +1500,8 @@ export default function DiscoverSwipe({
                 </div>
               </div>
 
-              {/* CONTENIDO INFERIOR DE LA TARJETA (Ultra limpio: sin chips, sin Sobre mí ni última conexión) */}
+              {/* CONTENIDO INFERIOR DE LA TARJETA */}
               <div className="absolute bottom-[92px] inset-x-4 z-20 pointer-events-auto">
-                {/* Identidad grande + utilidades discretas a la derecha (Regalo + Biografía) */}
                 <div className="flex items-end justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
@@ -1542,56 +1534,25 @@ export default function DiscoverSwipe({
                     </p>
                   </div>
 
-                  {/* Pila vertical derecha: Regalo Virtual + Biografía Completa */}
-                  <div className="flex flex-col gap-2 shrink-0">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setGiftPickerOpen(true);
-                      }}
-                      className="w-10 h-10 rounded-full bg-black/50 hover:bg-amber-500/30 border border-amber-300/45 text-amber-300 flex items-center justify-center shadow-lg active:scale-90 transition"
-                      aria-label="Enviar regalo virtual"
-                      title="Enviar regalo virtual"
-                    >
-                      <Gift className="w-[18px] h-[18px]" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setBioExpanded((v) => !v);
-                      }}
-                      className="w-10 h-10 rounded-full bg-black/50 hover:bg-white/25 border border-white/25 text-white flex items-center justify-center shadow-lg active:scale-90 transition"
-                      aria-label="Ver detalles"
-                      title="Ver detalles"
-                    >
-                      {bioExpanded ? (
-                        <ChevronDown className="w-5 h-5" />
-                      ) : (
-                        <Info className="w-5 h-5" />
-                      )}
-                    </button>
-                  </div>
+                  {/* Regalo Virtual discreto a la derecha */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setGiftPickerOpen(true);
+                    }}
+                    className="w-10 h-10 rounded-full bg-black/50 hover:bg-amber-500/30 border border-amber-300/45 text-amber-300 flex items-center justify-center shadow-lg active:scale-90 transition shrink-0"
+                    aria-label="Enviar regalo virtual"
+                    title="Enviar regalo virtual"
+                  >
+                    <Gift className="w-[18px] h-[18px]" />
+                  </button>
                 </div>
               </div>
 
-              {/* DOCK ESCULTURAL DE 5 ACCIONES ARMONIOSAS SOBRE LA FOTO */}
-              <div className="absolute bottom-4 inset-x-3 z-20 flex items-center justify-center gap-3 sm:gap-4 pointer-events-auto">
-                {/* 1. Deshacer (40px) */}
-                <button
-                  type="button"
-                  onClick={handleRewind}
-                  disabled={history.length === 0}
-                  className="w-10 h-10 rounded-full bg-zinc-950/85 border border-amber-300/40 text-amber-300 flex items-center justify-center shadow-[0_8px_20px_rgba(0,0,0,0.5)] hover:scale-105 hover:bg-amber-400/20 active:scale-90 disabled:opacity-35 disabled:pointer-events-none transition-all duration-150"
-                  title="Deshacer último perfil"
-                  aria-label="Deshacer"
-                >
-                  <RotateCcw className="w-[18px] h-[18px] stroke-[2.3]" />
-                </button>
-
-                {/* 2. Pasar / X (58px) */}
+              {/* DOCK ESCULTURAL DE 4 ACCIONES ARMONIOSAS SOBRE LA FOTO */}
+              <div className="absolute bottom-4 inset-x-3 z-20 flex items-center justify-center gap-4 sm:gap-5 pointer-events-auto">
+                {/* 1. Pasar / X (58px) */}
                 <button
                   type="button"
                   onClick={triggerPass}
@@ -1602,7 +1563,7 @@ export default function DiscoverSwipe({
                   <X className="w-7 h-7 stroke-[2.8]" />
                 </button>
 
-                {/* 3. Super Like / Estrella (48px + contador semanal visible) */}
+                {/* 2. Super Like / Estrella (48px + contador semanal visible) */}
                 <button
                   type="button"
                   onClick={triggerSuperLike}
@@ -1624,7 +1585,7 @@ export default function DiscoverSwipe({
                   </span>
                 </button>
 
-                {/* 4. Me Gusta / Corazón (58px) */}
+                {/* 3. Me Gusta / Corazón (58px) */}
                 <button
                   type="button"
                   onClick={triggerLike}
@@ -1635,14 +1596,14 @@ export default function DiscoverSwipe({
                   <Heart className="w-7 h-7 fill-white text-white" />
                 </button>
 
-                {/* 5. Chat Directo (40px) */}
+                {/* 4. Chat Directo (44px) */}
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     onStartChat?.(topCard);
                   }}
-                  className="w-10 h-10 rounded-full bg-zinc-950/85 border border-sky-300/40 text-sky-300 flex items-center justify-center shadow-[0_8px_20px_rgba(0,0,0,0.5)] hover:scale-105 hover:bg-sky-400/20 active:scale-90 transition-all duration-150"
+                  className="w-11 h-11 rounded-full bg-zinc-950/85 border border-sky-300/40 text-sky-300 flex items-center justify-center shadow-[0_8px_20px_rgba(0,0,0,0.5)] hover:scale-105 hover:bg-sky-400/20 active:scale-90 transition-all duration-150"
                   title={
                     accessPolicy.isFreeMode
                       ? 'Enviar mensaje privado gratis (Modo Libre activo)'
@@ -1657,211 +1618,36 @@ export default function DiscoverSwipe({
                   <MessageCircle className="w-[18px] h-[18px] stroke-[2.3]" />
                 </button>
               </div>
-
-              {/* HOJA DESPLEGABLE IN-CARD PARA BIOGRAFÍA Y DETALLES SIN SALIR DE LA VISTA */}
-              {bioExpanded && (
-                <>
-                  <div
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setBioExpanded(false);
-                    }}
-                    className="absolute inset-0 z-[25] bg-black/55"
-                  />
-                  <div
-                    onPointerDown={(e) => e.stopPropagation()}
-                    className="absolute inset-x-0 bottom-0 max-h-[80%] z-30 rounded-t-[28px] bg-[#120911]/95 border-t border-white/20 flex flex-col overflow-hidden animate-sheet-up shadow-[0_-16px_40px_rgba(0,0,0,0.65)] touch-pan-y"
-                  >
-                    <div className="px-4 pt-2.5 pb-3 border-b border-white/10 shrink-0">
-                      <div className="w-10 h-1 rounded-full bg-white/25 mx-auto mb-2.5" />
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <h3 className="font-display text-lg font-black text-white truncate">
-                            {topCard.name}
-                            {visibleAge !== null ? `, ${visibleAge}` : ''}
-                          </h3>
-                          {verified && (
-                            <BadgeCheck className="w-4 h-4 text-sky-400 fill-sky-400 stroke-white shrink-0" />
-                          )}
-                          {topCardIsPro && <ProCrownBadge variant="compact" />}
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setBioExpanded(false);
-                          }}
-                          className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center shrink-0 transition"
-                          aria-label="Cerrar detalles"
-                        >
-                          <ChevronDown className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-3.5 text-left">
-                      <div className="space-y-1">
-                        <p className="text-[10px] font-extrabold uppercase tracking-wider text-rose-300">
-                          Biografía
-                        </p>
-                        <p className="text-xs sm:text-sm text-white/95 leading-relaxed font-medium">
-                          {topCard.bio?.trim()
-                            ? topCard.bio
-                            : `${topCard.name} prefiere sorprenderte conversando en privado.`}
-                        </p>
-                      </div>
-
-                      {filledPrompts.length > 0 && (
-                        <div className="space-y-2">
-                          {filledPrompts.map((promptText, idx) => (
-                            <div
-                              key={idx}
-                              className="p-3 rounded-2xl bg-white/10 border border-white/15 space-y-1"
-                            >
-                              <p className="text-[10px] font-extrabold uppercase tracking-wider text-amber-300 flex items-center gap-1">
-                                <Quote className="w-3 h-3" /> Frase #{idx + 1}
-                              </p>
-                              <p className="text-xs text-white font-semibold leading-relaxed">
-                                “{promptText}”
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="space-y-1.5">
-                        <p className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400">
-                          Detalles
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          <span className="px-2.5 py-1 rounded-full bg-white/10 border border-white/15 text-[11px] font-bold text-amber-200 inline-flex items-center gap-1">
-                            <Sparkles className="w-3 h-3 text-amber-300" />
-                            {affinity}% afinidad
-                          </span>
-                          {drawerDetails.map((item, idx) => {
-                            const Icon = item.icon;
-                            return (
-                              <span
-                                key={idx}
-                                className="px-2.5 py-1 rounded-full bg-white/10 border border-white/15 text-[11px] font-semibold text-white/90 inline-flex items-center gap-1"
-                              >
-                                <Icon className="w-3 h-3 text-[#FF2E54]" />
-                                {item.label}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {allInterests.length > 0 && (
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <p className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400">
-                              Intereses
-                            </p>
-                            {sharedInterests.length > 0 && (
-                              <span className="text-[10.5px] font-extrabold text-emerald-400">
-                                ✨ {sharedInterests.length} en común
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex flex-wrap gap-1.5">
-                            {allInterests.map((tag) => {
-                              const isCommon = sharedSet.has(tag);
-                              return (
-                                <span
-                                  key={tag}
-                                  className={`rounded-full px-3 py-1 text-xs font-semibold border ${
-                                    isCommon
-                                      ? 'bg-emerald-950/60 border-emerald-400/50 text-white'
-                                      : 'bg-white/10 border-white/20 text-white/95'
-                                  }`}
-                                >
-                                  {formatInterestWithIcon(tag)}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Acciones rápidas al pie del panel de detalles */}
-                    <div className="p-3 border-t border-white/10 bg-black/40 grid grid-cols-3 gap-2 shrink-0">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setBioExpanded(false);
-                          onStartChat?.(topCard);
-                        }}
-                        className="py-2.5 px-2 rounded-2xl bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/40 text-sky-200 text-xs font-extrabold flex items-center justify-center gap-1.5 transition"
-                      >
-                        <MessageCircle className="w-3.5 h-3.5" />
-                        Chatear
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setBioExpanded(false);
-                          setGiftPickerOpen(true);
-                        }}
-                        className="py-2.5 px-2 rounded-2xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-200 text-xs font-extrabold flex items-center justify-center gap-1.5 transition"
-                      >
-                        <Gift className="w-3.5 h-3.5" />
-                        Regalar
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setBioExpanded(false);
-                          onSelectProfile?.(topCard);
-                        }}
-                        className="py-2.5 px-2 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 transition"
-                      >
-                        <User className="w-3.5 h-3.5" />
-                        Perfil
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Overlay de Tutorial Inicial */}
-              {showTutorial && (
-                <div className="absolute inset-0 z-40 bg-black/90 flex flex-col items-center justify-center p-6 text-center">
-                  <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-[#FF2E54] to-amber-400 flex items-center justify-center text-3xl mb-4 shadow-xl">
-                    👋
-                  </div>
-                  <h3 className="font-display text-2xl font-black text-white">
-                    Descubre personas reales
-                  </h3>
-                  <p className="text-xs sm:text-sm text-zinc-300 mt-2 max-w-xs leading-relaxed">
-                    Desliza a la derecha para dar <strong className="text-emerald-300">Me Gusta</strong>, a la izquierda para <strong className="text-rose-300">Pasar</strong>, hacia arriba para <strong className="text-sky-300">Super Like</strong> o toca los lados para ver más fotos.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={dismissTutorial}
-                    className="mt-6 w-full max-w-[240px] py-3.5 rounded-full bg-white text-black text-sm font-extrabold active:scale-95 transition-transform shadow-lg"
-                  >
-                    Comenzar a explorar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={dismissTutorial}
-                    className="mt-3 py-2 px-4 text-xs font-bold text-zinc-400 hover:text-white"
-                  >
-                    Saltar
-                  </button>
-                </div>
-              )}
             </div>
+          </div>
+        )}
+
+        {/* Overlay de Tutorial Inicial (por encima del header flotante z-30) */}
+        {showTutorial && (
+          <div className="absolute inset-0 z-40 bg-black/90 flex flex-col items-center justify-center p-6 text-center">
+            <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-[#FF2E54] to-amber-400 flex items-center justify-center text-3xl mb-4 shadow-xl">
+              👋
+            </div>
+            <h3 className="font-display text-2xl font-black text-white">
+              Descubre personas reales
+            </h3>
+            <p className="text-xs sm:text-sm text-zinc-300 mt-2 max-w-xs leading-relaxed">
+              Desliza a la derecha para dar <strong className="text-emerald-300">Me Gusta</strong>, a la izquierda para <strong className="text-rose-300">Pasar</strong>, hacia arriba para <strong className="text-sky-300">Super Like</strong> o toca los lados para ver más fotos.
+            </p>
+            <button
+              type="button"
+              onClick={dismissTutorial}
+              className="mt-6 w-full max-w-[240px] py-3.5 rounded-full bg-white text-black text-sm font-extrabold active:scale-95 transition-transform shadow-lg"
+            >
+              Comenzar a explorar
+            </button>
+            <button
+              type="button"
+              onClick={dismissTutorial}
+              className="mt-3 py-2 px-4 text-xs font-bold text-zinc-400 hover:text-white"
+            >
+              Saltar
+            </button>
           </div>
         )}
       </div>
