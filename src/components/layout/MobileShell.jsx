@@ -1,4 +1,4 @@
-import { Flame, Heart, MessageCircle, User } from 'lucide-react';
+import { Compass, Flame, Heart, MessageCircle, User } from 'lucide-react';
 
 export default function MobileShell({
   activeTab,
@@ -12,6 +12,7 @@ export default function MobileShell({
 
   const navItems = [
     { id: 'swipe', label: 'Descubrir', icon: Flame },
+    { id: 'explore', label: 'Explorar', icon: Compass },
     { id: 'likes', label: 'Likes', icon: Heart, badge: likesBadgeCount },
     { id: 'chat', label: 'Chats', icon: MessageCircle, badge: unreadBadgeCount },
     { id: 'profile', label: 'Perfil', icon: User },
@@ -52,16 +53,16 @@ export default function MobileShell({
           {children}
         </main>
 
-        {/* BottomNav Minimalista (4 Pestañas: Descubrir, Likes, Chats, Perfil) */}
+        {/* BottomNav Minimalista (5 Pestañas: Descubrir, Explorar, Likes, Chats, Perfil) */}
         <nav
           style={navSwipeStyle}
-          className={`shrink-0 z-30 border-t px-3 pt-1.5 pb-2 pb-safe transition-colors duration-500 ${
+          className={`shrink-0 z-30 border-t px-1.5 pt-1.5 pb-2 pb-safe transition-colors duration-500 ${
             isSwipeDark
-              ? 'bg-[#12050B]/95 border-white/10 backdrop-blur-xl'
-              : 'bg-white/95 border-zinc-200/70 backdrop-blur-xl'
+              ? 'bg-[#12050B]/92 border-white/[0.09] backdrop-blur-2xl'
+              : 'bg-white/95 border-zinc-200/70 backdrop-blur-2xl'
           }`}
         >
-          <div className="grid grid-cols-4 items-center">
+          <div className="grid grid-cols-5 items-center">
             {navItems.map((item) => {
               const Icon = item.icon;
               const active = activeTab === item.id;

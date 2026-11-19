@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BadgeCheck,
   Briefcase,
+  Camera,
   ChevronDown,
   Crown,
   Flame,
@@ -38,7 +39,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { unlockExclusivePhotoWithDiamonds } from '../../services/adRewardService';
 import { sendTextMessage, sendVirtualGift } from '../../services/chatService';
-import { sendLike } from '../../services/discoveryService';
+import { sendLike, subscribeGivenLikesCount } from '../../services/discoveryService';
 import { fetchDiscoverProfiles } from '../../services/userService';
 import {
   calculateAffinityScore,
@@ -179,6 +180,8 @@ export default function DiscoverSwipe({
   const setAgeRange = onAgeRangeChange ?? setLocalAgeRange;
 
   const [showFiltersModal, setShowFiltersModal] = useState(false);
+  const [showTasteBanner, setShowTasteBanner] = useState(false);
+  const [givenLikesTotal, setGivenLikesTotal] = useState(0);
   const [bioExpanded, setBioExpanded] = useState(false);
 
   const [cards, setCards] = useState([]);
@@ -240,7 +243,7 @@ export default function DiscoverSwipe({
       nextCardRef.current.style.transition = withTransition
         ? 'transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.24s ease-out'
         : 'none';
-      nextCardRef.current.style.transform = 'translate3d(0px, 10px, 0px) scale(0.95)';
+      nextCardRef.current.style.transform = 'translate3d(0px, 10px, 0px) scale(0.955)';
       nextCardRef.current.style.opacity = '0.72';
     }
     if (likeStampRef.current) likeStampRef.current.style.opacity = '0';
@@ -330,6 +333,11 @@ export default function DiscoverSwipe({
   useEffect(() => {
     loadCandidates(false);
   }, [loadCandidates]);
+
+  useEffect(() => {
+    if (!currentUser?.uid) return undefined;
+    return subscribeGivenLikesCount(currentUser.uid, setGivenLikesTotal);
+  }, [currentUser?.uid]);
 
   useEffect(() => {
     return () => {
@@ -431,7 +439,7 @@ export default function DiscoverSwipe({
       }
       if (nextCardRef.current) {
         nextCardRef.current.style.transition = 'none';
-        nextCardRef.current.style.transform = 'translate3d(0px, 10px, 0px) scale(0.95)';
+        nextCardRef.current.style.transform = 'translate3d(0px, 10px, 0px) scale(0.955)';
         nextCardRef.current.style.opacity = '0.72';
       }
       if (likeStampRef.current) likeStampRef.current.style.opacity = '0';
@@ -627,7 +635,7 @@ export default function DiscoverSwipe({
       const progress = isUpSwipe
         ? Math.min(1, Math.max(0, (-dy - 10) / 110))
         : Math.min(1, Math.max(0, (Math.abs(dx) - 10) / 110));
-      const scale = 0.95 + 0.05 * progress;
+      const scale = 0.955 + 0.045 * progress;
       const translateY = 10 * (1 - progress);
       const opacity = 0.72 + 0.28 * progress;
       nextCardRef.current.style.transition = 'none';
@@ -717,7 +725,7 @@ export default function DiscoverSwipe({
       const rect = activeCardRef.current.getBoundingClientRect();
       const tapX = e.clientX - rect.left;
       const tapY = e.clientY - rect.top;
-      if (tapY < rect.height * 0.76) {
+      if (tapY < rect.height * 0.68) {
         if (tapX < rect.width * 0.42) {
           setPhotoIdx((i) => (i - 1 + topCardPhotos.length) % topCardPhotos.length);
         } else if (tapX > rect.width * 0.58) {
@@ -726,6 +734,13 @@ export default function DiscoverSwipe({
       }
     }
   };
+
+  const likesRemaining = Math.max(0, 20 - givenLikesTotal);
+  const progressPercent = Math.min(100, Math.round((givenLikesTotal / 20) * 100));
+  const passportCountry = useMemo(
+    () => (passportCountryCode ? COUNTRIES.find((c) => c.code === passportCountryCode) : null),
+    [passportCountryCode]
+  );
 
   const sharedInterests = topCard ? getSharedInterests(currentUser, topCard) : [];
   const sharedSet = new Set(sharedInterests);
@@ -822,38 +837,151 @@ export default function DiscoverSwipe({
       style={{ background: mood.backdropStyle }}
       className="flex-1 h-full w-full text-white flex flex-col overflow-hidden select-none relative transition-all duration-700"
     >
-      {/* CABECERA MINIMALISTA PREMIUM: Logo a la izquierda + Filtros a la derecha */}
-      <header className="shrink-0 px-4 pt-2.5 pb-1.5 pt-safe z-30 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#FF2E54] via-rose-500 to-amber-400 shadow-[0_6px_18px_rgba(255,46,84,0.45)] flex items-center justify-center shrink-0">
-            <Flame className="w-4 h-4 text-white fill-white" />
-          </div>
-          <span className="font-display text-[19px] font-black tracking-tight text-white truncate">
-            Conoscamosnos
-          </span>
-        </div>
+      {/* CABECERA EDITORIAL ADAPTATIVA + TIRA VIVA DE INTENCIONES */}
+      <header className="shrink-0 pt-2.5 pb-1.5 pt-safe z-30 space-y-2">
+        {!showTasteBanner ? (
+          <div className="px-3.5 flex items-center justify-between gap-2">
+            {/* Izquierda: Logo marca + Descubrir + Subtítulo contextual */}
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-[11px] bg-gradient-to-tr from-[#FF2E54] via-rose-500 to-amber-400 shadow-[0_6px_18px_rgba(255,46,84,0.45)] flex items-center justify-center shrink-0">
+                <Flame className="w-4 h-4 text-white fill-white" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="font-display text-[19px] font-black tracking-tight text-white leading-none truncate">
+                  Descubrir
+                </h1>
+                <p className="text-[10.5px] font-semibold text-white/65 leading-tight mt-0.5 truncate flex items-center gap-1">
+                  {passportCountry ? (
+                    <>
+                      <span>✈️</span>
+                      <span className="truncate">
+                        {passportCountry.flag} {passportCountry.name}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span>{mood.emoji}</span>
+                      <span className="truncate">{mood.label}</span>
+                    </>
+                  )}
+                </p>
+              </div>
+            </div>
 
-        <button
-          type="button"
-          onClick={() => setShowFiltersModal((v) => !v)}
-          className={`relative w-10 h-10 rounded-full flex items-center justify-center border backdrop-blur-md transition shrink-0 ${
-            showFiltersModal || hasCustomFilters
-              ? 'bg-white text-zinc-950 border-white shadow-lg'
-              : 'bg-white/10 text-white border-white/15 hover:bg-white/20'
-          }`}
-          aria-label="Filtros de búsqueda"
-          title="Filtros de búsqueda"
-        >
-          <SlidersHorizontal className="w-4 h-4 stroke-[2.2]" />
-          {hasCustomFilters && !showFiltersModal && (
-            <span className="absolute top-0.5 right-0.5 w-2.5 h-2.5 rounded-full bg-[#FF2E54] ring-2 ring-[#1A0710]" />
-          )}
-        </button>
+            {/* Derecha: PRO · Boost · Filtros */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={onOpenPro || onOpenDiamondStore}
+                className={`h-8 px-2.5 rounded-full border text-[11px] font-extrabold flex items-center gap-1 backdrop-blur-md hover:brightness-110 active:scale-95 transition ${
+                  proActive
+                    ? 'bg-gradient-to-r from-[#FF2E54] to-amber-500 border-amber-200/60 text-white shadow-[0_4px_14px_rgba(245,158,11,0.35)]'
+                    : 'bg-gradient-to-r from-[#2D141F]/90 to-[#2B1F10]/90 border-amber-300/40 text-amber-200'
+                }`}
+                title="Conoscamosnos PRO"
+              >
+                <Crown className="w-3.5 h-3.5 text-amber-300" />
+                <span>PRO</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onOpenBoost}
+                className="h-8 px-2.5 rounded-full bg-purple-500/20 border border-purple-300/35 text-purple-200 text-[11px] font-extrabold flex items-center gap-1 backdrop-blur-md hover:bg-purple-500/30 active:scale-95 transition"
+                title="Activar Boost VIP"
+              >
+                <Zap className="w-3.5 h-3.5 fill-purple-300 text-purple-300" />
+                <span>Boost</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowFiltersModal((v) => !v)}
+                className={`relative w-8 h-8 rounded-full flex items-center justify-center border backdrop-blur-md active:scale-95 transition shrink-0 ${
+                  showFiltersModal || hasCustomFilters
+                    ? 'bg-white text-zinc-950 border-white shadow-lg'
+                    : 'bg-white/10 text-white border-white/15 hover:bg-white/20'
+                }`}
+                aria-label="Filtros de búsqueda"
+                title="Filtros de búsqueda"
+              >
+                <SlidersHorizontal className="w-4 h-4 stroke-[2.2]" />
+                {hasCustomFilters && !showFiltersModal && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#FF2E54] ring-2 ring-[#1A0710] animate-pulse" />
+                )}
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* Banner amigable de progreso de gustos reales */
+          <div className="px-3.5">
+            <div
+              onClick={() => setShowTasteBanner(false)}
+              className="bg-white/95 backdrop-blur-xl text-zinc-900 rounded-2xl px-3.5 py-2.5 shadow-xl flex items-center gap-3 cursor-pointer"
+            >
+              <div className="w-9 h-9 rounded-full bg-rose-50 flex items-center justify-center shrink-0">
+                <Heart className="w-5 h-5 text-[#FF2E54] fill-[#FF2E54]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-extrabold text-zinc-900 leading-snug">
+                  {likesRemaining > 0
+                    ? `Conociendo tus gustos — Da ${likesRemaining} Likes más`
+                    : '✨ ¡Algoritmo calibrado con tus gustos!'}
+                </p>
+                <div className="w-full h-1.5 rounded-full bg-zinc-100 mt-1.5 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full bg-gradient-to-r ${mood.progressGrad} transition-all duration-500`}
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tira horizontal sutil de intenciones + chip de Tus Gustos */}
+        {!showTasteBanner && !showFiltersModal && (
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar px-3.5 pb-0.5">
+            {['Todos', ...LOOKING_FOR_OPTIONS].map((opt) => {
+              const optMood = getIntentionMood(opt);
+              const selected = intention === opt;
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => setIntention(opt)}
+                  className={`shrink-0 px-3 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1 transition-all duration-300 ${
+                    selected
+                      ? optMood.pillActive
+                      : 'bg-white/[0.08] border-white/[0.12] text-white/80 hover:bg-white/[0.15] hover:text-white'
+                  }`}
+                >
+                  <span>{optMood.emoji}</span>
+                  <span>{opt === 'Todos' ? 'Todos' : optMood.label}</span>
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => setShowTasteBanner(true)}
+              className="shrink-0 px-3 py-1 rounded-full text-[11px] font-bold border bg-white/[0.08] border-white/[0.12] text-rose-200 hover:bg-white/[0.15] flex items-center gap-1 transition"
+              title="Ver afinidad y calibración de gustos"
+            >
+              <span>💗</span>
+              <span>{progressPercent > 0 ? `${progressPercent}%` : 'Tus gustos'}</span>
+            </button>
+          </div>
+        )}
       </header>
 
-      {/* PANEL DESPLEGABLE DE FILTROS + ACCESOS VIP */}
+      {/* PANEL DESPLEGABLE DE FILTROS CON SCRIM DIFUMINADO */}
       {showFiltersModal && (
-        <div className="absolute inset-x-3 top-14 mt-safe z-40 max-h-[78dvh] overflow-y-auto no-scrollbar p-4 rounded-3xl bg-[#140811]/95 backdrop-blur-xl border border-white/15 space-y-3.5 shadow-[0_24px_60px_rgba(0,0,0,0.75)] animate-sheet-up">
+        <>
+          <div
+            onClick={() => setShowFiltersModal(false)}
+            className="fixed inset-0 z-30 bg-black/55 backdrop-blur-sm"
+          />
+          <div className="absolute inset-x-3 top-14 mt-safe z-40 max-h-[78dvh] overflow-y-auto no-scrollbar p-4 rounded-[28px] bg-[#140811]/95 backdrop-blur-2xl border border-white/15 space-y-3.5 shadow-[0_24px_60px_rgba(0,0,0,0.8)] animate-sheet-up">
           <div className="flex items-center justify-between">
             <span className="text-xs font-extrabold text-zinc-100 flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
@@ -1118,12 +1246,13 @@ export default function DiscoverSwipe({
             </button>
           </div>
         </div>
+        </>
       )}
 
       {/* CONTENEDOR DEL MAZO VIRTUALIZADO A PANTALLA COMPLETA (Máximo 2 nodos en el DOM) */}
-      <div className="flex-1 min-h-0 relative px-2.5 pt-1 pb-1.5 flex flex-col">
+      <div className="flex-1 min-h-0 relative px-2.5 pt-0.5 pb-2.5 flex flex-col">
         {loading ? (
-          <div className="flex-1 rounded-3xl bg-black/35 border border-white/10 shadow-[0_24px_60px_-14px_rgba(0,0,0,0.8)] flex flex-col items-center justify-center gap-4 p-6 text-center">
+          <div className="flex-1 rounded-[30px] bg-black/35 border border-white/10 shadow-[0_24px_60px_-14px_rgba(0,0,0,0.9)] flex flex-col items-center justify-center gap-4 p-6 text-center">
             <div className="relative flex items-center justify-center">
               <div className="w-24 h-24 rounded-full border border-rose-400/40 animate-ping absolute" />
               <img
@@ -1140,7 +1269,7 @@ export default function DiscoverSwipe({
             </div>
           </div>
         ) : !topCard ? (
-          <div className="flex-1 rounded-3xl bg-black/40 border border-white/10 shadow-[0_24px_60px_-14px_rgba(0,0,0,0.8)] flex flex-col items-center justify-center p-6 text-center relative overflow-hidden">
+          <div className="flex-1 rounded-[30px] bg-black/40 border border-white/10 shadow-[0_24px_60px_-14px_rgba(0,0,0,0.9)] flex flex-col items-center justify-center p-6 text-center relative overflow-hidden">
             <div className="relative flex items-center justify-center mb-5">
               <div className="w-32 h-32 rounded-full border border-rose-400/25 animate-ping absolute" />
               <div className="w-24 h-24 rounded-full border border-rose-400/40 absolute" />
@@ -1197,16 +1326,16 @@ export default function DiscoverSwipe({
           </div>
         ) : (
           <div className="flex-1 relative">
-            {/* TARJETA 2 (Siguiente perfil debajo - escalado dinámico a 60fps) */}
+            {/* TARJETA 2 (Siguiente perfil debajo - profundidad fluida a 60fps) */}
             {nextCard && (
               <div
                 key={`next-${nextCard.uid || nextCard.id}`}
                 ref={nextCardRef}
                 style={{
-                  transform: 'translate3d(0px, 10px, 0px) scale(0.95)',
+                  transform: 'translate3d(0px, 10px, 0px) scale(0.955)',
                   opacity: 0.72,
                 }}
-                className="gpu-card absolute inset-0 rounded-3xl overflow-hidden bg-zinc-900 border border-white/10 shadow-[0_18px_45px_-12px_rgba(0,0,0,0.75)] pointer-events-none"
+                className="gpu-card absolute inset-0 rounded-[30px] overflow-hidden bg-zinc-900 border border-white/10 shadow-[0_18px_45px_-12px_rgba(0,0,0,0.75)] pointer-events-none"
               >
                 <img
                   src={getPrimaryPhoto(nextCard, 1080, { seed: currentUser?.uid })}
@@ -1214,11 +1343,11 @@ export default function DiscoverSwipe({
                   className="w-full h-full object-cover"
                   draggable={false}
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/45 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#080407] via-[#080407]/45 to-transparent" />
               </div>
             )}
 
-            {/* TARJETA 1 (Activa Superior - Full Bleed 60fps) */}
+            {/* TARJETA 1 (Activa Superior - Full Bleed Inmersiva 60fps) */}
             <div
               key={`top-${topCard.uid || topCard.id}`}
               ref={activeCardRef}
@@ -1226,13 +1355,13 @@ export default function DiscoverSwipe({
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerUp}
-              className={`gpu-card touch-none absolute inset-0 rounded-3xl overflow-hidden bg-zinc-950 select-none cursor-grab active:cursor-grabbing ${
+              className={`gpu-card touch-none absolute inset-0 rounded-[30px] overflow-hidden bg-zinc-950 select-none cursor-grab active:cursor-grabbing ${
                 topCardIsPro
-                  ? 'ring-[1.5px] ring-amber-300/45 shadow-[0_24px_60px_-14px_rgba(0,0,0,0.88),0_0_32px_-8px_rgba(245,197,86,0.34)]'
-                  : 'ring-1 ring-white/15 shadow-[0_24px_60px_-14px_rgba(0,0,0,0.88)]'
+                  ? 'ring-[1.5px] ring-amber-300/50 shadow-[0_24px_60px_-14px_rgba(0,0,0,0.9),0_0_32px_-8px_rgba(245,197,86,0.34)]'
+                  : 'ring-1 ring-white/15 shadow-[0_24px_60px_-14px_rgba(0,0,0,0.9)]'
               }`}
             >
-              {/* Foto principal a pantalla completa */}
+              {/* Foto principal ocupando toda la altura vertical */}
               <img
                 key={`${topCard.uid || topCard.id}-photo-${photoIdx}`}
                 src={optimizeCloudinaryUrl(topCardPhotos[photoIdx], 1080)}
@@ -1245,9 +1374,9 @@ export default function DiscoverSwipe({
                 draggable={false}
               />
 
-              {/* Degradados suaves superior e inferior para legibilidad impecable */}
-              <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/55 to-transparent pointer-events-none" />
-              <div className="absolute inset-x-0 bottom-0 h-[54%] bg-gradient-to-t from-black/95 via-black/55 to-transparent pointer-events-none" />
+              {/* Viñetas sedosas cinematográficas (rostros brillantes + contraste editorial abajo) */}
+              <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/60 via-black/20 to-transparent pointer-events-none" />
+              <div className="absolute inset-x-0 bottom-0 h-[62%] bg-gradient-to-t from-[#080407] via-[#080407]/75 to-transparent pointer-events-none" />
 
               {/* Overlay para Foto Exclusiva VIP */}
               {currentSwipePhotoIsExclusive && !currentSwipePhotoUnlocked && (
@@ -1294,7 +1423,7 @@ export default function DiscoverSwipe({
               <div
                 ref={likeStampRef}
                 style={{ opacity: 0 }}
-                className="absolute top-16 left-5 z-30 px-4 py-1.5 rounded-2xl border-[3.5px] border-emerald-400 bg-emerald-950/45 backdrop-blur-xs text-emerald-300 font-display font-black text-2xl sm:text-3xl tracking-wider -rotate-12 shadow-[0_0_26px_rgba(52,211,153,0.65)] drop-shadow-[0_0_10px_rgba(52,211,153,0.9)] pointer-events-none"
+                className="absolute top-16 left-5 z-30 px-4 py-1.5 rounded-2xl border-[3.5px] border-emerald-400 bg-emerald-950/45 backdrop-blur-sm text-emerald-300 font-display font-black text-2xl sm:text-3xl tracking-wider -rotate-12 shadow-[0_0_26px_rgba(52,211,153,0.65)] drop-shadow-[0_0_10px_rgba(52,211,153,0.9)] pointer-events-none"
               >
                 ME GUSTA
               </div>
@@ -1302,7 +1431,7 @@ export default function DiscoverSwipe({
               <div
                 ref={nopeStampRef}
                 style={{ opacity: 0 }}
-                className="absolute top-16 right-5 z-30 px-4 py-1.5 rounded-2xl border-[3.5px] border-[#FF2E54] bg-rose-950/45 backdrop-blur-xs text-[#FF4D6D] font-display font-black text-2xl sm:text-3xl tracking-wider rotate-12 shadow-[0_0_26px_rgba(255,46,84,0.65)] drop-shadow-[0_0_10px_rgba(255,46,84,0.9)] pointer-events-none"
+                className="absolute top-16 right-5 z-30 px-4 py-1.5 rounded-2xl border-[3.5px] border-[#FF2E54] bg-rose-950/45 backdrop-blur-sm text-[#FF4D6D] font-display font-black text-2xl sm:text-3xl tracking-wider rotate-12 shadow-[0_0_26px_rgba(255,46,84,0.65)] drop-shadow-[0_0_10px_rgba(255,46,84,0.9)] pointer-events-none"
               >
                 PASAR
               </div>
@@ -1310,7 +1439,7 @@ export default function DiscoverSwipe({
               <div
                 ref={superLikeStampRef}
                 style={{ opacity: 0 }}
-                className="absolute bottom-44 left-1/2 -translate-x-1/2 -rotate-6 z-30 px-5 py-2 rounded-2xl border-[3.5px] border-sky-400 bg-gradient-to-r from-sky-950/70 via-blue-950/70 to-amber-950/60 backdrop-blur-xs font-display font-black text-2xl sm:text-3xl tracking-wider shadow-[0_0_30px_rgba(56,189,248,0.75),0_0_16px_rgba(251,191,36,0.45)] inline-flex items-center gap-2 whitespace-nowrap pointer-events-none"
+                className="absolute bottom-52 left-1/2 -translate-x-1/2 -rotate-6 z-30 px-5 py-2 rounded-2xl border-[3.5px] border-sky-400 bg-gradient-to-r from-sky-950/70 via-blue-950/70 to-amber-950/60 backdrop-blur-sm font-display font-black text-2xl sm:text-3xl tracking-wider shadow-[0_0_30px_rgba(56,189,248,0.75),0_0_16px_rgba(251,191,36,0.45)] inline-flex items-center gap-2 whitespace-nowrap pointer-events-none"
               >
                 <Star className="w-6 h-6 text-amber-300 fill-amber-300 shrink-0" />
                 <span className="bg-gradient-to-r from-sky-300 via-cyan-200 to-amber-300 bg-clip-text text-transparent">
@@ -1354,10 +1483,15 @@ export default function DiscoverSwipe({
                         <Zap className="w-3 h-3 fill-zinc-950" /> VIP
                       </span>
                     )}
-                    {activity.activeNow && (
-                      <span className="px-2.5 py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/15 text-white text-[10.5px] font-bold inline-flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                        En línea
+
+                    <span className="px-2.5 py-1 rounded-full bg-black/45 backdrop-blur-md border border-white/15 text-white text-[10.5px] font-bold inline-flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-amber-400" />
+                      {affinity}% afinidad
+                    </span>
+
+                    {topCardPhotos.length > 1 && (
+                      <span className="px-2 py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/15 text-white/85 text-[10px] font-bold inline-flex items-center gap-1">
+                        <Camera className="w-3 h-3" /> {photoIdx + 1}/{topCardPhotos.length}
                       </span>
                     )}
                   </div>
@@ -1366,8 +1500,33 @@ export default function DiscoverSwipe({
                 </div>
               </div>
 
-              {/* CONTENIDO INFERIOR DE LA TARJETA */}
-              <div className="absolute bottom-4 inset-x-4 z-20 space-y-2.5 pointer-events-auto">
+              {/* CONTENIDO EDITORIAL INFERIOR DE LA TARJETA + UTILIDADES */}
+              <div className="absolute bottom-[84px] inset-x-4 z-20 space-y-2 pointer-events-auto">
+                {/* Fila contextual: presencia + lo que busca */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold shadow-sm ${
+                      activity.activeNow
+                        ? 'bg-white/95 text-zinc-950'
+                        : 'bg-black/45 backdrop-blur-md border border-white/15 text-white/90'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        activity.activeNow ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-400'
+                      }`}
+                    />
+                    {activity.label}
+                  </span>
+
+                  {topCard.lookingFor && (
+                    <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-white/15 backdrop-blur-md border border-white/20 text-white">
+                      {topCard.lookingFor}
+                    </span>
+                  )}
+                </div>
+
+                {/* Identidad grande + utilidades discretas a la derecha (Regalo + Biografía) */}
                 <div className="flex items-end justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
@@ -1375,7 +1534,7 @@ export default function DiscoverSwipe({
                         {topCard.name}
                       </h2>
                       {visibleAge !== null && (
-                        <span className="font-display text-[26px] font-light text-white/90 shrink-0 leading-none">
+                        <span className="font-display text-[26px] font-normal text-white/90 shrink-0 leading-none">
                           {visibleAge}
                         </span>
                       )}
@@ -1400,213 +1559,330 @@ export default function DiscoverSwipe({
                     </p>
                   </div>
 
-                  {/* Botón discreto para desplegar biografía completa en tarjeta */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setBioExpanded((v) => !v);
-                    }}
-                    className="w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-md border border-white/25 text-white flex items-center justify-center shrink-0 shadow-lg active:scale-90 transition"
-                    aria-label="Ver biografía completa"
-                    title="Ver biografía completa"
-                  >
-                    {bioExpanded ? (
-                      <ChevronDown className="w-5 h-5" />
-                    ) : (
-                      <Info className="w-5 h-5" />
-                    )}
-                  </button>
+                  {/* Pila vertical derecha: Regalo Virtual + Biografía Completa */}
+                  <div className="flex flex-col gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setGiftPickerOpen(true);
+                      }}
+                      className="w-10 h-10 rounded-full bg-black/45 hover:bg-amber-500/25 backdrop-blur-md border border-amber-300/40 text-amber-300 flex items-center justify-center shadow-lg active:scale-90 transition"
+                      aria-label="Enviar regalo virtual"
+                      title="Enviar regalo virtual"
+                    >
+                      <Gift className="w-[18px] h-[18px]" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setBioExpanded((v) => !v);
+                      }}
+                      className="w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-md border border-white/25 text-white flex items-center justify-center shadow-lg active:scale-90 transition"
+                      aria-label="Ver biografía completa"
+                      title="Ver biografía completa"
+                    >
+                      {bioExpanded ? (
+                        <ChevronDown className="w-5 h-5" />
+                      ) : (
+                        <Info className="w-5 h-5" />
+                      )}
+                    </button>
+                  </div>
                 </div>
 
-                {/* 2-3 etiquetas (chips) translúcidas glassmorphism de intereses */}
-                {cardInterests.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {cardInterests.map((tag) => {
-                      const isCommon = sharedSet.has(tag);
-                      return (
-                        <span
-                          key={tag}
-                          className={`rounded-full px-3 py-1 text-xs font-semibold backdrop-blur-md border shadow-[0_4px_14px_rgba(0,0,0,0.22)] ${
-                            isCommon
-                              ? 'bg-emerald-400/20 border-emerald-300/50 text-white'
-                              : 'bg-white/15 border-white/25 text-white/95'
-                          }`}
-                        >
-                          {formatInterestWithIcon(tag)}
-                        </span>
-                      );
-                    })}
+                {/* Slot inteligente: Foto 2+ muestra frase personal; Foto 1 muestra chips translúcidos de intereses */}
+                {photoIdx > 0 && (filledPrompts[0] || topCard.bio) ? (
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setBioExpanded(true);
+                    }}
+                    className="bg-black/45 backdrop-blur-md border border-white/15 rounded-2xl px-3 py-2 cursor-pointer hover:bg-black/55 transition space-y-0.5"
+                  >
+                    <p className="text-[10px] font-extrabold uppercase tracking-wider text-rose-300 flex items-center gap-1">
+                      <Quote className="w-3 h-3" /> Sobre {topCard.name}
+                    </p>
+                    <p className="text-xs text-white/95 font-medium leading-snug line-clamp-2">
+                      “{filledPrompts[0] || topCard.bio}”
+                    </p>
                   </div>
+                ) : (
+                  cardInterests.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {cardInterests.map((tag) => {
+                        const isCommon = sharedSet.has(tag);
+                        return (
+                          <span
+                            key={tag}
+                            className={`rounded-full px-3 py-1 text-xs font-semibold backdrop-blur-md border shadow-[0_4px_14px_rgba(0,0,0,0.22)] ${
+                              isCommon
+                                ? 'bg-emerald-400/20 border-emerald-300/50 text-white'
+                                : 'bg-white/15 border-white/25 text-white/95'
+                            }`}
+                          >
+                            {formatInterestWithIcon(tag)}
+                          </span>
+                        );
+                      })}
+                      {sharedInterests.length > 0 && (
+                        <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-300/40 text-emerald-200 text-[10.5px] font-extrabold">
+                          ✨ {sharedInterests.length} en común
+                        </span>
+                      )}
+                    </div>
+                  )
                 )}
+              </div>
+
+              {/* DOCK ESCULTURAL DE 5 ACCIONES ARMONIOSAS DENTRO DE LA TARJETA */}
+              <div className="absolute bottom-3.5 inset-x-3 z-20 flex items-center justify-center gap-3 sm:gap-4 pointer-events-auto">
+                {/* 1. Deshacer (40px, vidrio ámbar) */}
+                <button
+                  type="button"
+                  onClick={handleRewind}
+                  disabled={history.length === 0}
+                  className="w-10 h-10 rounded-full bg-zinc-950/75 backdrop-blur-xl border border-amber-300/35 text-amber-300 flex items-center justify-center shadow-[0_8px_20px_rgba(0,0,0,0.45)] hover:scale-105 hover:bg-amber-400/15 active:scale-90 disabled:opacity-35 disabled:pointer-events-none transition-all duration-150"
+                  title="Deshacer último perfil"
+                  aria-label="Deshacer"
+                >
+                  <RotateCcw className="w-[18px] h-[18px] stroke-[2.3]" />
+                </button>
+
+                {/* 2. Pasar / X (58px, terciopelo oscuro con brillo carmesí) */}
+                <button
+                  type="button"
+                  onClick={triggerPass}
+                  className="w-[58px] h-[58px] rounded-full bg-[#160B11]/85 backdrop-blur-xl border-[1.5px] border-rose-400/45 text-[#FF4D6D] flex items-center justify-center shadow-[0_12px_28px_rgba(0,0,0,0.55),0_0_20px_rgba(255,46,84,0.2)] hover:scale-105 hover:border-[#FF2E54] active:scale-90 transition-all duration-150"
+                  title="Pasar"
+                  aria-label="Pasar"
+                >
+                  <X className="w-7 h-7 stroke-[2.8]" />
+                </button>
+
+                {/* 3. Super Like / Estrella (48px, gema zafiro) */}
+                <button
+                  type="button"
+                  onClick={triggerSuperLike}
+                  className="w-12 h-12 rounded-full bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-500 border border-sky-200/50 text-white flex items-center justify-center shadow-[0_10px_24px_rgba(56,189,248,0.45)] hover:scale-105 hover:brightness-110 active:scale-90 transition-all duration-150"
+                  title="Enviar Super Like"
+                  aria-label="Super Like"
+                >
+                  <Star className="w-5 h-5 fill-white text-white" />
+                </button>
+
+                {/* 4. Me Gusta / Corazón (58px, gradiente adaptativo de marca Conoscamosnos) */}
+                <button
+                  type="button"
+                  onClick={triggerLike}
+                  className={`w-[58px] h-[58px] rounded-full bg-gradient-to-br ${mood.heartButton} border-[1.5px] border-white/30 text-white flex items-center justify-center hover:scale-105 hover:brightness-105 active:scale-90 transition-all duration-200`}
+                  title="Me gusta"
+                  aria-label="Me gusta"
+                >
+                  <Heart className="w-7 h-7 fill-white text-white" />
+                </button>
+
+                {/* 5. Chat Directo (40px, vidrio zafiro) */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onStartChat?.(topCard);
+                  }}
+                  className="w-10 h-10 rounded-full bg-zinc-950/75 backdrop-blur-xl border border-sky-300/35 text-sky-300 flex items-center justify-center shadow-[0_8px_20px_rgba(0,0,0,0.45)] hover:scale-105 hover:bg-sky-400/15 active:scale-90 transition-all duration-150"
+                  title={
+                    accessPolicy.isFreeMode
+                      ? 'Enviar mensaje privado gratis (Modo Libre activo)'
+                      : accessPolicy.enableDiamondCharges && accessPolicy.enableRewardedAds
+                      ? `Enviar mensaje (Gratis con Match · Directo: ${accessPolicy.unlockChatDiamonds} 💎 o 1 anuncio)`
+                      : accessPolicy.enableRewardedAds
+                      ? 'Enviar mensaje (Gratis con Match · Directo: 1 anuncio)'
+                      : `Enviar mensaje (Gratis con Match · Directo: ${accessPolicy.unlockChatDiamonds} 💎)`
+                  }
+                  aria-label="Chatear"
+                >
+                  <MessageCircle className="w-[18px] h-[18px] stroke-[2.3]" />
+                </button>
               </div>
 
               {/* HOJA DESPLEGABLE IN-CARD PARA BIOGRAFÍA COMPLETA SIN SALIR DE LA VISTA */}
               {bioExpanded && (
-                <div
-                  onPointerDown={(e) => e.stopPropagation()}
-                  className="absolute inset-x-0 bottom-0 max-h-[80%] z-30 rounded-t-[28px] bg-[#120911]/92 backdrop-blur-xl border-t border-white/20 flex flex-col overflow-hidden animate-sheet-up shadow-[0_-16px_40px_rgba(0,0,0,0.65)] touch-pan-y"
-                >
-                  <div className="px-4 pt-2.5 pb-3 border-b border-white/10 shrink-0">
-                    <div className="w-10 h-1 rounded-full bg-white/25 mx-auto mb-2.5" />
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <h3 className="font-display text-lg font-black text-white truncate">
-                          {topCard.name}
-                          {visibleAge !== null ? `, ${visibleAge}` : ''}
-                        </h3>
-                        {verified && (
-                          <BadgeCheck className="w-4 h-4 text-sky-400 fill-sky-400 stroke-white shrink-0" />
-                        )}
-                        {topCardIsPro && <ProCrownBadge variant="compact" />}
+                <>
+                  <div
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setBioExpanded(false);
+                    }}
+                    className="absolute inset-0 z-[25] bg-black/45 backdrop-blur-[2px]"
+                  />
+                  <div
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="absolute inset-x-0 bottom-0 max-h-[80%] z-30 rounded-t-[28px] bg-[#120911]/92 backdrop-blur-xl border-t border-white/20 flex flex-col overflow-hidden animate-sheet-up shadow-[0_-16px_40px_rgba(0,0,0,0.65)] touch-pan-y"
+                  >
+                    <div className="px-4 pt-2.5 pb-3 border-b border-white/10 shrink-0">
+                      <div className="w-10 h-1 rounded-full bg-white/25 mx-auto mb-2.5" />
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <h3 className="font-display text-lg font-black text-white truncate">
+                            {topCard.name}
+                            {visibleAge !== null ? `, ${visibleAge}` : ''}
+                          </h3>
+                          {verified && (
+                            <BadgeCheck className="w-4 h-4 text-sky-400 fill-sky-400 stroke-white shrink-0" />
+                          )}
+                          {topCardIsPro && <ProCrownBadge variant="compact" />}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setBioExpanded(false);
+                          }}
+                          className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center shrink-0 transition"
+                          aria-label="Cerrar biografía"
+                        >
+                          <ChevronDown className="w-4 h-4" />
+                        </button>
                       </div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-3.5 text-left">
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-extrabold uppercase tracking-wider text-rose-300">
+                          Biografía
+                        </p>
+                        <p className="text-xs sm:text-sm text-white/95 leading-relaxed font-medium">
+                          {topCard.bio?.trim()
+                            ? topCard.bio
+                            : `${topCard.name} prefiere sorprenderte conversando en privado.`}
+                        </p>
+                      </div>
+
+                      {filledPrompts.length > 0 && (
+                        <div className="space-y-2">
+                          {filledPrompts.map((promptText, idx) => (
+                            <div
+                              key={idx}
+                              className="p-3 rounded-2xl bg-white/10 border border-white/15 space-y-1"
+                            >
+                              <p className="text-[10px] font-extrabold uppercase tracking-wider text-amber-300 flex items-center gap-1">
+                                <Quote className="w-3 h-3" /> Frase #{idx + 1}
+                              </p>
+                              <p className="text-xs text-white font-semibold leading-relaxed">
+                                “{promptText}”
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400">
+                          Sobre {topCard.name}
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          <span className="px-2.5 py-1 rounded-full bg-white/10 border border-white/15 text-[11px] font-bold text-amber-200 inline-flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-amber-300" />
+                            {affinity}% afinidad
+                          </span>
+                          <span className="px-2.5 py-1 rounded-full bg-white/10 border border-white/15 text-[11px] font-bold text-white/90">
+                            {activity.label}
+                          </span>
+                          {drawerDetails.map((item, idx) => {
+                            const Icon = item.icon;
+                            return (
+                              <span
+                                key={idx}
+                                className="px-2.5 py-1 rounded-full bg-white/10 border border-white/15 text-[11px] font-semibold text-white/90 inline-flex items-center gap-1"
+                              >
+                                <Icon className="w-3 h-3 text-[#FF2E54]" />
+                                {item.label}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {allInterests.length > 0 && (
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400">
+                              Intereses
+                            </p>
+                            {sharedInterests.length > 0 && (
+                              <span className="text-[10.5px] font-extrabold text-emerald-400">
+                                ✨ {sharedInterests.length} en común
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {allInterests.map((tag) => {
+                              const isCommon = sharedSet.has(tag);
+                              return (
+                                <span
+                                  key={tag}
+                                  className={`rounded-full px-3 py-1 text-xs font-semibold backdrop-blur-md border ${
+                                    isCommon
+                                      ? 'bg-emerald-400/20 border-emerald-300/50 text-white'
+                                      : 'bg-white/15 border-white/25 text-white/95'
+                                  }`}
+                                >
+                                  {formatInterestWithIcon(tag)}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Acciones rápidas al pie del panel de biografía */}
+                    <div className="p-3 border-t border-white/10 bg-black/35 grid grid-cols-3 gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setBioExpanded(false);
+                          onStartChat?.(topCard);
+                        }}
+                        className="py-2.5 px-2 rounded-2xl bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/40 text-sky-200 text-xs font-extrabold flex items-center justify-center gap-1.5 transition"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        Chatear
+                      </button>
 
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           setBioExpanded(false);
+                          setGiftPickerOpen(true);
                         }}
-                        className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center shrink-0 transition"
-                        aria-label="Cerrar biografía"
+                        className="py-2.5 px-2 rounded-2xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-200 text-xs font-extrabold flex items-center justify-center gap-1.5 transition"
                       >
-                        <ChevronDown className="w-4 h-4" />
+                        <Gift className="w-3.5 h-3.5" />
+                        Regalar
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setBioExpanded(false);
+                          onSelectProfile?.(topCard);
+                        }}
+                        className="py-2.5 px-2 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 transition"
+                      >
+                        <User className="w-3.5 h-3.5" />
+                        Perfil
                       </button>
                     </div>
                   </div>
-
-                  <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-3.5 text-left">
-                    <div className="space-y-1">
-                      <p className="text-[10px] font-extrabold uppercase tracking-wider text-rose-300">
-                        Biografía
-                      </p>
-                      <p className="text-xs sm:text-sm text-white/95 leading-relaxed font-medium">
-                        {topCard.bio?.trim()
-                          ? topCard.bio
-                          : `${topCard.name} prefiere sorprenderte conversando en privado.`}
-                      </p>
-                    </div>
-
-                    {filledPrompts.length > 0 && (
-                      <div className="space-y-2">
-                        {filledPrompts.map((promptText, idx) => (
-                          <div
-                            key={idx}
-                            className="p-3 rounded-2xl bg-white/10 border border-white/15 space-y-1"
-                          >
-                            <p className="text-[10px] font-extrabold uppercase tracking-wider text-amber-300 flex items-center gap-1">
-                              <Quote className="w-3 h-3" /> Frase #{idx + 1}
-                            </p>
-                            <p className="text-xs text-white font-semibold leading-relaxed">
-                              “{promptText}”
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="space-y-1.5">
-                      <p className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400">
-                        Sobre {topCard.name}
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        <span className="px-2.5 py-1 rounded-full bg-white/10 border border-white/15 text-[11px] font-bold text-amber-200 inline-flex items-center gap-1">
-                          <Sparkles className="w-3 h-3 text-amber-300" />
-                          {affinity}% afinidad
-                        </span>
-                        <span className="px-2.5 py-1 rounded-full bg-white/10 border border-white/15 text-[11px] font-bold text-white/90">
-                          {activity.label}
-                        </span>
-                        {drawerDetails.map((item, idx) => {
-                          const Icon = item.icon;
-                          return (
-                            <span
-                              key={idx}
-                              className="px-2.5 py-1 rounded-full bg-white/10 border border-white/15 text-[11px] font-semibold text-white/90 inline-flex items-center gap-1"
-                            >
-                              <Icon className="w-3 h-3 text-[#FF2E54]" />
-                              {item.label}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {allInterests.length > 0 && (
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <p className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400">
-                            Intereses
-                          </p>
-                          {sharedInterests.length > 0 && (
-                            <span className="text-[10.5px] font-extrabold text-emerald-400">
-                              ✨ {sharedInterests.length} en común
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {allInterests.map((tag) => {
-                            const isCommon = sharedSet.has(tag);
-                            return (
-                              <span
-                                key={tag}
-                                className={`rounded-full px-3 py-1 text-xs font-semibold backdrop-blur-md border ${
-                                  isCommon
-                                    ? 'bg-emerald-400/20 border-emerald-300/50 text-white'
-                                    : 'bg-white/15 border-white/25 text-white/95'
-                                }`}
-                              >
-                                {formatInterestWithIcon(tag)}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Acciones rápidas al pie del panel de biografía */}
-                  <div className="p-3 border-t border-white/10 bg-black/35 grid grid-cols-3 gap-2 shrink-0">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setBioExpanded(false);
-                        onStartChat?.(topCard);
-                      }}
-                      className="py-2.5 px-2 rounded-2xl bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/40 text-sky-200 text-xs font-extrabold flex items-center justify-center gap-1.5 transition"
-                    >
-                      <MessageCircle className="w-3.5 h-3.5" />
-                      Chatear
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setBioExpanded(false);
-                        setGiftPickerOpen(true);
-                      }}
-                      className="py-2.5 px-2 rounded-2xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-200 text-xs font-extrabold flex items-center justify-center gap-1.5 transition"
-                    >
-                      <Gift className="w-3.5 h-3.5" />
-                      Regalar
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setBioExpanded(false);
-                        onSelectProfile?.(topCard);
-                      }}
-                      className="py-2.5 px-2 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 transition"
-                    >
-                      <User className="w-3.5 h-3.5" />
-                      Perfil
-                    </button>
-                  </div>
-                </div>
+                </>
               )}
 
               {/* Overlay de Tutorial Inicial */}
@@ -1641,56 +1917,6 @@ export default function DiscoverSwipe({
           </div>
         )}
       </div>
-
-      {/* BARRA DE ACCIONES CIRCULARES FLOTANTES: Deshacer · Rechazar (X) · Super Like (★) · Me Gusta (♥) */}
-      {!loading && topCard && (
-        <div className="shrink-0 pt-2 pb-2.5 px-4 flex items-center justify-center gap-3.5 sm:gap-4 z-20">
-          {/* Deshacer (amarillo, pequeño) */}
-          <button
-            type="button"
-            onClick={handleRewind}
-            disabled={history.length === 0}
-            className="w-11 h-11 rounded-full bg-zinc-900/90 border border-amber-400/45 text-amber-400 flex items-center justify-center shadow-[0_8px_22px_rgba(251,191,36,0.22)] hover:scale-105 hover:bg-amber-400/15 active:scale-90 disabled:opacity-35 disabled:pointer-events-none transition-all duration-150"
-            title="Deshacer último perfil"
-            aria-label="Deshacer"
-          >
-            <RotateCcw className="w-5 h-5 stroke-[2.4]" />
-          </button>
-
-          {/* Rechazar / X (rojo, grande) */}
-          <button
-            type="button"
-            onClick={triggerPass}
-            className="w-16 h-16 rounded-full bg-[#181016]/95 border-2 border-[#FF2E54]/65 text-[#FF3B5C] flex items-center justify-center shadow-[0_12px_28px_rgba(255,46,84,0.34)] hover:scale-105 hover:border-[#FF2E54] active:scale-90 transition-all duration-150"
-            title="Pasar"
-            aria-label="Pasar"
-          >
-            <X className="w-8 h-8 stroke-[3]" />
-          </button>
-
-          {/* Super Like / Estrella (azul, mediano) */}
-          <button
-            type="button"
-            onClick={triggerSuperLike}
-            className="w-12 h-12 rounded-full bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-500 border border-sky-200/50 text-white flex items-center justify-center shadow-[0_10px_24px_rgba(56,189,248,0.45)] hover:scale-105 hover:brightness-110 active:scale-90 transition-all duration-150"
-            title="Enviar Super Like"
-            aria-label="Super Like"
-          >
-            <Star className="w-5 h-5 fill-white text-white" />
-          </button>
-
-          {/* Me Gusta / Corazón (verde vibrante, grande) */}
-          <button
-            type="button"
-            onClick={triggerLike}
-            className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 via-emerald-500 to-teal-500 border-2 border-emerald-200/45 text-white flex items-center justify-center shadow-[0_12px_30px_rgba(16,185,129,0.48)] hover:scale-105 hover:brightness-105 active:scale-90 transition-all duration-150"
-            title="Me gusta"
-            aria-label="Me gusta"
-          >
-            <Heart className="w-8 h-8 fill-white text-white" />
-          </button>
-        </div>
-      )}
 
       {/* Match Celebration Popup con avatares dobles + rompehielos con 1 toque */}
       {matchPopup && (() => {
