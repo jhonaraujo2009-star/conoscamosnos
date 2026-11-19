@@ -23,6 +23,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { subscribeAllAdImpressions } from '../../services/adRewardService';
 import {
   DEFAULT_LIVE_ECONOMY,
+  purgeAdminRevenueRecords,
   setUserSuspensionStatus,
   setUserVerificationBadge,
   subscribeAllUsersForAdmin,
@@ -34,10 +35,12 @@ import { logoutUser } from '../../services/authService';
 import { subscribeAllGiftTransactions } from '../../services/chatService';
 import {
   approvePaymentRequest,
+  deleteManualPaymentRequest,
   rejectPaymentRequest,
   subscribeAllPaymentRequests,
   subscribeAllPaymentTransactions,
   subscribeAllStoreActivations,
+  togglePaymentRequestReviewed,
 } from '../../services/monetizationService';
 import { subscribeAllReports, updateReportStatus } from '../../services/userService';
 import {
@@ -55,6 +58,7 @@ import {
 } from '../../utils/formatters';
 import AdminOverviewTab from './AdminOverviewTab';
 import AdminReportsTab from './AdminReportsTab';
+import AdminRevenueCleanupModal from './AdminRevenueCleanupModal';
 import AdminSettingsTab from './AdminSettingsTab';
 import AdminTreasuryTab from './AdminTreasuryTab';
 import AdminVerificationTab from './AdminVerificationTab';
@@ -87,6 +91,8 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
   const [busyId, setBusyId] = useState('');
   const [payoutRefs, setPayoutRefs] = useState({});
   const [previewImg, setPreviewImg] = useState(null);
+  const [cleanupModalOpen, setCleanupModalOpen] = useState(false);
+  const [cleaningRevenue, setCleaningRevenue] = useState(false);
 
   const [baseDiamondPrice, setBaseDiamondPrice] = useState(
     String(economyConfig?.baseDiamondValueUSD ?? 0.01)
@@ -156,6 +162,15 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
       unsubAds();
       unsubGifts();
       unsubActs();
+    };
+  }, []);
+
+  useEffect(() => {
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (!metaTheme) return undefined;
+    metaTheme.setAttribute('content', '#FAF4E8');
+    return () => {
+      metaTheme.setAttribute('content', '#FAF7F9');
     };
   }, []);
 
@@ -450,6 +465,55 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
     }
   };
 
+  const handleToggleRechargeReviewed = async (req) => {
+    const nextReviewed = !req.adminChecked;
+    setBusyId(req.id);
+    try {
+      await togglePaymentRequestReviewed({
+        requestId: req.id,
+        adminId: userProfile.uid,
+        reviewed: nextReviewed,
+      });
+      onSuccess?.(
+        nextReviewed
+          ? '✓ Recarga marcada como revisada.'
+          : 'Marca de revisado retirada.'
+      );
+    } catch (err) {
+      onError?.(err.message || 'No se pudo actualizar el estado de revisión.');
+    } finally {
+      setBusyId('');
+    }
+  };
+
+  const handleDeleteRecharge = async (req) => {
+    setBusyId(req.id);
+    try {
+      await deleteManualPaymentRequest({ requestId: req.id });
+      onSuccess?.(`🗑️ Recarga de ${req.userName || 'usuario'} eliminada del reporte.`);
+    } catch (err) {
+      onError?.(err.message || 'No se pudo eliminar el registro de recarga.');
+    } finally {
+      setBusyId('');
+    }
+  };
+
+  const handlePurgeRevenue = async ({ mode, ranges, collections }) => {
+    if (cleaningRevenue) return;
+    setCleaningRevenue(true);
+    try {
+      const res = await purgeAdminRevenueRecords({ mode, ranges, collections });
+      setCleanupModalOpen(false);
+      onSuccess?.(
+        `🧹 Limpieza completada: ${res.totalDeleted || 0} registro(s) eliminado(s).`
+      );
+    } catch (err) {
+      onError?.(err.message || 'No se pudo completar la limpieza de ingresos.');
+    } finally {
+      setCleaningRevenue(false);
+    }
+  };
+
   const handlePayWithdrawal = async (w) => {
     const refText = payoutRefs[w.id] || '';
     if (!refText.trim()) {
@@ -591,22 +655,22 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
 
   return (
     <div
-      className="h-[100dvh] w-screen overflow-y-auto bg-[#FAF7FB] text-zinc-900"
+      className="h-[100dvh] w-screen overflow-y-auto bg-[#FAF4E8] text-[#2C241E]"
       style={{
         backgroundImage:
-          'radial-gradient(at 12% 0%, rgba(255,46,84,0.10) 0px, transparent 50%), radial-gradient(at 88% 4%, rgba(56,189,248,0.11) 0px, transparent 48%), radial-gradient(at 50% 95%, rgba(251,191,36,0.08) 0px, transparent 50%)',
+          'radial-gradient(at 10% 0%, rgba(245,213,174,0.34) 0px, transparent 52%), radial-gradient(at 90% 6%, rgba(254,232,205,0.45) 0px, transparent 50%), radial-gradient(at 50% 96%, rgba(253,226,214,0.28) 0px, transparent 52%)',
       }}
     >
-      {/* Cabecera Pastel Luminosa */}
-      <header className="sticky top-0 z-30 border-b border-rose-100 bg-white/90 backdrop-blur-xl shadow-[0_8px_24px_-16px_rgba(15,23,42,0.12)]">
+      {/* Cabecera Crema Luminosa */}
+      <header className="sticky top-0 z-30 border-b border-[#E9DFCD] bg-[#FFFBF2]/95 backdrop-blur-xl shadow-[0_8px_24px_-16px_rgba(120,88,48,0.12)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-rose-400 via-[#FF2E54] to-amber-400 flex items-center justify-center shadow-md shadow-rose-200 shrink-0">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-rose-400 via-[#FF2E54] to-amber-400 flex items-center justify-center shadow-md shadow-rose-200/70 shrink-0">
               <Crown className="w-5 h-5 text-white" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="font-display text-base sm:text-lg font-black tracking-tight text-zinc-900 truncate">
+                <h1 className="font-display text-base sm:text-lg font-black tracking-tight text-[#2C241E] truncate">
                   Conoscamosnos · Executive Suite
                 </h1>
                 <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-extrabold">
@@ -614,7 +678,7 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
                   En vivo
                 </span>
               </div>
-              <p className="text-[11px] text-zinc-500 truncate">
+              <p className="text-[11px] text-[#857566] truncate">
                 {userProfile?.name} · Super Admin
               </p>
             </div>
@@ -633,7 +697,7 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
             <button
               type="button"
               onClick={() => logoutUser(userProfile?.uid)}
-              className="p-2.5 rounded-full bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-600 hover:text-zinc-900 transition"
+              className="p-2.5 rounded-full bg-[#F4ECDD] hover:bg-[#EAE0CE] border border-[#E2D5BE] text-[#5C4E41] hover:text-[#2C241E] transition"
               title="Cerrar sesión"
             >
               <LogOut className="w-4 h-4" />
@@ -663,7 +727,7 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
                 className={`px-3.5 py-2 rounded-2xl text-xs font-extrabold flex items-center gap-2 shrink-0 border transition ${
                   active
                     ? 'bg-gradient-to-r from-[#FF2E54] to-rose-500 text-white border-rose-500 shadow-sm'
-                    : 'bg-white text-zinc-700 border-zinc-200 hover:bg-rose-50 hover:text-zinc-900'
+                    : 'bg-[#FFFDF8] text-[#5C4E41] border-[#E8DEC9] hover:bg-[#F5EDE0] hover:text-[#2C241E]'
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
@@ -692,6 +756,7 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
             dateFilter={dateFilter}
             onDateFilterChange={setDateFilter}
             onNavigateTab={setActiveTab}
+            onOpenRevenueCleanup={() => setCleanupModalOpen(true)}
           />
         )}
 
@@ -732,6 +797,9 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
             onPreviewImg={setPreviewImg}
             onApproveRecharge={handleApproveRecharge}
             onRejectRecharge={handleRejectRecharge}
+            onToggleRechargeReviewed={handleToggleRechargeReviewed}
+            onDeleteRecharge={handleDeleteRecharge}
+            onOpenRevenueCleanup={() => setCleanupModalOpen(true)}
             onPayWithdrawal={handlePayWithdrawal}
             onRejectWithdrawal={handleRejectWithdrawal}
           />
@@ -772,38 +840,57 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
         )}
       </main>
 
-      {/* Lightbox de comprobantes */}
+      {/* Modal de limpieza de ingresos / días de prueba */}
+      <AdminRevenueCleanupModal
+        open={cleanupModalOpen}
+        onClose={() => !cleaningRevenue && setCleanupModalOpen(false)}
+        paymentRequests={paymentRequests}
+        paymentTxs={paymentTxs}
+        adImpressions={adImpressions}
+        withdrawals={withdrawals}
+        giftTxs={giftTxs}
+        storeActivations={storeActivations}
+        onConfirmPurge={handlePurgeRevenue}
+        busy={cleaningRevenue}
+      />
+
+      {/* Lightbox claro crema de comprobantes */}
       {previewImg && (
         <div
-          className="fixed inset-0 z-[80] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-[80] bg-[#2B221B]/55 backdrop-blur-md flex items-center justify-center p-4"
           onClick={() => setPreviewImg(null)}
         >
           <div
-            className="relative max-w-3xl w-full flex flex-col items-center gap-3"
+            className="relative max-w-3xl w-full bg-[#FFFDF8] border border-[#E8DEC9] rounded-[28px] p-3.5 sm:p-4 shadow-2xl flex flex-col items-center gap-3"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="w-full flex items-center justify-end gap-2">
-              <a
-                href={previewImg}
-                target="_blank"
-                rel="noreferrer"
-                className="px-3.5 py-2 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold inline-flex items-center gap-1.5 transition"
-              >
-                <ExternalLink className="w-3.5 h-3.5" /> Abrir original
-              </a>
-              <button
-                type="button"
-                onClick={() => setPreviewImg(null)}
-                className="p-2 rounded-full bg-white text-zinc-950 hover:bg-zinc-200 transition shadow-lg"
-                aria-label="Cerrar imagen"
-              >
-                <X className="w-4 h-4" />
-              </button>
+            <div className="w-full flex items-center justify-between gap-2 px-1">
+              <span className="text-xs font-black text-[#2C241E]">
+                Comprobante adjunto
+              </span>
+              <div className="flex items-center gap-2">
+                <a
+                  href={previewImg}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3.5 py-2 rounded-full bg-[#F4ECDD] hover:bg-[#EAE0CE] border border-[#E2D5BE] text-[#4B3E33] text-xs font-bold inline-flex items-center gap-1.5 transition"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> Abrir original
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewImg(null)}
+                  className="p-2 rounded-full bg-[#F4ECDD] hover:bg-[#EAE0CE] border border-[#E2D5BE] text-[#2C241E] transition"
+                  aria-label="Cerrar imagen"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
             <img
               src={previewImg}
               alt="Comprobante ampliado"
-              className="max-w-full max-h-[82dvh] rounded-2xl shadow-2xl border border-white/15 object-contain"
+              className="max-w-full max-h-[78dvh] rounded-2xl border border-[#E8DEC9] bg-[#FAF4E8] object-contain"
             />
           </div>
         </div>

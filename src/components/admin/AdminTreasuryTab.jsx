@@ -3,12 +3,15 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Building2,
+  CheckCheck,
   CheckCircle2,
   Clock,
+  Eraser,
   ExternalLink,
   Gem,
   Search,
   ShieldCheck,
+  Trash2,
   Wallet,
   Webhook,
   XCircle,
@@ -43,19 +46,35 @@ export default function AdminTreasuryTab({
   onPreviewImg,
   onApproveRecharge,
   onRejectRecharge,
+  onToggleRechargeReviewed,
+  onDeleteRecharge,
+  onOpenRevenueCleanup,
   onPayWithdrawal,
   onRejectWithdrawal,
 }) {
   const [subTab, setSubTab] = useState('recharges'); // 'recharges' | 'withdrawals' | 'webhooks'
-  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'pending' | 'done' | 'rejected'
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'pending' | 'unreviewed' | 'reviewed' | 'done' | 'rejected'
   const [search, setSearch] = useState('');
   const [rejectDraft, setRejectDraft] = useState(null); // { kind: 'recharge' | 'withdrawal', id, reason }
+  const [confirmDeleteId, setConfirmDeleteId] = useState('');
+
+  const unreviewedRechargesCount = useMemo(
+    () => paymentRequests.filter((r) => !r.adminChecked).length,
+    [paymentRequests]
+  );
+
+  const reviewedRechargesCount = useMemo(
+    () => paymentRequests.filter((r) => Boolean(r.adminChecked)).length,
+    [paymentRequests]
+  );
 
   const filteredRequests = useMemo(() => {
     const q = search.trim().toLowerCase();
     return [...paymentRequests]
       .filter((r) => {
         if (statusFilter === 'pending' && r.status !== 'pending') return false;
+        if (statusFilter === 'unreviewed' && r.adminChecked) return false;
+        if (statusFilter === 'reviewed' && !r.adminChecked) return false;
         if (statusFilter === 'done' && r.status !== 'approved') return false;
         if (statusFilter === 'rejected' && r.status !== 'rejected') return false;
         if (!q) return true;
@@ -111,28 +130,58 @@ export default function AdminTreasuryTab({
     });
   }, [paymentTxs, search]);
 
+  const statusFilterPills =
+    subTab === 'recharges'
+      ? [
+          { id: 'all', label: 'Todos' },
+          { id: 'pending', label: `Pendientes (${metrics.pendingRechargesCount})` },
+          { id: 'unreviewed', label: `Sin revisar (${unreviewedRechargesCount})` },
+          { id: 'reviewed', label: `Revisados (${reviewedRechargesCount})` },
+          { id: 'done', label: 'Aprobados' },
+          { id: 'rejected', label: 'Rechazados' },
+        ]
+      : [
+          { id: 'all', label: 'Todos' },
+          { id: 'pending', label: `Por pagar (${metrics.pendingWithdrawalsCount})` },
+          { id: 'done', label: 'Pagados' },
+          { id: 'rejected', label: 'Rechazados' },
+        ];
+
   return (
     <div className="space-y-5">
-      {/* KPI Ejecutivo de Tesorería (Pastel Claro) */}
+      {/* KPI Ejecutivo de Tesorería (Crema Claro) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         <AdminSectionCard accent="emerald" className="p-4 sm:p-5 space-y-2.5">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <span className="text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-emerald-700">
               Ingresos Totales
             </span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-100 border border-emerald-200 text-emerald-700 flex items-center justify-center">
-              <ArrowDownLeft className="w-4 h-4" />
+            <div className="flex items-center gap-1.5 shrink-0">
+              {onOpenRevenueCleanup && (
+                <button
+                  type="button"
+                  onClick={onOpenRevenueCleanup}
+                  className="px-2.5 py-1 rounded-full bg-[#F4ECDD] hover:bg-[#EAE0CE] border border-[#DFC9A6] text-[#5C4328] text-[10.5px] font-black inline-flex items-center gap-1 transition"
+                  title="Limpiar o borrar días de prueba"
+                >
+                  <Eraser className="w-3 h-3" />
+                  <span>Limpiar</span>
+                </button>
+              )}
+              <div className="w-8 h-8 rounded-xl bg-emerald-100 border border-emerald-200 text-emerald-700 flex items-center justify-center">
+                <ArrowDownLeft className="w-4 h-4" />
+              </div>
             </div>
           </div>
-          <p className="font-display text-2xl sm:text-3xl font-black text-zinc-900 tabular-nums">
+          <p className="font-display text-2xl sm:text-3xl font-black text-[#2C241E] tabular-nums">
             {formatUSD(metrics.totalRevenueUSD)}
           </p>
-          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10.5px] text-zinc-500 pt-2 border-t border-emerald-100">
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10.5px] text-[#857566] pt-2 border-t border-emerald-200/60">
             <span>
-              API: <strong className="text-zinc-800">{formatUSD(metrics.gatewayCompletedUSD)}</strong>
+              API: <strong className="text-[#2C241E]">{formatUSD(metrics.gatewayCompletedUSD)}</strong>
             </span>
             <span>
-              Manual: <strong className="text-zinc-800">{formatUSD(metrics.manualApprovedUSD)}</strong>
+              Manual: <strong className="text-[#2C241E]">{formatUSD(metrics.manualApprovedUSD)}</strong>
             </span>
             <span>
               Ads: <strong className="text-amber-700">{formatUSD(metrics.adEstRevenueUSD)}</strong>
@@ -142,7 +191,7 @@ export default function AdminTreasuryTab({
 
         <AdminSectionCard accent="amber" className="p-4 sm:p-5 space-y-2.5">
           <div className="flex items-center justify-between">
-            <span className="text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-amber-700">
+            <span className="text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-amber-800">
               Pendiente en Cola
             </span>
             <div className="w-8 h-8 rounded-xl bg-amber-100 border border-amber-200 text-amber-700 flex items-center justify-center">
@@ -156,9 +205,9 @@ export default function AdminTreasuryTab({
                 setSubTab('recharges');
                 setStatusFilter('pending');
               }}
-              className="w-full px-2.5 py-2 rounded-xl bg-amber-50/70 hover:bg-amber-100/70 border border-amber-200/80 flex items-center justify-between text-xs transition"
+              className="w-full px-2.5 py-2 rounded-xl bg-[#FAF0DC]/80 hover:bg-[#F5E6CA] border border-[#E6CE9E] flex items-center justify-between text-xs transition"
             >
-              <span className="text-zinc-700 font-semibold">Recargas 💎</span>
+              <span className="text-[#4B3E33] font-semibold">Recargas 💎</span>
               <span className="font-extrabold text-amber-800 tabular-nums">
                 {metrics.pendingRechargesCount} ({formatUSD(metrics.pendingRechargesUSD)})
               </span>
@@ -171,7 +220,7 @@ export default function AdminTreasuryTab({
               }}
               className="w-full px-2.5 py-2 rounded-xl bg-sky-50/80 hover:bg-sky-100/70 border border-sky-200/80 flex items-center justify-between text-xs transition"
             >
-              <span className="text-zinc-700 font-semibold">Retiros</span>
+              <span className="text-[#4B3E33] font-semibold">Retiros</span>
               <span className="font-extrabold text-sky-800 tabular-nums">
                 {metrics.pendingWithdrawalsCount} ({formatUSD(metrics.pendingWithdrawalsUSD)})
               </span>
@@ -188,10 +237,10 @@ export default function AdminTreasuryTab({
               <ArrowUpRight className="w-4 h-4" />
             </div>
           </div>
-          <p className="font-display text-2xl sm:text-3xl font-black text-zinc-900 tabular-nums">
+          <p className="font-display text-2xl sm:text-3xl font-black text-[#2C241E] tabular-nums">
             {formatUSD(metrics.totalPaidOutUSD)}
           </p>
-          <p className="text-[11px] text-zinc-500 pt-2 border-t border-sky-100">
+          <p className="text-[11px] text-[#857566] pt-2 border-t border-sky-200/60">
             <strong className="text-sky-700 tabular-nums">{metrics.paidWithdrawalsCount}</strong>{' '}
             liquidaciones confirmadas
           </p>
@@ -206,10 +255,10 @@ export default function AdminTreasuryTab({
               <Building2 className="w-4 h-4" />
             </div>
           </div>
-          <p className="font-display text-2xl sm:text-3xl font-black text-zinc-900 tabular-nums">
+          <p className="font-display text-2xl sm:text-3xl font-black text-[#2C241E] tabular-nums">
             {formatUSD(metrics.netBalanceUSD)}
           </p>
-          <p className="text-[11px] text-zinc-500 pt-2 border-t border-rose-100">
+          <p className="text-[11px] text-[#857566] pt-2 border-t border-rose-200/60">
             Margen neto después de retiros
           </p>
         </AdminSectionCard>
@@ -218,7 +267,7 @@ export default function AdminTreasuryTab({
       {/* Sub-navegación + Búsqueda + Filtros */}
       <AdminSectionCard className="p-3.5 sm:p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="inline-flex flex-wrap p-1 rounded-2xl bg-zinc-100 border border-zinc-200 text-xs gap-1">
+          <div className="inline-flex flex-wrap p-1 rounded-2xl bg-[#F5EDE0] border border-[#E6DAC5] text-xs gap-1">
             {[
               {
                 id: 'recharges',
@@ -252,11 +301,12 @@ export default function AdminTreasuryTab({
                     setSubTab(t.id);
                     setStatusFilter('all');
                     setRejectDraft(null);
+                    setConfirmDeleteId('');
                   }}
                   className={`px-3.5 py-2 rounded-xl font-extrabold inline-flex items-center gap-1.5 transition ${
                     active
                       ? 'bg-gradient-to-r from-[#FF2E54] to-rose-500 text-white shadow-sm'
-                      : 'text-zinc-600 hover:text-zinc-900 hover:bg-white'
+                      : 'text-[#5C4E41] hover:text-[#2C241E] hover:bg-[#FFFDF8]'
                   }`}
                 >
                   <TabIcon className="w-3.5 h-3.5" />
@@ -276,31 +326,20 @@ export default function AdminTreasuryTab({
           </div>
 
           <div className="relative flex-1 min-w-[200px] max-w-xs">
-            <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-2.5" />
+            <Search className="w-3.5 h-3.5 text-[#9A8B7A] absolute left-3 top-2.5" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar usuario, referencia o TxID..."
-              className="w-full pl-8 pr-3 py-2 rounded-xl bg-zinc-50 border border-zinc-200 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-rose-400 focus:bg-white"
+              className="w-full pl-8 pr-3 py-2 rounded-xl bg-[#FBF7EE] border border-[#E5D9C3] text-xs text-[#2C241E] placeholder:text-[#9A8B7A] focus:outline-none focus:border-rose-400 focus:bg-[#FFFDF9]"
             />
           </div>
         </div>
 
         {subTab !== 'webhooks' && (
-          <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-zinc-100 text-xs">
-            {[
-              { id: 'all', label: 'Todos' },
-              {
-                id: 'pending',
-                label:
-                  subTab === 'recharges'
-                    ? `Pendientes (${metrics.pendingRechargesCount})`
-                    : `Por pagar (${metrics.pendingWithdrawalsCount})`,
-              },
-              { id: 'done', label: subTab === 'recharges' ? 'Aprobados' : 'Pagados' },
-              { id: 'rejected', label: 'Rechazados' },
-            ].map((f) => (
+          <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-[#EFE6D6] text-xs">
+            {statusFilterPills.map((f) => (
               <button
                 key={f.id}
                 type="button"
@@ -308,7 +347,7 @@ export default function AdminTreasuryTab({
                 className={`px-3 py-1 rounded-full text-[11px] font-extrabold transition border ${
                   statusFilter === f.id
                     ? 'bg-rose-500 text-white border-rose-500 shadow-sm'
-                    : 'bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100 hover:text-zinc-900'
+                    : 'bg-[#FAF4E8] text-[#5C4E41] border-[#E5D9C3] hover:bg-[#F4ECDD] hover:text-[#2C241E]'
                 }`}
               >
                 {f.label}
@@ -336,9 +375,11 @@ export default function AdminTreasuryTab({
                 req.userPhoto || getPrimaryPhoto(userObj || { name: req.userName || '?' }, 120);
               const isPending = req.status === 'pending';
               const isApproved = req.status === 'approved';
+              const isChecked = Boolean(req.adminChecked);
               const copyKey = `req_${req.id}`;
               const isRejectingThis =
                 rejectDraft?.kind === 'recharge' && rejectDraft?.id === req.id;
+              const isConfirmingDelete = confirmDeleteId === req.id;
               const isProReq = req.creditTarget === 'pro';
               const creditUnits = req.diamondsToCredit || req.coinsToCredit || 0;
               const creditBadgeText = isProReq
@@ -356,11 +397,11 @@ export default function AdminTreasuryTab({
                       <img
                         src={avatar}
                         alt={req.userName}
-                        className="w-11 h-11 rounded-2xl object-cover bg-zinc-100 border border-zinc-200 shrink-0"
+                        className="w-11 h-11 rounded-2xl object-cover bg-[#F4ECDD] border border-[#E5D9C3] shrink-0"
                       />
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className="text-sm font-black text-zinc-900 truncate">
+                          <p className="text-sm font-black text-[#2C241E] truncate">
                             {req.countryFlag} {req.userName}
                           </p>
                           <span
@@ -374,8 +415,14 @@ export default function AdminTreasuryTab({
                           >
                             {isPending ? 'Pendiente' : isApproved ? 'Aprobada' : 'Rechazada'}
                           </span>
+                          {isChecked && (
+                            <span className="px-2 py-0.5 rounded-full text-[9.5px] font-black uppercase bg-teal-50 border border-teal-200 text-teal-800 inline-flex items-center gap-1">
+                              <CheckCheck className="w-3 h-3" />
+                              Revisado
+                            </span>
+                          )}
                         </div>
-                        <p className="text-[11px] text-zinc-500 truncate mt-0.5">
+                        <p className="text-[11px] text-[#857566] truncate mt-0.5">
                           {req.methodName} · {formatGiftDate(req.createdAt)}
                         </p>
                       </div>
@@ -391,12 +438,12 @@ export default function AdminTreasuryTab({
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-2xl bg-zinc-50 border border-zinc-200">
+                  <div className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-2xl bg-[#FAF4E8] border border-[#E5D9C3]">
                     <div className="min-w-0">
-                      <span className="text-[9.5px] font-bold uppercase tracking-wider text-zinc-500 block">
+                      <span className="text-[9.5px] font-bold uppercase tracking-wider text-[#857566] block">
                         Referencia / Hash
                       </span>
-                      <span className="text-xs font-mono font-bold text-zinc-900 break-all">
+                      <span className="text-xs font-mono font-bold text-[#2C241E] break-all">
                         {req.referenceNumber}
                       </span>
                     </div>
@@ -408,7 +455,7 @@ export default function AdminTreasuryTab({
                   </div>
 
                   {req.proofUrl && (
-                    <div className="relative rounded-2xl overflow-hidden border border-zinc-200 bg-zinc-100 group">
+                    <div className="relative rounded-2xl overflow-hidden border border-[#E5D9C3] bg-[#F5EDE0] group">
                       <img
                         src={req.proofUrl}
                         alt="Comprobante"
@@ -419,7 +466,7 @@ export default function AdminTreasuryTab({
                         <button
                           type="button"
                           onClick={() => onPreviewImg(req.proofUrl)}
-                          className="px-2.5 py-1 rounded-full bg-white/95 hover:bg-white text-zinc-900 border border-zinc-200 shadow-sm text-[10px] font-bold inline-flex items-center gap-1"
+                          className="px-2.5 py-1 rounded-full bg-[#FFFDF8]/95 hover:bg-white text-[#2C241E] border border-[#E2D5BE] shadow-sm text-[10px] font-bold inline-flex items-center gap-1"
                         >
                           <ZoomIn className="w-3 h-3" /> Ampliar
                         </button>
@@ -427,7 +474,7 @@ export default function AdminTreasuryTab({
                           href={req.proofUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="px-2.5 py-1 rounded-full bg-white/95 hover:bg-white text-zinc-900 border border-zinc-200 shadow-sm text-[10px] font-bold inline-flex items-center gap-1"
+                          className="px-2.5 py-1 rounded-full bg-[#FFFDF8]/95 hover:bg-white text-[#2C241E] border border-[#E2D5BE] shadow-sm text-[10px] font-bold inline-flex items-center gap-1"
                         >
                           <ExternalLink className="w-3 h-3" />
                         </a>
@@ -452,7 +499,7 @@ export default function AdminTreasuryTab({
                               className={`px-2.5 py-1 rounded-full text-[10.5px] font-bold border transition ${
                                 rejectDraft.reason === reasonOpt
                                   ? 'bg-rose-500 text-white border-rose-500'
-                                  : 'bg-white text-zinc-700 border-zinc-200 hover:border-rose-300'
+                                  : 'bg-[#FFFDF8] text-[#4B3E33] border-[#E5D9C3] hover:border-rose-300'
                               }`}
                             >
                               {reasonOpt}
@@ -466,13 +513,13 @@ export default function AdminTreasuryTab({
                             setRejectDraft((d) => ({ ...d, reason: e.target.value }))
                           }
                           placeholder="Escribe el motivo..."
-                          className="w-full px-3 py-2 rounded-xl bg-white border border-rose-200 text-xs text-zinc-900 focus:outline-none focus:border-rose-400"
+                          className="w-full px-3 py-2 rounded-xl bg-white border border-rose-200 text-xs text-[#2C241E] focus:outline-none focus:border-rose-400"
                         />
                         <div className="grid grid-cols-2 gap-2">
                           <button
                             type="button"
                             onClick={() => setRejectDraft(null)}
-                            className="py-2 rounded-xl bg-white border border-zinc-200 text-zinc-700 text-xs font-bold hover:bg-zinc-50"
+                            className="py-2 rounded-xl bg-[#FFFDF8] border border-[#E2D5BE] text-[#4B3E33] text-xs font-bold hover:bg-[#F4ECDD]"
                           >
                             Cancelar
                           </button>
@@ -523,6 +570,62 @@ export default function AdminTreasuryTab({
                       </p>
                     )
                   )}
+
+                  {/* Barra de auditoría y limpieza en cada recarga manual */}
+                  {isConfirmingDelete ? (
+                    <div className="p-2.5 rounded-2xl bg-rose-50/90 border border-rose-200 flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[11px] font-extrabold text-rose-900">
+                        ¿Eliminar este registro del reporte?
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          disabled={busyId === req.id}
+                          onClick={() => setConfirmDeleteId('')}
+                          className="px-3 py-1.5 rounded-xl bg-[#FFFDF8] border border-[#E2D5BE] text-[#4B3E33] text-[11px] font-bold hover:bg-[#F4ECDD] disabled:opacity-50"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busyId === req.id}
+                          onClick={async () => {
+                            await onDeleteRecharge?.(req);
+                            setConfirmDeleteId('');
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-[#FF2E54] text-white text-[11px] font-black hover:brightness-110 disabled:opacity-50"
+                        >
+                          {busyId === req.id ? 'Eliminando...' : 'Sí, eliminar'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="pt-2.5 border-t border-[#EFE6D6] flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        disabled={busyId === req.id}
+                        onClick={() => onToggleRechargeReviewed?.(req)}
+                        className={`px-3 py-1.5 rounded-xl border text-[11px] font-extrabold inline-flex items-center gap-1.5 disabled:opacity-50 transition ${
+                          isChecked
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100/70'
+                            : 'bg-[#F4ECDD] hover:bg-[#EAE0CE] border-[#E2D5BE] text-[#4B3E33]'
+                        }`}
+                      >
+                        <CheckCheck className="w-3.5 h-3.5" />
+                        <span>{isChecked ? 'Revisado ✓' : 'Marcar revisado'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={busyId === req.id}
+                        onClick={() => setConfirmDeleteId(req.id)}
+                        className="px-3 py-1.5 rounded-xl bg-[#FDF1EE] hover:bg-rose-100 border border-[#EED3CC] text-rose-700 text-[11px] font-extrabold inline-flex items-center gap-1.5 disabled:opacity-50 transition"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Eliminar</span>
+                      </button>
+                    </div>
+                  )}
                 </AdminSectionCard>
               );
             })
@@ -564,11 +667,11 @@ export default function AdminTreasuryTab({
                       <img
                         src={avatar}
                         alt={w.userName}
-                        className="w-11 h-11 rounded-2xl object-cover bg-zinc-100 border border-zinc-200 shrink-0"
+                        className="w-11 h-11 rounded-2xl object-cover bg-[#F4ECDD] border border-[#E5D9C3] shrink-0"
                       />
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className="text-sm font-black text-zinc-900 truncate">
+                          <p className="text-sm font-black text-[#2C241E] truncate">
                             {w.countryFlag} {w.userName}
                           </p>
                           <span
@@ -583,7 +686,7 @@ export default function AdminTreasuryTab({
                             {isPending ? 'Por pagar' : isPaid ? 'Pagado' : 'Reembolsado'}
                           </span>
                         </div>
-                        <p className="text-[11px] text-zinc-500 truncate mt-0.5">
+                        <p className="text-[11px] text-[#857566] truncate mt-0.5">
                           {w.userEmail || 'Creador'} · {formatGiftDate(w.createdAt)}
                         </p>
                       </div>
@@ -599,12 +702,12 @@ export default function AdminTreasuryTab({
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-2xl bg-sky-50 border border-sky-200 flex items-center justify-between gap-2.5">
+                  <div className="p-3 rounded-2xl bg-sky-50/80 border border-sky-200 flex items-center justify-between gap-2.5">
                     <div className="min-w-0">
                       <span className="text-[9.5px] font-extrabold uppercase tracking-wider text-sky-700 block">
                         {w.payoutMethodName}
                       </span>
-                      <span className="text-xs font-mono font-bold text-zinc-900 break-all">
+                      <span className="text-xs font-mono font-bold text-[#2C241E] break-all">
                         {w.payoutDetails}
                       </span>
                     </div>
@@ -632,7 +735,7 @@ export default function AdminTreasuryTab({
                               className={`px-2.5 py-1 rounded-full text-[10.5px] font-bold border transition ${
                                 rejectDraft.reason === reasonOpt
                                   ? 'bg-rose-500 text-white border-rose-500'
-                                  : 'bg-white text-zinc-700 border-zinc-200 hover:border-rose-300'
+                                  : 'bg-[#FFFDF8] text-[#4B3E33] border-[#E5D9C3] hover:border-rose-300'
                               }`}
                             >
                               {reasonOpt}
@@ -646,13 +749,13 @@ export default function AdminTreasuryTab({
                             setRejectDraft((d) => ({ ...d, reason: e.target.value }))
                           }
                           placeholder="Motivo del reembolso..."
-                          className="w-full px-3 py-2 rounded-xl bg-white border border-rose-200 text-xs text-zinc-900 focus:outline-none focus:border-rose-400"
+                          className="w-full px-3 py-2 rounded-xl bg-white border border-rose-200 text-xs text-[#2C241E] focus:outline-none focus:border-rose-400"
                         />
                         <div className="grid grid-cols-2 gap-2">
                           <button
                             type="button"
                             onClick={() => setRejectDraft(null)}
-                            className="py-2 rounded-xl bg-white border border-zinc-200 text-zinc-700 text-xs font-bold hover:bg-zinc-50"
+                            className="py-2 rounded-xl bg-[#FFFDF8] border border-[#E2D5BE] text-[#4B3E33] text-xs font-bold hover:bg-[#F4ECDD]"
                           >
                             Cancelar
                           </button>
@@ -676,7 +779,7 @@ export default function AdminTreasuryTab({
                           placeholder="Pega el TxID / Referencia de la transferencia enviada"
                           value={payoutRefs[w.id] || ''}
                           onChange={(e) => onPayoutRefChange(w.id, e.target.value)}
-                          className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-sky-400 focus:bg-white"
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-[#FBF7EE] border border-[#E5D9C3] text-xs text-[#2C241E] placeholder:text-[#9A8B7A] focus:outline-none focus:border-sky-400 focus:bg-[#FFFDF9]"
                         />
                         <div className="grid grid-cols-2 gap-2.5">
                           <button
@@ -707,7 +810,7 @@ export default function AdminTreasuryTab({
                   ) : (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between gap-2 pt-1 text-[11px] flex-wrap">
-                        <span className="text-zinc-500">
+                        <span className="text-[#857566]">
                           Bruto {formatUSD(w.grossUSD)} · Fee {formatUSD(w.platformFeeUSD)}
                           {w.creatorShareRatio ? ` · ${Math.round(w.creatorShareRatio * 100)}% creador` : ''}
                         </span>
@@ -738,7 +841,7 @@ export default function AdminTreasuryTab({
       {subTab === 'webhooks' && (
         <div className="space-y-3">
           <AdminSectionCard accent="emerald" className="px-5 py-3.5 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-extrabold text-zinc-900 flex items-center gap-2">
+            <p className="text-xs font-extrabold text-[#2C241E] flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
               Acreditaciones Automáticas NowPayments (HMAC-SHA512)
             </p>
@@ -772,10 +875,10 @@ export default function AdminTreasuryTab({
                             {tx.verifiedSignature ? 'HMAC-SHA512 OK' : tx.source || 'admin'}
                           </span>
                         </div>
-                        <p className="text-sm font-black text-zinc-900 truncate mt-1.5">
+                        <p className="text-sm font-black text-[#2C241E] truncate mt-1.5">
                           {tx.userName || tx.userId}
                         </p>
-                        <p className="text-[11px] text-zinc-500">
+                        <p className="text-[11px] text-[#857566]">
                           {formatGiftDate(tx.createdAt)}
                         </p>
                       </div>
@@ -791,8 +894,8 @@ export default function AdminTreasuryTab({
                     </div>
 
                     {tx.externalPaymentId && (
-                      <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-100">
-                        <span className="text-[10.5px] font-mono text-zinc-500 truncate">
+                      <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#EFE6D6]">
+                        <span className="text-[10.5px] font-mono text-[#857566] truncate">
                           ID: #{tx.externalPaymentId}
                         </span>
                         <AdminCopyButton

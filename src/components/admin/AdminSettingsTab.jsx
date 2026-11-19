@@ -32,10 +32,10 @@ const PRESET_ICONS = {
 
 function AdminToggleSwitch({ label, description, checked, onToggle, accentClass = 'bg-emerald-500' }) {
   return (
-    <div className="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-white border border-zinc-200/85 shadow-xs">
+    <div className="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-[#FFFDF8] border border-[#E5D9C3] shadow-sm">
       <div className="min-w-0">
-        <p className="text-xs font-extrabold text-zinc-900">{label}</p>
-        <p className="text-[11px] text-zinc-500 leading-snug mt-0.5">{description}</p>
+        <p className="text-xs font-extrabold text-[#2C241E]">{label}</p>
+        <p className="text-[11px] text-[#857566] leading-snug mt-0.5">{description}</p>
       </div>
       <button
         type="button"
@@ -43,11 +43,11 @@ function AdminToggleSwitch({ label, description, checked, onToggle, accentClass 
         aria-checked={Boolean(checked)}
         onClick={onToggle}
         className={`relative w-12 h-7 rounded-full shrink-0 transition-colors ${
-          checked ? accentClass : 'bg-zinc-200'
+          checked ? accentClass : 'bg-[#DFD2BC]'
         }`}
       >
         <span
-          className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+          className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-[#FFFDF8] shadow transition-transform ${
             checked ? 'translate-x-5' : 'translate-x-0'
           }`}
         />
@@ -155,11 +155,11 @@ export default function AdminSettingsTab({
         <form onSubmit={onSaveAccessConfig} className="space-y-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="font-display text-lg sm:text-xl font-black text-zinc-900 flex items-center gap-2">
+              <h2 className="font-display text-lg sm:text-xl font-black text-[#2C241E] flex items-center gap-2">
                 <Unlock className="w-5 h-5 text-emerald-600" />
                 Control Global de Cobros (💎), Anuncios y Retención
               </h2>
-              <p className="text-xs text-zinc-600 mt-1 leading-relaxed max-w-2xl">
+              <p className="text-xs text-[#5C4E41] mt-1 leading-relaxed max-w-2xl">
                 Economía única 100% en <strong className="text-sky-700">Diamantes (💎)</strong>. Activa <strong className="text-emerald-700">Modo Libre</strong> para retener público nuevo o cambia a <strong className="text-sky-700">Solo Anuncios</strong> / <strong className="text-rose-700">Diamantes + Ads</strong> en 1 clic. Los miembros <strong className="text-[#FF2E54]">Conoscamosnos PRO</strong> tienen chats, Likes y Fotos VIP ilimitados sin anuncios.
               </p>
             </div>
@@ -179,7 +179,7 @@ export default function AdminSettingsTab({
             </span>
           </div>
 
-          {/* 4 Presets Rápidos Pastel */}
+          {/* 4 Presets Rápidos Pastel Crema */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {ACCESS_MODE_OPTIONS.map((opt) => {
               const Icon = PRESET_ICONS[opt.id] || Sparkles;
@@ -191,14 +191,16 @@ export default function AdminSettingsTab({
                   onClick={() => handleSelectPreset(opt)}
                   className={`p-4 rounded-2xl border text-left transition ${
                     selected
-                      ? 'bg-gradient-to-br from-emerald-50 via-white to-sky-50 border-emerald-400 shadow-md ring-2 ring-emerald-200/70'
-                      : 'bg-zinc-50/70 border-zinc-200 hover:bg-white hover:border-zinc-300'
+                      ? 'bg-gradient-to-br from-emerald-50 via-[#FFFDF8] to-sky-50 border-emerald-400 shadow-md ring-2 ring-emerald-200/70'
+                      : 'bg-[#FAF4E8] border-[#E5D9C3] hover:bg-[#FFFDF8] hover:border-[#D5C3A5]'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2 mb-2">
                     <div
                       className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                        selected ? 'bg-emerald-500 text-white' : 'bg-white border border-zinc-200 text-zinc-600'
+                        selected
+                          ? 'bg-emerald-500 text-white'
+                          : 'bg-[#FFFDF8] border border-[#E5D9C3] text-[#5C4E41]'
                       }`}
                     >
                       <Icon className="w-4 h-4" />
@@ -209,8 +211,8 @@ export default function AdminSettingsTab({
                       </span>
                     )}
                   </div>
-                  <p className="text-xs font-black text-zinc-900">{opt.label}</p>
-                  <p className="text-[11px] text-zinc-500 mt-1 leading-snug">{opt.description}</p>
+                  <p className="text-xs font-black text-[#2C241E]">{opt.label}</p>
+                  <p className="text-[11px] text-[#857566] mt-1 leading-snug">{opt.description}</p>
                 </button>
               );
             })}
@@ -237,7 +239,7 @@ export default function AdminSettingsTab({
           {/* Parámetros de Anuncios y Tarifas en Diamantes (💎) en vivo */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <div>
-              <label className="text-[11px] font-bold text-zinc-600 block mb-1">
+              <label className="text-[11px] font-bold text-[#5C4E41] block mb-1">
                 Duración Ad (seg)
               </label>
               <input
@@ -254,7 +256,7 @@ export default function AdminSettingsTab({
             </div>
 
             <div>
-              <label className="text-[11px] font-bold text-zinc-600 block mb-1">
+              <label className="text-[11px] font-bold text-[#5C4E41] block mb-1">
                 Chat Directo (💎)
               </label>
               <input
@@ -271,7 +273,7 @@ export default function AdminSettingsTab({
             </div>
 
             <div>
-              <label className="text-[11px] font-bold text-zinc-600 block mb-1">
+              <label className="text-[11px] font-bold text-[#5C4E41] block mb-1">
                 Ver 1 Like / Foto (💎)
               </label>
               <input
@@ -288,7 +290,7 @@ export default function AdminSettingsTab({
             </div>
 
             <div>
-              <label className="text-[11px] font-bold text-zinc-600 block mb-1">
+              <label className="text-[11px] font-bold text-[#5C4E41] block mb-1">
                 Ver Todos Likes (💎)
               </label>
               <input
@@ -305,7 +307,7 @@ export default function AdminSettingsTab({
             </div>
 
             <div>
-              <label className="text-[11px] font-bold text-zinc-600 block mb-1">
+              <label className="text-[11px] font-bold text-[#5C4E41] block mb-1">
                 Foto VIP (💎)
               </label>
               <input
@@ -325,7 +327,7 @@ export default function AdminSettingsTab({
             </div>
 
             <div>
-              <label className="text-[11px] font-bold text-zinc-600 block mb-1">
+              <label className="text-[11px] font-bold text-[#5C4E41] block mb-1">
                 CPM Est. ($/1k Ads)
               </label>
               <input
@@ -338,13 +340,13 @@ export default function AdminSettingsTab({
                 onChange={(e) =>
                   onAccessDraftChange((p) => ({ ...p, estimatedAdCpmUSD: e.target.value }))
                 }
-                className="w-full px-3 py-2 rounded-xl bg-amber-50/70 border border-amber-200 text-sm font-black text-amber-800 focus:outline-none focus:border-amber-400"
+                className="w-full px-3 py-2 rounded-xl bg-[#FAF0DC]/80 border border-[#E6CE9E] text-sm font-black text-amber-800 focus:outline-none focus:border-amber-400"
               />
             </div>
           </div>
 
           <div>
-            <label className="text-[11px] font-bold text-zinc-600 block mb-1">
+            <label className="text-[11px] font-bold text-[#5C4E41] block mb-1">
               Monetag Direct Link / SmartLink activo (https://...)
             </label>
             <input
@@ -354,7 +356,7 @@ export default function AdminSettingsTab({
                 onAccessDraftChange((p) => ({ ...p, monetagDirectLink: e.target.value }))
               }
               placeholder={AD_REWARD_CONFIG.monetagDirectLink}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-mono text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-emerald-400 focus:bg-white"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-[#FBF7EE] border border-[#E5D9C3] text-xs font-mono text-[#2C241E] placeholder:text-[#9A8B7A] focus:outline-none focus:border-emerald-400 focus:bg-[#FFFDF9]"
             />
           </div>
 
@@ -369,16 +371,16 @@ export default function AdminSettingsTab({
         </form>
       </AdminSectionCard>
 
-      {/* 2. NUEVA: Membresía Conoscamosnos PRO y Tabla de Rentabilidad en Diamantes (💎 / USD) */}
+      {/* 2. Membresía Conoscamosnos PRO y Tabla de Rentabilidad en Diamantes (💎 / USD) */}
       <AdminSectionCard accent="crimson" className="lg:col-span-2 p-5 sm:p-6">
         <form onSubmit={onSaveProPlansConfig} className="space-y-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="font-display text-lg sm:text-xl font-black text-zinc-900 flex items-center gap-2">
+              <h2 className="font-display text-lg sm:text-xl font-black text-[#2C241E] flex items-center gap-2">
                 <Crown className="w-5 h-5 text-[#FF2E54]" />
                 Membresía Conoscamosnos PRO y Tabla de Aproximación (💎 / USD)
               </h2>
-              <p className="text-xs text-zinc-600 mt-1 leading-relaxed max-w-3xl">
+              <p className="text-xs text-[#5C4E41] mt-1 leading-relaxed max-w-3xl">
                 Configura los precios de <strong className="text-[#FF2E54]">Conoscamosnos PRO</strong> (en USD directo o en Diamantes <strong className="text-sky-700">💎</strong>). Quien activa PRO obtiene chats directos ilimitados sin Match, ve todos sus Likes y qué foto le gustó, Modo Pasaporte por país, filtros Check Azul/Online y Cero Anuncios.
               </p>
             </div>
@@ -392,15 +394,15 @@ export default function AdminSettingsTab({
             {safeProPlans.map((plan, idx) => (
               <div
                 key={plan.id}
-                className="p-4 rounded-2xl bg-gradient-to-br from-rose-50/90 via-white to-amber-50/75 border border-rose-200 space-y-3"
+                className="p-4 rounded-2xl bg-gradient-to-br from-[#FDF1EE] via-[#FFFDF8] to-[#FAF0DC] border border-[#EED3CC] space-y-3"
               >
                 <div className="flex items-center justify-between gap-2">
                   <div>
-                    <p className="text-xs font-black text-zinc-900 flex items-center gap-1.5">
+                    <p className="text-xs font-black text-[#2C241E] flex items-center gap-1.5">
                       <Crown className="w-3.5 h-3.5 text-[#FF2E54]" />
                       {plan.shortLabel || plan.title}
                     </p>
-                    <p className="text-[10.5px] text-zinc-500">{plan.subtitle}</p>
+                    <p className="text-[10.5px] text-[#857566]">{plan.subtitle}</p>
                   </div>
                   {plan.badge && (
                     <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[9.5px] font-black shrink-0">
@@ -411,7 +413,7 @@ export default function AdminSettingsTab({
 
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <label className="text-[10px] font-bold text-zinc-600 block mb-0.5">
+                    <label className="text-[10px] font-bold text-[#5C4E41] block mb-0.5">
                       Duración (días)
                     </label>
                     <input
@@ -424,11 +426,11 @@ export default function AdminSettingsTab({
                         next[idx] = { ...next[idx], durationDays: Number(e.target.value) };
                         onProPlansDraftChange?.(next);
                       }}
-                      className="w-full px-2.5 py-1.5 rounded-xl bg-white border border-rose-200 text-xs font-black text-zinc-900"
+                      className="w-full px-2.5 py-1.5 rounded-xl bg-[#FFFDF9] border border-rose-200 text-xs font-black text-[#2C241E]"
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-zinc-600 block mb-0.5">
+                    <label className="text-[10px] font-bold text-[#5C4E41] block mb-0.5">
                       Costo en 💎
                     </label>
                     <input
@@ -441,11 +443,11 @@ export default function AdminSettingsTab({
                         next[idx] = { ...next[idx], priceDiamonds: Number(e.target.value) };
                         onProPlansDraftChange?.(next);
                       }}
-                      className="w-full px-2.5 py-1.5 rounded-xl bg-white border border-sky-200 text-xs font-black text-sky-700"
+                      className="w-full px-2.5 py-1.5 rounded-xl bg-[#FFFDF9] border border-sky-200 text-xs font-black text-sky-700"
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-zinc-600 block mb-0.5">
+                    <label className="text-[10px] font-bold text-[#5C4E41] block mb-0.5">
                       Precio USD
                     </label>
                     <input
@@ -459,7 +461,7 @@ export default function AdminSettingsTab({
                         next[idx] = { ...next[idx], priceUSD: Number(e.target.value) };
                         onProPlansDraftChange?.(next);
                       }}
-                      className="w-full px-2.5 py-1.5 rounded-xl bg-white border border-emerald-200 text-xs font-black text-emerald-700"
+                      className="w-full px-2.5 py-1.5 rounded-xl bg-[#FFFDF9] border border-emerald-200 text-xs font-black text-emerald-700"
                     />
                   </div>
                 </div>
@@ -477,10 +479,10 @@ export default function AdminSettingsTab({
               {safeBoostPlans.map((plan, idx) => (
                 <div
                   key={plan.id}
-                  className="p-4 rounded-2xl bg-gradient-to-br from-purple-50/85 via-white to-sky-50/70 border border-purple-200 space-y-2.5"
+                  className="p-4 rounded-2xl bg-gradient-to-br from-purple-50/80 via-[#FFFDF8] to-sky-50/70 border border-purple-200 space-y-2.5"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-black text-zinc-900">{plan.title}</p>
+                    <p className="text-xs font-black text-[#2C241E]">{plan.title}</p>
                     {plan.badge && (
                       <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 text-[9.5px] font-black shrink-0">
                         {plan.badge}
@@ -489,7 +491,7 @@ export default function AdminSettingsTab({
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-[10px] font-bold text-zinc-600 block mb-0.5">
+                      <label className="text-[10px] font-bold text-[#5C4E41] block mb-0.5">
                         Duración (horas)
                       </label>
                       <input
@@ -502,11 +504,11 @@ export default function AdminSettingsTab({
                           next[idx] = { ...next[idx], durationHours: Number(e.target.value) };
                           onBoostPlansDraftChange?.(next);
                         }}
-                        className="w-full px-2.5 py-1.5 rounded-xl bg-white border border-purple-200 text-xs font-black text-zinc-900"
+                        className="w-full px-2.5 py-1.5 rounded-xl bg-[#FFFDF9] border border-purple-200 text-xs font-black text-[#2C241E]"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-zinc-600 block mb-0.5">
+                      <label className="text-[10px] font-bold text-[#5C4E41] block mb-0.5">
                         Costo en 💎
                       </label>
                       <input
@@ -519,7 +521,7 @@ export default function AdminSettingsTab({
                           next[idx] = { ...next[idx], costDiamonds: Number(e.target.value) };
                           onBoostPlansDraftChange?.(next);
                         }}
-                        className="w-full px-2.5 py-1.5 rounded-xl bg-white border border-sky-200 text-xs font-black text-sky-700"
+                        className="w-full px-2.5 py-1.5 rounded-xl bg-[#FFFDF9] border border-sky-200 text-xs font-black text-sky-700"
                       />
                     </div>
                   </div>
@@ -529,10 +531,10 @@ export default function AdminSettingsTab({
           </div>
 
           {/* Tabla de Aproximación Financiera en Tiempo Real (Sistema Único 💎) */}
-          <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white">
+          <div className="overflow-x-auto rounded-2xl border border-[#E5D9C3] bg-[#FFFDF8]">
             <table className="w-full text-left border-collapse min-w-[680px]">
               <thead>
-                <tr className="bg-gradient-to-r from-rose-50/90 via-amber-50/70 to-sky-50/90 border-b border-zinc-200 text-[10.5px] font-black uppercase tracking-wider text-zinc-700">
+                <tr className="bg-gradient-to-r from-[#FDF1EE] via-[#FAF0DC] to-[#EEF5FA] border-b border-[#E5D9C3] text-[10.5px] font-black uppercase tracking-wider text-[#4B3E33]">
                   <th className="py-3 px-4">Paquete</th>
                   <th className="py-3 px-3">Compra (💎)</th>
                   <th className="py-3 px-3">Precio USD</th>
@@ -542,7 +544,7 @@ export default function AdminSettingsTab({
                   <th className="py-3 px-4 text-right">Margen Plataforma</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100 text-xs">
+              <tbody className="divide-y divide-[#EFE6D6] text-xs">
                 {packagesDraft.map((pkg) => {
                   const units = Math.max(0, Number(pkg.diamonds ?? pkg.coins ?? 0));
                   const price = Number(pkg.priceUSD || 0);
@@ -555,8 +557,8 @@ export default function AdminSettingsTab({
                   const healthyMargin = platformNetUSD >= 0;
 
                   return (
-                    <tr key={pkg.id} className="hover:bg-rose-50/30 transition">
-                      <td className="py-3 px-4 font-extrabold text-zinc-900">
+                    <tr key={pkg.id} className="hover:bg-[#FAF4E8] transition">
+                      <td className="py-3 px-4 font-extrabold text-[#2C241E]">
                         <div className="flex items-center gap-2">
                           <span>{pkg.label}</span>
                           {pkg.badge && (
@@ -569,17 +571,17 @@ export default function AdminSettingsTab({
                       <td className="py-3 px-3 font-black text-sky-700 tabular-nums">
                         {units.toLocaleString('es-ES')} 💎
                       </td>
-                      <td className="py-3 px-3 font-black text-zinc-900 tabular-nums">
+                      <td className="py-3 px-3 font-black text-[#2C241E] tabular-nums">
                         ${price.toFixed(2)}
                       </td>
-                      <td className="py-3 px-3 font-mono text-zinc-600 tabular-nums">
+                      <td className="py-3 px-3 font-mono text-[#5C4E41] tabular-nums">
                         ${costPerDiamond.toFixed(4)}
                       </td>
                       <td className="py-3 px-3">
-                        <span className="font-black text-zinc-800 tabular-nums">
+                        <span className="font-black text-[#3B2E24] tabular-nums">
                           ~{chatsApprox} chats ({chatUnlockDiamonds} 💎 c/u)
                         </span>
-                        <span className="block text-[10px] text-zinc-500">
+                        <span className="block text-[10px] text-[#857566]">
                           o ~{likesApprox} Likes ({likeUnlockDiamonds} 💎 c/u)
                         </span>
                       </td>
@@ -605,9 +607,9 @@ export default function AdminSettingsTab({
           </div>
 
           {/* Precios Editables de Regalos Virtuales (💎) */}
-          <div className="p-4 rounded-2xl bg-zinc-50 border border-zinc-200 space-y-3">
+          <div className="p-4 rounded-2xl bg-[#FAF4E8] border border-[#E5D9C3] space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[11px] font-black uppercase tracking-wider text-zinc-800">
+              <span className="text-[11px] font-black uppercase tracking-wider text-[#3B2E24]">
                 Catálogo de Regalos Virtuales (Editables en 💎)
               </span>
               <span className="text-[10.5px] font-bold text-emerald-700">
@@ -618,15 +620,15 @@ export default function AdminSettingsTab({
               {safeGifts.map((gift, idx) => (
                 <div
                   key={gift.id}
-                  className="p-3 rounded-2xl bg-white border border-zinc-200/85 space-y-1.5 shadow-xs"
+                  className="p-3 rounded-2xl bg-[#FFFDF8] border border-[#E5D9C3] space-y-1.5 shadow-sm"
                 >
                   <div className="flex items-center justify-between gap-1">
                     <span className="text-xl leading-none">{gift.icon}</span>
-                    <span className="text-[11px] font-black text-zinc-900 truncate">
+                    <span className="text-[11px] font-black text-[#2C241E] truncate">
                       {gift.name}
                     </span>
                   </div>
-                  <label className="text-[9.5px] font-bold text-zinc-500 block">
+                  <label className="text-[9.5px] font-bold text-[#857566] block">
                     Precio (💎)
                   </label>
                   <input
@@ -665,18 +667,18 @@ export default function AdminSettingsTab({
       <AdminSectionCard accent="sky" className="p-5 sm:p-6">
         <form onSubmit={onSaveEconomyConfig} className="space-y-5">
           <div>
-            <h2 className="font-display text-lg font-black text-zinc-900 flex items-center gap-2">
+            <h2 className="font-display text-lg font-black text-[#2C241E] flex items-center gap-2">
               <Gem className="w-5 h-5 text-sky-600" />
               Economía, % de Retiro y Paquetes (💎)
             </h2>
-            <p className="text-xs text-zinc-600 mt-1">
+            <p className="text-xs text-[#5C4E41] mt-1">
               Ajusta el porcentaje que retira el usuario creador en dinero real, el retiro mínimo y los paquetes de Diamantes en tiempo real.
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="text-[11px] font-bold text-zinc-600 block mb-1">
+              <label className="text-[11px] font-bold text-[#5C4E41] block mb-1">
                 Base por 💎 (USD)
               </label>
               <input
@@ -687,12 +689,12 @@ export default function AdminSettingsTab({
                 required
                 value={baseDiamondPrice}
                 onChange={(e) => onBaseDiamondPriceChange(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-sm font-black text-zinc-900 focus:outline-none focus:border-sky-400 focus:bg-white"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#FBF7EE] border border-[#E5D9C3] text-sm font-black text-[#2C241E] focus:outline-none focus:border-sky-400 focus:bg-[#FFFDF9]"
               />
             </div>
 
             <div>
-              <label className="text-[11px] font-bold text-zinc-600 block mb-1">
+              <label className="text-[11px] font-bold text-[#5C4E41] block mb-1">
                 % Retiro Usuario (Creador)
               </label>
               <input
@@ -702,12 +704,12 @@ export default function AdminSettingsTab({
                 required
                 value={creatorSharePct}
                 onChange={(e) => onCreatorSharePctChange(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-sky-50/70 border border-sky-200 text-sm font-black text-sky-900 focus:outline-none focus:border-sky-400 focus:bg-white"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-sky-50/70 border border-sky-200 text-sm font-black text-sky-900 focus:outline-none focus:border-sky-400 focus:bg-[#FFFDF9]"
               />
             </div>
 
             <div>
-              <label className="text-[11px] font-bold text-zinc-600 block mb-1">
+              <label className="text-[11px] font-bold text-[#5C4E41] block mb-1">
                 Retiro Mín. (💎)
               </label>
               <input
@@ -717,18 +719,18 @@ export default function AdminSettingsTab({
                 required
                 value={minWithdrawDiamonds}
                 onChange={(e) => onMinWithdrawDiamondsChange(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-sm font-black text-zinc-900 focus:outline-none focus:border-sky-400 focus:bg-white"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#FBF7EE] border border-[#E5D9C3] text-sm font-black text-[#2C241E] focus:outline-none focus:border-sky-400 focus:bg-[#FFFDF9]"
               />
             </div>
           </div>
 
           {/* Control rápido e interactivo del % de Retiro Usuario vs Comisión Plataforma */}
-          <div className="p-3.5 rounded-2xl bg-gradient-to-r from-sky-50 via-white to-emerald-50 border border-sky-200/85 space-y-3 text-xs">
+          <div className="p-3.5 rounded-2xl bg-gradient-to-r from-[#EEF5FA] via-[#FFFDF8] to-[#EEF7F1] border border-[#CADEEF] space-y-3 text-xs">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sky-950 font-bold">
+              <span className="text-[#2C241E] font-bold">
                 Reparto de retiros: <strong className="text-emerald-700">{safeCreatorPct}% Usuario</strong> · <strong className="text-indigo-700">{platformFeePct}% Plataforma</strong>
               </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-white border border-sky-200 text-[11px] font-black text-zinc-900 tabular-nums">
+              <span className="px-2.5 py-0.5 rounded-full bg-[#FFFDF8] border border-[#CADEEF] text-[11px] font-black text-[#2C241E] tabular-nums">
                 {formatDiamondRateUSD(previewNetDiamondRate)} / 💎 neto
               </span>
             </div>
@@ -752,22 +754,22 @@ export default function AdminSettingsTab({
                     onClick={() => onCreatorSharePctChange(String(pct))}
                     className={`px-2.5 py-1 rounded-full text-[10.5px] font-black border transition ${
                       safeCreatorPct === pct
-                        ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
-                        : 'bg-white text-zinc-700 border-zinc-200 hover:border-sky-300'
+                        ? 'bg-sky-600 text-white border-sky-600 shadow-sm'
+                        : 'bg-[#FFFDF8] text-[#4B3E33] border-[#E2D5BE] hover:border-sky-300'
                     }`}
                   >
                     {pct}%
                   </button>
                 ))}
               </div>
-              <span className="text-[11px] text-zinc-600 font-semibold tabular-nums">
+              <span className="text-[11px] text-[#5C4E41] font-semibold tabular-nums">
                 Mín. ({minW} 💎): Creador cobra <strong className="text-emerald-700">{formatUSD(minWCreatorUSD)}</strong> · App <strong className="text-indigo-700">{formatUSD(minWPlatformUSD)}</strong>
               </span>
             </div>
           </div>
 
           <div className="space-y-2.5">
-            <p className="text-[10.5px] font-extrabold uppercase tracking-wider text-zinc-500">
+            <p className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#857566]">
               Paquetes de Diamantes en Tienda (💎)
             </p>
             <div className="space-y-2">
@@ -777,14 +779,14 @@ export default function AdminSettingsTab({
                 return (
                   <div
                     key={pkg.id}
-                    className="grid grid-cols-12 gap-2 items-center p-3 rounded-2xl bg-zinc-50 border border-zinc-200"
+                    className="grid grid-cols-12 gap-2 items-center p-3 rounded-2xl bg-[#FAF4E8] border border-[#E5D9C3]"
                   >
                     <div className="col-span-4 min-w-0">
-                      <p className="text-xs font-extrabold text-zinc-900 truncate">{pkg.label}</p>
-                      <p className="text-[10px] font-mono text-zinc-500">${perDiamond} / 💎</p>
+                      <p className="text-xs font-extrabold text-[#2C241E] truncate">{pkg.label}</p>
+                      <p className="text-[10px] font-mono text-[#857566]">${perDiamond} / 💎</p>
                     </div>
                     <div className="col-span-4">
-                      <label className="text-[9.5px] text-zinc-500 font-bold block mb-0.5">Diamantes (💎)</label>
+                      <label className="text-[9.5px] text-[#857566] font-bold block mb-0.5">Diamantes (💎)</label>
                       <input
                         type="number"
                         min="10"
@@ -796,11 +798,11 @@ export default function AdminSettingsTab({
                           next[idx] = { ...rest, diamonds: val };
                           onPackagesDraftChange(next);
                         }}
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-sky-200 text-xs font-black text-sky-700 focus:outline-none focus:border-sky-400"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-[#FFFDF9] border border-sky-200 text-xs font-black text-sky-700 focus:outline-none focus:border-sky-400"
                       />
                     </div>
                     <div className="col-span-4">
-                      <label className="text-[9.5px] text-zinc-500 font-bold block mb-0.5">Precio (USD)</label>
+                      <label className="text-[9.5px] text-[#857566] font-bold block mb-0.5">Precio (USD)</label>
                       <input
                         type="number"
                         step="0.01"
@@ -811,7 +813,7 @@ export default function AdminSettingsTab({
                           next[idx] = { ...next[idx], priceUSD: Number(e.target.value) };
                           onPackagesDraftChange(next);
                         }}
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-emerald-200 text-xs font-black text-emerald-700 focus:outline-none focus:border-emerald-400"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-[#FFFDF9] border border-emerald-200 text-xs font-black text-emerald-700 focus:outline-none focus:border-emerald-400"
                       />
                     </div>
                   </div>
@@ -835,16 +837,16 @@ export default function AdminSettingsTab({
       <AdminSectionCard accent="amber" className="p-5 sm:p-6">
         <form onSubmit={onSaveChannelsConfig} className="space-y-4">
           <div>
-            <h2 className="font-display text-lg font-black text-zinc-900 flex items-center gap-2">
+            <h2 className="font-display text-lg font-black text-[#2C241E] flex items-center gap-2">
               <Webhook className="w-5 h-5 text-amber-600" />
               Canales de Cobro y Pasarela IPN
             </h2>
-            <p className="text-xs text-zinc-600 mt-1 leading-relaxed">
+            <p className="text-xs text-[#5C4E41] mt-1 leading-relaxed">
               Activa o edita en tiempo real tus cuentas de cobro directo para compra de Diamantes o Conoscamosnos PRO y verifica NowPayments en el servidor.
             </p>
           </div>
 
-          <div className="p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200 space-y-2">
+          <div className="p-3.5 rounded-2xl bg-[#FAF4E8] border border-[#E5D9C3] space-y-2">
             <div className="flex items-center justify-between gap-2">
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700">
                 Endpoint POST NowPayments IPN
@@ -855,7 +857,7 @@ export default function AdminSettingsTab({
                     ? 'bg-emerald-100 border-emerald-200 text-emerald-800'
                     : gatewayHealth
                     ? 'bg-amber-100 border-amber-200 text-amber-800'
-                    : 'bg-zinc-100 border-zinc-200 text-zinc-600'
+                    : 'bg-[#F4ECDD] border-[#E2D5BE] text-[#5C4E41]'
                 }`}
               >
                 {gatewayHealth?.ready
@@ -866,7 +868,7 @@ export default function AdminSettingsTab({
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <code className="text-xs font-mono text-zinc-900 break-all flex-1">
+              <code className="text-xs font-mono text-[#2C241E] break-all flex-1">
                 {webhookEndpointUrl}
               </code>
               <AdminCopyButton
@@ -880,9 +882,9 @@ export default function AdminSettingsTab({
           {/* Cuentas editables en tiempo real */}
           <div className="space-y-3">
             {/* Zinli */}
-            <div className="p-3.5 rounded-2xl bg-white border border-zinc-200 space-y-2">
+            <div className="p-3.5 rounded-2xl bg-[#FFFDF8] border border-[#E5D9C3] space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-extrabold text-zinc-900 flex items-center gap-2">
+                <span className="text-xs font-extrabold text-[#2C241E] flex items-center gap-2">
                   <Wallet className="w-4 h-4 text-amber-600" />
                   Zinli (USD · QR oficial)
                 </span>
@@ -894,7 +896,7 @@ export default function AdminSettingsTab({
                   className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border ${
                     channelsDraft.enableZinli
                       ? 'bg-emerald-100 border-emerald-200 text-emerald-800'
-                      : 'bg-zinc-100 border-zinc-200 text-zinc-500'
+                      : 'bg-[#F4ECDD] border-[#E2D5BE] text-[#857566]'
                   }`}
                 >
                   {channelsDraft.enableZinli ? 'Activo' : 'Pausado'}
@@ -907,14 +909,14 @@ export default function AdminSettingsTab({
                   onChannelsDraftChange((c) => ({ ...c, zinliEmail: e.target.value }))
                 }
                 placeholder="correo@zinli.com"
-                className="w-full px-3 py-2 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-mono text-zinc-900 focus:outline-none focus:border-amber-400 focus:bg-white"
+                className="w-full px-3 py-2 rounded-xl bg-[#FBF7EE] border border-[#E5D9C3] text-xs font-mono text-[#2C241E] focus:outline-none focus:border-amber-400 focus:bg-[#FFFDF9]"
               />
             </div>
 
             {/* Pago Móvil */}
-            <div className="p-3.5 rounded-2xl bg-white border border-zinc-200 space-y-2">
+            <div className="p-3.5 rounded-2xl bg-[#FFFDF8] border border-[#E5D9C3] space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-extrabold text-zinc-900 flex items-center gap-2">
+                <span className="text-xs font-extrabold text-[#2C241E] flex items-center gap-2">
                   <Wallet className="w-4 h-4 text-amber-600" />
                   Pago Móvil (Venezuela)
                 </span>
@@ -926,7 +928,7 @@ export default function AdminSettingsTab({
                   className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border ${
                     channelsDraft.enablePagoMovil
                       ? 'bg-emerald-100 border-emerald-200 text-emerald-800'
-                      : 'bg-zinc-100 border-zinc-200 text-zinc-500'
+                      : 'bg-[#F4ECDD] border-[#E2D5BE] text-[#857566]'
                   }`}
                 >
                   {channelsDraft.enablePagoMovil ? 'Activo' : 'Pausado'}
@@ -939,14 +941,14 @@ export default function AdminSettingsTab({
                   onChannelsDraftChange((c) => ({ ...c, pagoMovilInfo: e.target.value }))
                 }
                 placeholder="Teléfono | Cédula | Banco"
-                className="w-full px-3 py-2 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-mono text-zinc-900 focus:outline-none focus:border-amber-400 focus:bg-white"
+                className="w-full px-3 py-2 rounded-xl bg-[#FBF7EE] border border-[#E5D9C3] text-xs font-mono text-[#2C241E] focus:outline-none focus:border-amber-400 focus:bg-[#FFFDF9]"
               />
             </div>
 
             {/* Binance Pay Directo */}
-            <div className="p-3.5 rounded-2xl bg-white border border-zinc-200 space-y-2">
+            <div className="p-3.5 rounded-2xl bg-[#FFFDF8] border border-[#E5D9C3] space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-extrabold text-zinc-900 flex items-center gap-2">
+                <span className="text-xs font-extrabold text-[#2C241E] flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-emerald-600" />
                   Binance Pay Directo (USDT)
                 </span>
@@ -961,7 +963,7 @@ export default function AdminSettingsTab({
                   className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border ${
                     channelsDraft.enableBinancePay && channelsDraft.binancePayId.trim()
                       ? 'bg-emerald-100 border-emerald-200 text-emerald-800'
-                      : 'bg-zinc-100 border-zinc-200 text-zinc-500'
+                      : 'bg-[#F4ECDD] border-[#E2D5BE] text-[#857566]'
                   }`}
                 >
                   {channelsDraft.enableBinancePay && channelsDraft.binancePayId.trim()
@@ -976,19 +978,19 @@ export default function AdminSettingsTab({
                   onChannelsDraftChange((c) => ({ ...c, binancePayId: e.target.value }))
                 }
                 placeholder="Tu Binance Pay ID o correo Binance (opcional)"
-                className="w-full px-3 py-2 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-mono text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-amber-400 focus:bg-white"
+                className="w-full px-3 py-2 rounded-xl bg-[#FBF7EE] border border-[#E5D9C3] text-xs font-mono text-[#2C241E] placeholder:text-[#9A8B7A] focus:outline-none focus:border-amber-400 focus:bg-[#FFFDF9]"
               />
             </div>
 
             {/* Estado vivo de Ads */}
-            <div className="p-3.5 rounded-2xl bg-sky-50/70 border border-sky-200 flex items-center justify-between gap-3">
+            <div className="p-3.5 rounded-2xl bg-[#EEF5FA] border border-[#CADEEF] flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
                 <Tv className="w-4 h-4 text-sky-600 shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-xs font-extrabold text-zinc-900 truncate">
+                  <p className="text-xs font-extrabold text-[#2C241E] truncate">
                     Anuncios Monetag ({accessDraft.adDurationSeconds}s)
                   </p>
-                  <p className="text-[10.5px] font-mono text-zinc-500 truncate">
+                  <p className="text-[10.5px] font-mono text-[#857566] truncate">
                     {accessDraft.monetagDirectLink || 'Fallback /ad-viewer.html'}
                   </p>
                 </div>
@@ -997,7 +999,7 @@ export default function AdminSettingsTab({
                 className={`px-2.5 py-0.5 rounded-full text-[10px] font-black inline-flex items-center gap-1 shrink-0 border ${
                   accessDraft.enableRewardedAds
                     ? 'bg-sky-100 border-sky-200 text-sky-800'
-                    : 'bg-zinc-100 border-zinc-200 text-zinc-500'
+                    : 'bg-[#F4ECDD] border-[#E2D5BE] text-[#857566]'
                 }`}
               >
                 <CheckCircle2 className="w-3 h-3" />

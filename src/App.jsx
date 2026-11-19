@@ -55,10 +55,15 @@ const DiamondStoreModal = lazy(() => import('./components/monetization/DiamondSt
 const EarningsWithdrawModal = lazy(() => import('./components/monetization/EarningsWithdrawModal'));
 const SafetyCenterModal = lazy(() => import('./components/profile/SafetyCenterModal'));
 
-function FullScreenLoader() {
+function FullScreenLoader({ theme = 'dark' }) {
+  const isCream = theme === 'cream';
   return (
-    <div className="h-[100dvh] w-screen bg-black flex flex-col items-center justify-center gap-3 overflow-hidden">
-      <div className="w-14 h-14 rounded-full bg-[#FF2E54] flex items-center justify-center animate-pulse">
+    <div
+      className={`h-[100dvh] w-screen flex flex-col items-center justify-center gap-3 overflow-hidden ${
+        isCream ? 'bg-[#FAF4E8]' : 'bg-black'
+      }`}
+    >
+      <div className="w-14 h-14 rounded-full bg-[#FF2E54] flex items-center justify-center animate-pulse shadow-md shadow-rose-300/30">
         <Flame className="w-8 h-8 text-white fill-white" />
       </div>
     </div>
@@ -909,7 +914,7 @@ function AppRoutes() {
             ) : !isSuperAdmin ? (
               <Navigate to="/app" replace />
             ) : (
-              <Suspense fallback={<FullScreenLoader />}>
+              <Suspense fallback={<FullScreenLoader theme="cream" />}>
                 <AdminDashboardPage onSuccess={handleSuccess} onError={handleError} />
               </Suspense>
             )

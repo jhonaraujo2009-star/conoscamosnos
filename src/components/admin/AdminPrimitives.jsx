@@ -9,15 +9,15 @@ const ACCENT_TOP_LINE = {
 };
 
 const ACCENT_SURFACE = {
-  none: 'bg-white/95 border-zinc-200/80',
-  crimson: 'bg-gradient-to-br from-white via-white to-rose-50/80 border-rose-200/85',
-  amber: 'bg-gradient-to-br from-white via-white to-amber-50/80 border-amber-200/85',
-  emerald: 'bg-gradient-to-br from-white via-white to-emerald-50/80 border-emerald-200/85',
-  sky: 'bg-gradient-to-br from-white via-white to-sky-50/80 border-sky-200/85',
+  none: 'bg-[#FFFDF8] border-[#E8DEC9]',
+  crimson: 'bg-gradient-to-br from-[#FFFDF9] via-[#FFFBF5] to-[#FDF1EE] border-[#EED3CC]',
+  amber: 'bg-gradient-to-br from-[#FFFDF9] via-[#FFFBF2] to-[#FAF0DC] border-[#E8D5B2]',
+  emerald: 'bg-gradient-to-br from-[#FFFDF9] via-[#FCFDF8] to-[#EEF7F1] border-[#CBE3D4]',
+  sky: 'bg-gradient-to-br from-[#FFFDF9] via-[#FBFDFD] to-[#EEF5FA] border-[#CADEEF]',
 };
 
 /**
- * Tarjeta editorial pastel luminosa con borde suave y acento superior opcional.
+ * Tarjeta editorial crema luminosa con borde arena cálido y acento superior opcional.
  */
 export function AdminSectionCard({
   accent = 'none',
@@ -28,7 +28,7 @@ export function AdminSectionCard({
   const surface = ACCENT_SURFACE[accent] || ACCENT_SURFACE.none;
   return (
     <section
-      className={`relative overflow-hidden rounded-[26px] border shadow-[0_14px_34px_-18px_rgba(15,23,42,0.14)] ${surface} ${className}`}
+      className={`relative overflow-hidden rounded-[26px] border shadow-[0_12px_30px_-18px_rgba(115,86,52,0.16)] ${surface} ${className}`}
     >
       {topGlow && (
         <div
@@ -41,7 +41,7 @@ export function AdminSectionCard({
 }
 
 /**
- * Botón reutilizable de copia con retroalimentación visual inmediata.
+ * Botón reutilizable de copia con retroalimentación visual inmediata en paleta crema.
  */
 export function AdminCopyButton({ copyKey, copiedKey, onCopy, label = 'Copiar' }) {
   const isCopied = Boolean(copiedKey && copiedKey === copyKey);
@@ -52,7 +52,7 @@ export function AdminCopyButton({ copyKey, copiedKey, onCopy, label = 'Copiar' }
       className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-extrabold inline-flex items-center gap-1 shrink-0 transition ${
         isCopied
           ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
-          : 'bg-zinc-100 hover:bg-zinc-200/80 border-zinc-200 text-zinc-700 hover:text-zinc-900'
+          : 'bg-[#F4ECDD] hover:bg-[#EAE0CE] border-[#E2D5BE] text-[#4B3E33] hover:text-[#2C241E]'
       }`}
     >
       {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
@@ -62,19 +62,19 @@ export function AdminCopyButton({ copyKey, copiedKey, onCopy, label = 'Copiar' }
 }
 
 /**
- * Estado vacío editorial claro unificado para pestañas del panel Super Admin.
+ * Estado vacío editorial claro crema unificado para pestañas del panel Super Admin.
  */
 export function AdminEmptyState({ icon: Icon, title, description }) {
   return (
     <AdminSectionCard className="p-10 text-center space-y-2.5">
       {Icon && (
-        <div className="w-12 h-12 mx-auto rounded-2xl bg-rose-50 border border-rose-200/70 text-[#FF2E54] flex items-center justify-center">
+        <div className="w-12 h-12 mx-auto rounded-2xl bg-[#FDF1EE] border border-[#EED3CC] text-[#FF2E54] flex items-center justify-center">
           <Icon className="w-6 h-6" />
         </div>
       )}
-      <p className="font-display text-sm font-black text-zinc-900">{title}</p>
+      <p className="font-display text-sm font-black text-[#2C241E]">{title}</p>
       {description && (
-        <p className="text-xs text-zinc-500 max-w-xs mx-auto leading-relaxed">{description}</p>
+        <p className="text-xs text-[#857566] max-w-xs mx-auto leading-relaxed">{description}</p>
       )}
     </AdminSectionCard>
   );

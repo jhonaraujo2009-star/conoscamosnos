@@ -9,6 +9,7 @@ import {
   query,
   runTransaction,
   serverTimestamp,
+  updateDoc,
   where,
 } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
@@ -329,6 +330,51 @@ export async function rejectPaymentRequest({ requestId, adminId, reason = 'Compr
       reviewedAt: serverTimestamp(),
     });
   });
+}
+
+/**
+ * Super Admin: marca o desmarca una recarga manual como revisada sin alterar status ni reviewedAt.
+ */
+export async function togglePaymentRequestReviewed({ requestId, adminId, reviewed = true }) {
+  if (!requestId || !adminId) {
+    throw new Error('Faltan datos para actualizar la revisión.');
+  }
+  await updateDoc(doc(db, 'paymentRequests', requestId), {
+    adminChecked: Boolean(reviewed),
+    adminCheckedBy: reviewed ? adminId : null,
+    adminCheckedAt: reviewed ? serverTimestamp() : null,
+  });
+}
+
+/**
+ * Super Admin: elimina definitivamente un registro de recarga manual desde /api/admin/cleanup.
+ */
+export async function deleteManualPaymentRequest({ requestId }) {
+  const currentUser = auth?.currentUser;
+  if (!currentUser) {
+    throw new Error('Debes iniciar sesión como Super Admin.');
+  }
+  if (!requestId) {
+    throw new Error('Identificador de recarga inválido.');
+  }
+
+  const idToken = await currentUser.getIdToken();
+  const res = await fetch('/api/admin/cleanup', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({
+      action: 'delete_payment_request',
+      requestId,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.error || 'No se pudo eliminar la recarga manual.');
+  }
+  return data;
 }
 
 async function callServerStoreActivate({ kind, planId }) {

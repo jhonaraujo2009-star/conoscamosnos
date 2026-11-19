@@ -1,4 +1,5 @@
 import express from 'express';
+import { adminCleanupExpressHandler } from './controllers/adminCleanupController.js';
 import { createInvoiceExpressHandler } from './controllers/createInvoiceController.js';
 import { economySpendExpressHandler } from './controllers/economySpendController.js';
 import { sendPushExpressHandler } from './controllers/pushNotificationController.js';
@@ -23,6 +24,7 @@ app.post('/api/payments/create-invoice', createInvoiceExpressHandler);
 app.post('/api/store/activate', storeActivateExpressHandler);
 app.post('/api/economy/spend', economySpendExpressHandler);
 app.post('/api/notifications/send', sendPushExpressHandler);
+app.post('/api/admin/cleanup', adminCleanupExpressHandler);
 app.use('/api/webhooks', paymentsRouter);
 
 const port = Number(process.env.API_PORT || process.env.PORT || 4000);

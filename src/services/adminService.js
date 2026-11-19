@@ -9,7 +9,7 @@ import {
   updateDoc,
   writeBatch,
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { auth, db } from '../config/firebase';
 import {
   AD_REWARD_CONFIG,
   BOOST_PLANS,
@@ -383,4 +383,38 @@ export async function setUserVerificationBadge({ targetUid, adminId, approved = 
     verifiedAt: approved ? serverTimestamp() : null,
     updatedAt: serverTimestamp(),
   });
+}
+
+/**
+ * Super Admin: elimina registros financieros o de prueba por días seleccionados o histórico desde /api/admin/cleanup.
+ */
+export async function purgeAdminRevenueRecords({
+  mode = 'ranges',
+  ranges = [],
+  collections = [],
+}) {
+  const currentUser = auth?.currentUser;
+  if (!currentUser) {
+    throw new Error('Debes iniciar sesión como Super Admin.');
+  }
+
+  const idToken = await currentUser.getIdToken();
+  const res = await fetch('/api/admin/cleanup', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({
+      action: 'purge_revenue',
+      mode,
+      ranges,
+      collections,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.error || 'No se pudieron limpiar los registros seleccionados.');
+  }
+  return data;
 }
