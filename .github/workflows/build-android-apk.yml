@@ -98,20 +98,35 @@ jobs:
       - name: Build signed Android TWA APK
         working-directory: android
         env:
-          BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ env.KEYSTORE_PASS }}
-          BUBBLEWRAP_KEY_PASSWORD: ${{ env.KEYSTORE_PASS }}
+          KEYSTORE_PASS: ${{ env.KEYSTORE_PASS }}
         run: |
           set -o pipefail
           (
             set -e
             bubblewrap update --skipVersionUpgrade
-            bubblewrap build --skipPwaValidation
+            sed -i 's/jcenter()/mavenCentral()/g' build.gradle app/build.gradle
+            chmod +x ./gradlew
+            ./gradlew assembleRelease --no-daemon
           ) 2>&1 | tee /tmp/twa-build.log || {
-            tail -n 15 /tmp/twa-build.log | sed 's/^/::error::/'
+            grep -E -A 4 "FAILURE:|What went wrong:|Caused by:|> Could not|ERROR:" /tmp/twa-build.log | head -n 10 | sed 's/^/::error::/'
             exit 1
           }
-          test -f app-release-signed.apk
-          cp app-release-signed.apk /tmp/Conoscamosnos.apk
+
+          UNSIGNED_APK="app/build/outputs/apk/release/app-release-unsigned.apk"
+          test -f "$UNSIGNED_APK"
+
+          ZIPALIGN="$(find "$ANDROID_HOME/build-tools" -name zipalign -type f 2>/dev/null | sort -V | tail -n 1)"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f 2>/dev/null | sort -V | tail -n 1)"
+
+          "$ZIPALIGN" -p -f 4 "$UNSIGNED_APK" /tmp/Conoscamosnos-aligned.apk
+          "$APKSIGNER" sign \
+            --ks /tmp/conoscamosnos-release.keystore \
+            --ks-key-alias conoscamosnos \
+            --ks-pass env:KEYSTORE_PASS \
+            --key-pass env:KEYSTORE_PASS \
+            --out /tmp/Conoscamosnos.apk \
+            /tmp/Conoscamosnos-aligned.apk
+
           ls -lh /tmp/Conoscamosnos.apk
 
       - name: Verify APK signature and package metadata
