@@ -1,27 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
+  AlertCircle,
   Bell,
   CheckCircle2,
   ChevronRight,
   Crown,
-  Download,
   Eye,
   EyeOff,
   Gem,
   Landmark,
+  Loader2,
   Lock,
   LogOut,
   Mail,
   MapPin,
-  Save,
   ShieldCheck,
-  Smartphone,
   Wand2,
   Zap,
 } from 'lucide-react';
 import { WITHDRAWAL_PAYOUT_METHODS } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
-import { usePwaInstall } from '../../hooks/usePwaInstall';
 import { logoutUser } from '../../services/authService';
 import {
   disablePushNotifications,
@@ -33,6 +31,11 @@ import {
   subscribeUserPayoutAccount,
   updateUserProfile,
 } from '../../services/userService';
+import {
+  createDebouncedAutoSaver,
+  createSectionSignature,
+  validatePayoutAccountDraft,
+} from '../../utils/autoSaveHelpers';
 import {
   calculateWithdrawalBreakdown,
   formatTimeRemaining,
@@ -100,13 +103,50 @@ export default function AccountSettingsModal({
   const { economyConfig, isSuperAdmin } = useAuth();
   const [busySetting, setBusySetting] = useState('');
   const [locatingGps, setLocatingGps] = useState(false);
-  const [showInstallGuide, setShowInstallGuide] = useState(false);
   const [savedPayout, setSavedPayout] = useState(null);
   const [payoutMethodId, setPayoutMethodId] = useState(WITHDRAWAL_PAYOUT_METHODS[0].id);
   const [payoutAccountValue, setPayoutAccountValue] = useState('');
   const [payoutHolderName, setPayoutHolderName] = useState('');
-  const [savingPayout, setSavingPayout] = useState(false);
-  const { isInstalled, isIOS, downloadOrInstallApp } = usePwaInstall();
+  const [payoutSaveStatus, setPayoutSaveStatus] = useState({ state: 'idle', message: '' });
+
+  const uidRef = useRef(userProfile?.uid);
+  const onErrorRef = useRef(onError);
+  uidRef.current = userProfile?.uid;
+  onErrorRef.current = onError;
+
+  const payoutDraftRef = useRef({
+    methodId: WITHDRAWAL_PAYOUT_METHODS[0].id,
+    accountValue: '',
+    holderName: '',
+  });
+  const lastRemotePayoutSigRef = useRef('');
+  const lastSavedPayoutSigRef = useRef('');
+  const payoutSaverRef = useRef(null);
+
+  if (!payoutSaverRef.current) {
+    payoutSaverRef.current = createDebouncedAutoSaver({
+      delayMs: 650,
+      onSave: async (payload) => {
+        const uid = uidRef.current;
+        if (!uid) return;
+        const sig = createSectionSignature(payload);
+        if (sig === lastSavedPayoutSigRef.current) {
+          setPayoutSaveStatus({ state: 'saved', message: '' });
+          return;
+        }
+        setPayoutSaveStatus({ state: 'saving', message: '' });
+        try {
+          await saveUserPayoutAccount(uid, payload);
+          lastSavedPayoutSigRef.current = sig;
+          setPayoutSaveStatus({ state: 'saved', message: '' });
+        } catch (err) {
+          const msg = err?.message || 'No se pudo guardar tu cuenta de cobro.';
+          setPayoutSaveStatus({ state: 'error', message: msg });
+          onErrorRef.current?.(msg);
+        }
+      },
+    });
+  }
 
   useEffect(() => {
     if (!isOpen || !userProfile?.uid || currentAuthUid !== userProfile.uid) {
@@ -114,13 +154,38 @@ export default function AccountSettingsModal({
     }
     const unsub = subscribeUserPayoutAccount(userProfile.uid, (data) => {
       setSavedPayout(data);
-      if (data) {
-        setPayoutMethodId(data.methodId || WITHDRAWAL_PAYOUT_METHODS[0].id);
-        setPayoutAccountValue(data.accountValue || '');
-        setPayoutHolderName(data.holderName || '');
+      const remoteDraft = {
+        methodId: data?.methodId || WITHDRAWAL_PAYOUT_METHODS[0].id,
+        methodName:
+          (WITHDRAWAL_PAYOUT_METHODS.find((m) => m.id === data?.methodId) ||
+            WITHDRAWAL_PAYOUT_METHODS[0]).name,
+        accountValue: String(data?.accountValue || '').trim(),
+        holderName: String(data?.holderName || '').trim(),
+      };
+      const remoteSig = createSectionSignature(remoteDraft);
+      if (remoteSig !== lastRemotePayoutSigRef.current) {
+        lastRemotePayoutSigRef.current = remoteSig;
+        if (
+          !payoutSaverRef.current?.isBusyOrPending() &&
+          remoteSig !== lastSavedPayoutSigRef.current
+        ) {
+          lastSavedPayoutSigRef.current = remoteSig;
+          payoutDraftRef.current = {
+            methodId: remoteDraft.methodId,
+            accountValue: remoteDraft.accountValue,
+            holderName: remoteDraft.holderName,
+          };
+          setPayoutMethodId(remoteDraft.methodId);
+          setPayoutAccountValue(remoteDraft.accountValue);
+          setPayoutHolderName(remoteDraft.holderName);
+          setPayoutSaveStatus({ state: data?.accountValue ? 'saved' : 'idle', message: '' });
+        }
       }
     });
-    return () => unsub();
+    return () => {
+      payoutSaverRef.current?.flush();
+      unsub();
+    };
   }, [isOpen, userProfile?.uid, currentAuthUid]);
 
   // Seguridad estricta: solo el dueño autenticado de este uid puede abrir su configuración privada
@@ -131,23 +196,48 @@ export default function AccountSettingsModal({
   const activePayoutMethod =
     WITHDRAWAL_PAYOUT_METHODS.find((m) => m.id === payoutMethodId) || WITHDRAWAL_PAYOUT_METHODS[0];
 
-  const handleSavePayoutAccount = async (e) => {
-    e.preventDefault();
-    if (savingPayout) return;
-    setSavingPayout(true);
-    try {
-      await saveUserPayoutAccount(userProfile.uid, {
-        methodId: activePayoutMethod.id,
-        methodName: activePayoutMethod.name,
-        accountValue: payoutAccountValue,
-        holderName: payoutHolderName,
-      });
-      onSuccess?.(`✅ Cuenta de cobro (${activePayoutMethod.name}) guardada en tu bóveda privada.`);
-    } catch (err) {
-      onError?.(err.message || 'No se pudo guardar tu cuenta de cobro.');
-    } finally {
-      setSavingPayout(false);
+  const schedulePayoutSave = (patch, { immediate = false } = {}) => {
+    const nextDraft = {
+      ...payoutDraftRef.current,
+      ...patch,
+    };
+    payoutDraftRef.current = nextDraft;
+
+    const methodObj =
+      WITHDRAWAL_PAYOUT_METHODS.find((m) => m.id === nextDraft.methodId) ||
+      WITHDRAWAL_PAYOUT_METHODS[0];
+
+    const check = validatePayoutAccountDraft({
+      methodId: methodObj.id,
+      methodName: methodObj.name,
+      accountValue: nextDraft.accountValue,
+      holderName: nextDraft.holderName,
+    });
+
+    if (!check.valid) {
+      payoutSaverRef.current?.cancel();
+      setPayoutSaveStatus(
+        String(nextDraft.accountValue || '').trim().length > 0
+          ? { state: 'hint', message: check.reason }
+          : { state: 'idle', message: '' }
+      );
+      return;
     }
+
+    const sig = createSectionSignature(check.payload);
+    if (sig === lastSavedPayoutSigRef.current) {
+      payoutSaverRef.current?.cancel();
+      setPayoutSaveStatus({ state: 'saved', message: '' });
+      return;
+    }
+
+    setPayoutSaveStatus({ state: immediate ? 'saving' : 'pending', message: '' });
+    payoutSaverRef.current?.schedule(check.payload, { immediate });
+  };
+
+  const handleModalClose = () => {
+    payoutSaverRef.current?.flush();
+    onClose?.();
   };
 
   const boosted = isBoostActive(userProfile);
@@ -245,22 +335,6 @@ export default function AccountSettingsModal({
     }
   };
 
-  const handleDownloadApp = async () => {
-    const res = await downloadOrInstallApp({ customApkUrl: economyConfig?.androidApkUrl });
-    if (res.status === 'downloading_apk') {
-      setShowInstallGuide(false);
-      onSuccess?.('⬇️ Descargando Conoscamosnos...');
-      return;
-    }
-    if (res.status === 'accepted') {
-      setShowInstallGuide(false);
-      onSuccess?.('✅ ¡Conoscamosnos se está instalando en tu dispositivo!');
-      return;
-    }
-    if (res.status === 'dismissed') return;
-    setShowInstallGuide((v) => !v);
-  };
-
   return (
     <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="w-full max-w-md max-h-[92dvh] bg-[#FAF7F9] rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-2xl animate-sheet-up">
@@ -270,7 +344,7 @@ export default function AccountSettingsModal({
           eyebrow="Bóveda y Seguridad Privada"
           title="Ajustes de Cuenta"
           subtitle={`Solo visible para ti (${userProfile.name})`}
-          onClose={onClose}
+          onClose={handleModalClose}
           closeLabel="Cerrar"
         />
 
@@ -309,7 +383,7 @@ export default function AccountSettingsModal({
               <button
                 type="button"
                 onClick={() => {
-                  onClose();
+                  handleModalClose();
                   onOpenDiamondStore?.('buy');
                 }}
                 className="p-4 rounded-3xl bg-white border border-sky-200/80 shadow-card text-left hover:border-sky-400 transition"
@@ -331,7 +405,7 @@ export default function AccountSettingsModal({
               <button
                 type="button"
                 onClick={() => {
-                  onClose();
+                  handleModalClose();
                   onOpenDiamondStore?.('pro');
                 }}
                 className="p-4 rounded-3xl bg-gradient-to-br from-rose-50 via-white to-amber-50 border border-rose-200/80 shadow-card text-left hover:border-[#FF2E54] transition"
@@ -356,7 +430,7 @@ export default function AccountSettingsModal({
             <button
               type="button"
               onClick={() => {
-                onClose();
+                handleModalClose();
                 onOpenWithdrawals?.();
               }}
               className="w-full p-4 rounded-3xl bg-white border border-emerald-200/80 shadow-card flex items-center justify-between text-left hover:border-emerald-400 transition"
@@ -375,7 +449,7 @@ export default function AccountSettingsModal({
             <button
               type="button"
               onClick={() => {
-                onClose();
+                handleModalClose();
                 onOpenBoost?.();
               }}
               className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-purple-50 to-fuchsia-50 border border-purple-200/80 flex items-center justify-between text-left hover:brightness-95 transition"
@@ -408,8 +482,8 @@ export default function AccountSettingsModal({
               )}
             </div>
 
-            <form
-              onSubmit={handleSavePayoutAccount}
+            <div
+              onBlurCapture={() => payoutSaverRef.current?.flush()}
               className="bg-white rounded-3xl p-4 shadow-card border border-zinc-200/70 space-y-3"
             >
               <div className="flex items-start gap-2.5">
@@ -421,7 +495,7 @@ export default function AccountSettingsModal({
                     Dónde recibes tus pagos de la plataforma
                   </p>
                   <p className="text-[11px] text-zinc-500 leading-snug mt-0.5">
-                    Configura tu <strong>Binance Pay</strong>, <strong>Zinli (USD)</strong> o <strong>Pago Móvil</strong>. Se pre-carga automáticamente al retirar tus Diamantes.
+                    Configura tu <strong>Binance Pay</strong>, <strong>Zinli (USD)</strong> o <strong>Pago Móvil</strong>. Se guarda y pre-carga automáticamente al retirar tus Diamantes.
                   </p>
                 </div>
               </div>
@@ -433,7 +507,11 @@ export default function AccountSettingsModal({
                   </label>
                   <select
                     value={payoutMethodId}
-                    onChange={(e) => setPayoutMethodId(e.target.value)}
+                    onChange={(e) => {
+                      const nextMethodId = e.target.value;
+                      setPayoutMethodId(nextMethodId);
+                      schedulePayoutSave({ methodId: nextMethodId }, { immediate: true });
+                    }}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-bold text-zinc-900 focus:outline-none focus:bg-white focus:border-zinc-900 transition"
                   >
                     {WITHDRAWAL_PAYOUT_METHODS.map((m) => (
@@ -451,9 +529,12 @@ export default function AccountSettingsModal({
                   <input
                     type="text"
                     value={payoutAccountValue}
-                    onChange={(e) => setPayoutAccountValue(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setPayoutAccountValue(val);
+                      schedulePayoutSave({ accountValue: val }, { immediate: false });
+                    }}
                     placeholder={activePayoutMethod.placeholder}
-                    required
                     className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-semibold text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:bg-white focus:border-zinc-900 transition"
                   />
                 </div>
@@ -465,28 +546,48 @@ export default function AccountSettingsModal({
                   <input
                     type="text"
                     value={payoutHolderName}
-                    onChange={(e) => setPayoutHolderName(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setPayoutHolderName(val);
+                      schedulePayoutSave({ holderName: val }, { immediate: false });
+                    }}
                     placeholder="Ej. María Pérez"
                     className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-semibold text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:bg-white focus:border-zinc-900 transition"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-2 pt-0.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
                 <span className="text-[10px] font-semibold text-zinc-400 flex items-center gap-1">
                   <Lock className="w-3 h-3 text-emerald-600 shrink-0" />
                   Bóveda privada · Invisible a otros usuarios
                 </span>
-                <button
-                  type="submit"
-                  disabled={savingPayout}
-                  className="px-4 py-2 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-extrabold inline-flex items-center gap-1.5 shadow-sm disabled:opacity-50 shrink-0 transition"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  {savingPayout ? 'Guardando...' : 'Guardar'}
-                </button>
+                {payoutSaveStatus.state === 'saving' || payoutSaveStatus.state === 'pending' ? (
+                  <span className="px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-extrabold inline-flex items-center gap-1 shrink-0">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Guardando...
+                  </span>
+                ) : payoutSaveStatus.state === 'error' ? (
+                  <span className="px-2.5 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-extrabold inline-flex items-center gap-1 shrink-0">
+                    <AlertCircle className="w-3 h-3" />
+                    {payoutSaveStatus.message || 'Error al guardar'}
+                  </span>
+                ) : payoutSaveStatus.state === 'hint' ? (
+                  <span className="px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-bold shrink-0">
+                    Mín. 4 caracteres para guardar
+                  </span>
+                ) : payoutSaveStatus.state === 'saved' ? (
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-extrabold inline-flex items-center gap-1 shrink-0">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Guardado automático
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-1 rounded-full bg-zinc-100 text-zinc-500 text-[10px] font-bold shrink-0">
+                    Auto-guardado
+                  </span>
+                )}
               </div>
-            </form>
+            </div>
           </section>
 
           {/* 3. Notificaciones de Regalos y Centro de Bloqueados / Reportados */}
@@ -498,7 +599,7 @@ export default function AccountSettingsModal({
               <button
                 type="button"
                 onClick={() => {
-                  onClose();
+                  handleModalClose();
                   onOpenGiftNotifications?.();
                 }}
                 className="w-full px-4 py-3.5 flex items-center justify-between gap-3 text-left hover:bg-zinc-50 transition"
@@ -529,7 +630,7 @@ export default function AccountSettingsModal({
               <button
                 type="button"
                 onClick={() => {
-                  onClose();
+                  handleModalClose();
                   onOpenSafetyCenter?.('blocked');
                 }}
                 className="w-full px-4 py-3.5 flex items-center justify-between gap-3 text-left hover:bg-zinc-50 transition"
@@ -653,60 +754,12 @@ export default function AccountSettingsModal({
             </div>
           </section>
 
-          {/* 5. Descargar Aplicación */}
-          <section className="bg-white rounded-3xl p-4 shadow-card space-y-2.5">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center shrink-0">
-                  <Smartphone className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-extrabold text-zinc-900">Descargar Aplicación</p>
-                  <p className="text-[11px] text-zinc-500 truncate">
-                    {isInstalled
-                      ? 'Instalada en este dispositivo'
-                      : 'Descarga directa de Conoscamosnos en tu teléfono'}
-                  </p>
-                </div>
-              </div>
-
-              {isInstalled ? (
-                <span className="px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-extrabold flex items-center gap-1 shrink-0">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Instalada
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleDownloadApp}
-                  className="px-3.5 py-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-[11px] font-black flex items-center gap-1.5 shadow-sm hover:brightness-105 shrink-0 active:scale-95 transition"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Descargar App
-                </button>
-              )}
-            </div>
-
-            {showInstallGuide && !isInstalled && (
-              <div className="p-3 rounded-2xl bg-zinc-50 border border-zinc-200/80 text-[11px] text-zinc-700 leading-relaxed">
-                {isIOS ? (
-                  <p>
-                    Toca Compartir (↑) y luego <strong>“Agregar a pantalla de inicio”</strong>.
-                  </p>
-                ) : (
-                  <p>
-                    En Chrome toca el menú <strong>⋮</strong> → <strong>“Instalar aplicación”</strong>.
-                  </p>
-                )}
-              </div>
-            )}
-          </section>
-
-          {/* 6. Panel Super Admin (visible si role === 'SUPER_ADMIN'/'admin' o cuenta verificada Super Admin) */}
+          {/* 5. Panel Super Admin (visible si role === 'SUPER_ADMIN'/'admin' o cuenta verificada Super Admin) */}
           {isSuperAdmin && (
             <button
               type="button"
               onClick={() => {
-                onClose();
+                handleModalClose();
                 onOpenAdmin?.();
               }}
               className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#171026] to-[#261229] border border-amber-300/35 text-amber-200 text-xs font-extrabold flex items-center justify-between shadow-md hover:brightness-110 transition"
@@ -718,11 +771,11 @@ export default function AccountSettingsModal({
             </button>
           )}
 
-          {/* 7. Cerrar sesión */}
+          {/* 6. Cerrar sesión */}
           <button
             type="button"
             onClick={() => {
-              onClose();
+              handleModalClose();
               logoutUser(userProfile.uid);
             }}
             className="w-full py-3.5 rounded-full bg-white border border-rose-200 text-[#FF2E54] text-xs font-extrabold flex items-center justify-center gap-2 shadow-sm hover:bg-rose-50 transition"

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import {
+  AlertCircle,
   CheckCircle2,
   Crown,
   Gem,
-  Save,
+  Loader2,
   ShieldCheck,
   Sparkles,
   Tv,
@@ -56,6 +57,47 @@ function AdminToggleSwitch({ label, description, checked, onToggle, accentClass 
   );
 }
 
+function AutoSaveStatusBadge({ status }) {
+  const state = status?.state || 'idle';
+
+  if (state === 'saving' || state === 'pending') {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[10.5px] font-black shrink-0">
+        <Loader2 className="w-3 h-3 animate-spin" />
+        Guardando...
+      </span>
+    );
+  }
+
+  if (state === 'error') {
+    return (
+      <span
+        title={status?.message || 'Error al guardar'}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-[10.5px] font-black max-w-[260px] truncate shrink-0"
+      >
+        <AlertCircle className="w-3 h-3 shrink-0" />
+        <span className="truncate">{status?.message || 'Revisa los valores'}</span>
+      </span>
+    );
+  }
+
+  if (state === 'saved') {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10.5px] font-black shrink-0">
+        <CheckCircle2 className="w-3 h-3" />
+        Guardado en vivo
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#FBF7EE] border border-[#E5D9C3] text-[#6B5A48] text-[10.5px] font-extrabold shrink-0">
+      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+      Auto-guardado activo
+    </span>
+  );
+}
+
 export default function AdminSettingsTab({
   baseDiamondPrice,
   onBaseDiamondPriceChange,
@@ -69,20 +111,20 @@ export default function AdminSettingsTab({
   onBoostPlansDraftChange,
   giftsDraft = VIRTUAL_GIFTS,
   onGiftsDraftChange,
-  savingProPlans,
-  onSaveProPlansConfig,
+  proPlansSaveStatus,
+  onFlushProPlans,
   packagesDraft,
   onPackagesDraftChange,
-  savingConfig,
-  onSaveEconomyConfig,
+  economySaveStatus,
+  onFlushEconomy,
   accessDraft,
   onAccessDraftChange,
-  savingAccess,
-  onSaveAccessConfig,
+  accessSaveStatus,
+  onFlushAccess,
   channelsDraft,
   onChannelsDraftChange,
-  savingChannels,
-  onSaveChannelsConfig,
+  channelsSaveStatus,
+  onFlushChannels,
   webhookEndpointUrl,
   copiedKey,
   onCopyWebhook,
@@ -125,34 +167,46 @@ export default function AdminSettingsTab({
   const minWPlatformUSD = Math.max(0, minWGrossUSD - minWCreatorUSD);
 
   const handleSelectPreset = (preset) => {
-    onAccessDraftChange((prev) => ({
-      ...prev,
-      unlockMode: preset.id,
-      enableDiamondCharges: preset.enableDiamondCharges,
-      enableRewardedAds: preset.enableRewardedAds,
-    }));
+    onAccessDraftChange?.(
+      (prev) => ({
+        ...prev,
+        unlockMode: preset.id,
+        enableDiamondCharges: preset.enableDiamondCharges,
+        enableRewardedAds: preset.enableRewardedAds,
+      }),
+      {
+        immediate: true,
+        toastMessage: `✅ Modo "${preset.label}" aplicado en vivo.`,
+      }
+    );
   };
 
   const handleToggleSwitch = (field) => {
-    onAccessDraftChange((prev) => {
-      const nextDiamonds =
-        field === 'enableDiamondCharges' ? !prev.enableDiamondCharges : prev.enableDiamondCharges;
-      const nextAds =
-        field === 'enableRewardedAds' ? !prev.enableRewardedAds : prev.enableRewardedAds;
-      return {
-        ...prev,
-        enableDiamondCharges: nextDiamonds,
-        enableRewardedAds: nextAds,
-        unlockMode: deriveUnlockMode(nextDiamonds, nextAds),
-      };
-    });
+    onAccessDraftChange?.(
+      (prev) => {
+        const nextDiamonds =
+          field === 'enableDiamondCharges' ? !prev.enableDiamondCharges : prev.enableDiamondCharges;
+        const nextAds =
+          field === 'enableRewardedAds' ? !prev.enableRewardedAds : prev.enableRewardedAds;
+        return {
+          ...prev,
+          enableDiamondCharges: nextDiamonds,
+          enableRewardedAds: nextAds,
+          unlockMode: deriveUnlockMode(nextDiamonds, nextAds),
+        };
+      },
+      {
+        immediate: true,
+        toastMessage: '✅ Política de cobros y anuncios actualizada en vivo.',
+      }
+    );
   };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* 1. Control Global de Monetización en Diamantes (💎), Anuncios y Modo Libre */}
       <AdminSectionCard accent="emerald" className="lg:col-span-2 p-5 sm:p-6">
-        <form onSubmit={onSaveAccessConfig} className="space-y-5">
+        <div onBlurCapture={onFlushAccess} className="space-y-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="font-display text-lg sm:text-xl font-black text-[#2C241E] flex items-center gap-2">
@@ -160,23 +214,26 @@ export default function AdminSettingsTab({
                 Control Global de Cobros (💎), Anuncios y Retención
               </h2>
               <p className="text-xs text-[#5C4E41] mt-1 leading-relaxed max-w-2xl">
-                Economía única 100% en <strong className="text-sky-700">Diamantes (💎)</strong>. Activa <strong className="text-emerald-700">Modo Libre</strong> para retener público nuevo o cambia a <strong className="text-sky-700">Solo Anuncios</strong> / <strong className="text-rose-700">Diamantes + Ads</strong> en 1 clic. Los miembros <strong className="text-[#FF2E54]">Conoscamosnos PRO</strong> tienen chats, Likes y Fotos VIP ilimitados sin anuncios.
+                Economía única 100% en <strong className="text-sky-700">Diamantes (💎)</strong>. Activa <strong className="text-emerald-700">Modo Libre</strong> para retener público nuevo o cambia a <strong className="text-sky-700">Solo Anuncios</strong> / <strong className="text-rose-700">Diamantes + Ads</strong> en 1 clic sin necesidad de pulsar Guardar.
               </p>
             </div>
 
-            <span
-              className={`px-3 py-1 rounded-full text-[11px] font-black border shrink-0 ${
-                accessDraft.unlockMode === 'free'
-                  ? 'bg-emerald-100 border-emerald-200 text-emerald-800'
-                  : accessDraft.unlockMode === 'ads_only'
-                  ? 'bg-sky-100 border-sky-200 text-sky-800'
-                  : accessDraft.unlockMode === 'diamonds_only'
-                  ? 'bg-amber-100 border-amber-200 text-amber-800'
-                  : 'bg-rose-100 border-rose-200 text-rose-800'
-              }`}
-            >
-              {ACCESS_MODE_OPTIONS.find((m) => m.id === accessDraft.unlockMode)?.label || 'Híbrido'}
-            </span>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <AutoSaveStatusBadge status={accessSaveStatus} />
+              <span
+                className={`px-3 py-1 rounded-full text-[11px] font-black border shrink-0 ${
+                  accessDraft.unlockMode === 'free'
+                    ? 'bg-emerald-100 border-emerald-200 text-emerald-800'
+                    : accessDraft.unlockMode === 'ads_only'
+                    ? 'bg-sky-100 border-sky-200 text-sky-800'
+                    : accessDraft.unlockMode === 'diamonds_only'
+                    ? 'bg-amber-100 border-amber-200 text-amber-800'
+                    : 'bg-rose-100 border-rose-200 text-rose-800'
+                }`}
+              >
+                {ACCESS_MODE_OPTIONS.find((m) => m.id === accessDraft.unlockMode)?.label || 'Híbrido'}
+              </span>
+            </div>
           </div>
 
           {/* 4 Presets Rápidos Pastel Crema */}
@@ -359,21 +416,12 @@ export default function AdminSettingsTab({
               className="w-full px-3.5 py-2.5 rounded-xl bg-[#FBF7EE] border border-[#E5D9C3] text-xs font-mono text-[#2C241E] placeholder:text-[#9A8B7A] focus:outline-none focus:border-emerald-400 focus:bg-[#FFFDF9]"
             />
           </div>
-
-          <button
-            type="submit"
-            disabled={savingAccess}
-            className="w-full py-3.5 rounded-full bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 text-white font-black text-sm shadow-md shadow-emerald-200 hover:brightness-105 disabled:opacity-50 transition flex items-center justify-center gap-2"
-          >
-            <Save className="w-4 h-4" />
-            {savingAccess ? 'Aplicando en toda la app...' : 'Guardar y Aplicar Política Global en Vivo'}
-          </button>
-        </form>
+        </div>
       </AdminSectionCard>
 
       {/* 2. Membresía Conoscamosnos PRO y Tabla de Rentabilidad en Diamantes (💎 / USD) */}
       <AdminSectionCard accent="crimson" className="lg:col-span-2 p-5 sm:p-6">
-        <form onSubmit={onSaveProPlansConfig} className="space-y-5">
+        <div onBlurCapture={onFlushProPlans} className="space-y-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="font-display text-lg sm:text-xl font-black text-[#2C241E] flex items-center gap-2">
@@ -384,9 +432,12 @@ export default function AdminSettingsTab({
                 Configura los precios oficiales de <strong className="text-[#FF2E54]">Conoscamosnos PRO</strong> (solo pago real en USD vía pasarela o transferencia verificada). Quien activa PRO obtiene chats directos ilimitados sin Match, ve todos sus Likes y qué foto le gustó, Modo Pasaporte por país, filtros Check Azul/Online y Cero Anuncios.
               </p>
             </div>
-            <span className="px-3 py-1 rounded-full bg-rose-100 border border-rose-200 text-rose-800 text-[11px] font-black shrink-0">
-              Solo Pago Real (USD)
-            </span>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <AutoSaveStatusBadge status={proPlansSaveStatus} />
+              <span className="px-3 py-1 rounded-full bg-rose-100 border border-rose-200 text-rose-800 text-[11px] font-black shrink-0">
+                Solo Pago Real (USD)
+              </span>
+            </div>
           </div>
 
           {/* Planes Editables Conoscamosnos PRO */}
@@ -422,8 +473,9 @@ export default function AdminSettingsTab({
                       max="365"
                       value={plan.durationDays}
                       onChange={(e) => {
+                        const raw = e.target.value;
                         const next = [...safeProPlans];
-                        next[idx] = { ...next[idx], durationDays: Number(e.target.value) };
+                        next[idx] = { ...next[idx], durationDays: raw === '' ? '' : Number(raw) };
                         onProPlansDraftChange?.(next);
                       }}
                       className="w-full px-2.5 py-1.5 rounded-xl bg-[#FFFDF9] border border-rose-200 text-xs font-black text-[#2C241E]"
@@ -440,8 +492,9 @@ export default function AdminSettingsTab({
                       max="500"
                       value={plan.priceUSD}
                       onChange={(e) => {
+                        const raw = e.target.value;
                         const next = [...safeProPlans];
-                        next[idx] = { ...next[idx], priceUSD: Number(e.target.value) };
+                        next[idx] = { ...next[idx], priceUSD: raw === '' ? '' : Number(raw) };
                         onProPlansDraftChange?.(next);
                       }}
                       className="w-full px-2.5 py-1.5 rounded-xl bg-[#FFFDF9] border border-emerald-200 text-xs font-black text-emerald-700"
@@ -483,8 +536,9 @@ export default function AdminSettingsTab({
                         max="720"
                         value={plan.durationHours}
                         onChange={(e) => {
+                          const raw = e.target.value;
                           const next = [...safeBoostPlans];
-                          next[idx] = { ...next[idx], durationHours: Number(e.target.value) };
+                          next[idx] = { ...next[idx], durationHours: raw === '' ? '' : Number(raw) };
                           onBoostPlansDraftChange?.(next);
                         }}
                         className="w-full px-2.5 py-1.5 rounded-xl bg-[#FFFDF9] border border-purple-200 text-xs font-black text-[#2C241E]"
@@ -498,10 +552,11 @@ export default function AdminSettingsTab({
                         type="number"
                         min="10"
                         max="10000"
-                        value={plan.costDiamonds ?? plan.costCoins ?? 50}
+                        value={plan.costDiamonds ?? plan.costCoins ?? ''}
                         onChange={(e) => {
+                          const raw = e.target.value;
                           const next = [...safeBoostPlans];
-                          next[idx] = { ...next[idx], costDiamonds: Number(e.target.value) };
+                          next[idx] = { ...next[idx], costDiamonds: raw === '' ? '' : Number(raw) };
                           onBoostPlansDraftChange?.(next);
                         }}
                         className="w-full px-2.5 py-1.5 rounded-xl bg-[#FFFDF9] border border-sky-200 text-xs font-black text-sky-700"
@@ -621,8 +676,9 @@ export default function AdminSettingsTab({
                     required
                     value={gift.price}
                     onChange={(e) => {
+                      const raw = e.target.value;
                       const next = [...safeGifts];
-                      next[idx] = { ...next[idx], price: Number(e.target.value) };
+                      next[idx] = { ...next[idx], price: raw === '' ? '' : Number(raw) };
                       onGiftsDraftChange?.(next);
                     }}
                     className="w-full px-2.5 py-1.5 rounded-xl bg-sky-50/70 border border-sky-200 text-xs font-black text-sky-800 focus:outline-none focus:border-sky-400"
@@ -634,29 +690,23 @@ export default function AdminSettingsTab({
               ))}
             </div>
           </div>
-
-          <button
-            type="submit"
-            disabled={savingProPlans}
-            className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#FF2E54] via-rose-500 to-amber-500 text-white font-black text-sm shadow-md shadow-rose-200 hover:brightness-105 disabled:opacity-50 transition flex items-center justify-center gap-2"
-          >
-            <Save className="w-4 h-4" />
-            {savingProPlans ? 'Guardando cambios...' : 'Guardar Planes PRO, Boost y Regalos en Vivo'}
-          </button>
-        </form>
+        </div>
       </AdminSectionCard>
 
       {/* 3. Economía, % de Retiro del Usuario y Paquetes (appConfig/economy) */}
       <AdminSectionCard accent="sky" className="p-5 sm:p-6">
-        <form onSubmit={onSaveEconomyConfig} className="space-y-5">
-          <div>
-            <h2 className="font-display text-lg font-black text-[#2C241E] flex items-center gap-2">
-              <Gem className="w-5 h-5 text-sky-600" />
-              Economía, % de Retiro y Paquetes (💎)
-            </h2>
-            <p className="text-xs text-[#5C4E41] mt-1">
-              Ajusta el porcentaje que retira el usuario creador en dinero real, el retiro mínimo y los paquetes de Diamantes en tiempo real.
-            </p>
+        <div onBlurCapture={onFlushEconomy} className="space-y-5">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h2 className="font-display text-lg font-black text-[#2C241E] flex items-center gap-2">
+                <Gem className="w-5 h-5 text-sky-600" />
+                Economía, % de Retiro y Paquetes (💎)
+              </h2>
+              <p className="text-xs text-[#5C4E41] mt-1">
+                Ajusta el porcentaje que retira el usuario creador en dinero real, el retiro mínimo y los paquetes de Diamantes en tiempo real.
+              </p>
+            </div>
+            <AutoSaveStatusBadge status={economySaveStatus} />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -725,6 +775,9 @@ export default function AdminSettingsTab({
               step="1"
               value={safeCreatorPct}
               onChange={(e) => onCreatorSharePctChange(e.target.value)}
+              onMouseUp={() => onFlushEconomy?.()}
+              onTouchEnd={() => onFlushEconomy?.()}
+              onPointerUp={() => onFlushEconomy?.()}
               className="w-full accent-sky-600 cursor-pointer"
             />
 
@@ -734,7 +787,12 @@ export default function AdminSettingsTab({
                   <button
                     key={pct}
                     type="button"
-                    onClick={() => onCreatorSharePctChange(String(pct))}
+                    onClick={() =>
+                      onCreatorSharePctChange(String(pct), {
+                        immediate: true,
+                        toastMessage: `💎 Retiro de creadores ajustado a ${pct}% en vivo.`,
+                      })
+                    }
                     className={`px-2.5 py-1 rounded-full text-[10.5px] font-black border transition ${
                       safeCreatorPct === pct
                         ? 'bg-sky-600 text-white border-sky-600 shadow-sm'
@@ -757,7 +815,8 @@ export default function AdminSettingsTab({
             </p>
             <div className="space-y-2">
               {packagesDraft.map((pkg, idx) => {
-                const units = Number(pkg.diamonds ?? pkg.coins ?? 0);
+                const rawUnits = pkg.diamonds ?? pkg.coins ?? '';
+                const units = Number(rawUnits || 0);
                 const perDiamond = units > 0 ? (Number(pkg.priceUSD || 0) / units).toFixed(4) : '0.0000';
                 return (
                   <div
@@ -773,9 +832,10 @@ export default function AdminSettingsTab({
                       <input
                         type="number"
                         min="10"
-                        value={units}
+                        value={rawUnits}
                         onChange={(e) => {
-                          const val = Number(e.target.value);
+                          const raw = e.target.value;
+                          const val = raw === '' ? '' : Number(raw);
                           const next = [...packagesDraft];
                           const { coins: _omitCoins, ...rest } = next[idx];
                           next[idx] = { ...rest, diamonds: val };
@@ -792,8 +852,9 @@ export default function AdminSettingsTab({
                         min="0.5"
                         value={pkg.priceUSD}
                         onChange={(e) => {
+                          const raw = e.target.value;
                           const next = [...packagesDraft];
-                          next[idx] = { ...next[idx], priceUSD: Number(e.target.value) };
+                          next[idx] = { ...next[idx], priceUSD: raw === '' ? '' : Number(raw) };
                           onPackagesDraftChange(next);
                         }}
                         className="w-full px-2.5 py-1.5 rounded-lg bg-[#FFFDF9] border border-emerald-200 text-xs font-black text-emerald-700 focus:outline-none focus:border-emerald-400"
@@ -804,29 +865,23 @@ export default function AdminSettingsTab({
               })}
             </div>
           </div>
-
-          <button
-            type="submit"
-            disabled={savingConfig}
-            className="w-full py-3.5 rounded-full bg-gradient-to-r from-sky-500 via-cyan-500 to-emerald-500 text-white font-black text-sm shadow-md shadow-sky-200 hover:brightness-105 disabled:opacity-50 transition flex items-center justify-center gap-2"
-          >
-            <Save className="w-4 h-4" />
-            {savingConfig ? 'Guardando cambios...' : 'Guardar % de Retiro y Paquetes'}
-          </button>
-        </form>
+        </div>
       </AdminSectionCard>
 
       {/* 4. Canales de Pago Editables & Pasarela IPN */}
       <AdminSectionCard accent="amber" className="p-5 sm:p-6">
-        <form onSubmit={onSaveChannelsConfig} className="space-y-4">
-          <div>
-            <h2 className="font-display text-lg font-black text-[#2C241E] flex items-center gap-2">
-              <Webhook className="w-5 h-5 text-amber-600" />
-              Canales de Cobro y Pasarela IPN
-            </h2>
-            <p className="text-xs text-[#5C4E41] mt-1 leading-relaxed">
-              Activa o edita en tiempo real tus cuentas de cobro directo para compra de Diamantes o Conoscamosnos PRO y verifica NowPayments en el servidor.
-            </p>
+        <div onBlurCapture={onFlushChannels} className="space-y-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h2 className="font-display text-lg font-black text-[#2C241E] flex items-center gap-2">
+                <Webhook className="w-5 h-5 text-amber-600" />
+                Canales de Cobro y Pasarela IPN
+              </h2>
+              <p className="text-xs text-[#5C4E41] mt-1 leading-relaxed">
+                Activa o edita en tiempo real tus cuentas de cobro directo para compra de Diamantes o Conoscamosnos PRO y verifica NowPayments en el servidor.
+              </p>
+            </div>
+            <AutoSaveStatusBadge status={channelsSaveStatus} />
           </div>
 
           <div className="p-3.5 rounded-2xl bg-[#FAF4E8] border border-[#E5D9C3] space-y-2">
@@ -874,7 +929,13 @@ export default function AdminSettingsTab({
                 <button
                   type="button"
                   onClick={() =>
-                    onChannelsDraftChange((c) => ({ ...c, enableZinli: !c.enableZinli }))
+                    onChannelsDraftChange(
+                      (c) => ({ ...c, enableZinli: !c.enableZinli }),
+                      {
+                        immediate: true,
+                        toastMessage: '💳 Estado de Zinli actualizado en vivo.',
+                      }
+                    )
                   }
                   className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border ${
                     channelsDraft.enableZinli
@@ -906,7 +967,13 @@ export default function AdminSettingsTab({
                 <button
                   type="button"
                   onClick={() =>
-                    onChannelsDraftChange((c) => ({ ...c, enablePagoMovil: !c.enablePagoMovil }))
+                    onChannelsDraftChange(
+                      (c) => ({ ...c, enablePagoMovil: !c.enablePagoMovil }),
+                      {
+                        immediate: true,
+                        toastMessage: '💳 Estado de Pago Móvil actualizado en vivo.',
+                      }
+                    )
                   }
                   className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border ${
                     channelsDraft.enablePagoMovil
@@ -938,10 +1005,16 @@ export default function AdminSettingsTab({
                 <button
                   type="button"
                   onClick={() =>
-                    onChannelsDraftChange((c) => ({
-                      ...c,
-                      enableBinancePay: !c.enableBinancePay,
-                    }))
+                    onChannelsDraftChange(
+                      (c) => ({
+                        ...c,
+                        enableBinancePay: !c.enableBinancePay,
+                      }),
+                      {
+                        immediate: true,
+                        toastMessage: '💳 Estado de Binance Pay actualizado en vivo.',
+                      }
+                    )
                   }
                   className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border ${
                     channelsDraft.enableBinancePay && channelsDraft.binancePayId.trim()
@@ -990,16 +1063,7 @@ export default function AdminSettingsTab({
               </span>
             </div>
           </div>
-
-          <button
-            type="submit"
-            disabled={savingChannels}
-            className="w-full py-3.5 rounded-full bg-gradient-to-r from-amber-500 via-orange-400 to-rose-400 text-white font-black text-sm shadow-md shadow-amber-200 hover:brightness-105 disabled:opacity-50 transition flex items-center justify-center gap-2"
-          >
-            <Save className="w-4 h-4" />
-            {savingChannels ? 'Guardando canales...' : 'Guardar Canales de Cobro'}
-          </button>
-        </form>
+        </div>
       </AdminSectionCard>
     </div>
   );

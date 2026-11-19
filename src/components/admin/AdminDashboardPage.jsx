@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BadgeCheck,
@@ -28,6 +28,7 @@ import {
   setUserVerificationBadge,
   subscribeAllUsersForAdmin,
   updateEconomyConfig,
+  updatePaymentChannelsConfig,
   updatePlatformAccessConfig,
   updateProPlansConfig,
 } from '../../services/adminService';
@@ -48,6 +49,13 @@ import {
   rejectWithdrawalRequest,
   subscribeAllWithdrawals,
 } from '../../services/withdrawalService';
+import {
+  createDebouncedAutoSaver,
+  createSectionSignature,
+  validateAccessPolicyDraft,
+  validateEconomyDraft,
+  validateProPlansDraft,
+} from '../../utils/autoSaveHelpers';
 import {
   formatUSD,
   isBoostActive,
@@ -94,54 +102,327 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
   const [cleanupModalOpen, setCleanupModalOpen] = useState(false);
   const [cleaningRevenue, setCleaningRevenue] = useState(false);
 
-  const [baseDiamondPrice, setBaseDiamondPrice] = useState(
-    String(economyConfig?.baseDiamondValueUSD ?? 0.01)
-  );
-  const [creatorSharePct, setCreatorSharePct] = useState(
-    String(Math.round((economyConfig?.creatorShareRatio ?? 0.6) * 100))
-  );
-  const [minWithdrawDiamonds, setMinWithdrawDiamonds] = useState(
-    String(economyConfig?.minWithdrawalDiamonds ?? 500)
-  );
-  const [proPlansDraft, setProPlansDraft] = useState(
-    economyConfig?.proPlans || PRO_PLANS
-  );
-  const [boostPlansDraft, setBoostPlansDraft] = useState(
-    economyConfig?.boostPlans || BOOST_PLANS
-  );
-  const [giftsDraft, setGiftsDraft] = useState(
-    economyConfig?.virtualGifts || VIRTUAL_GIFTS
-  );
-  const [packagesDraft, setPackagesDraft] = useState(
-    economyConfig?.diamondPackages || economyConfig?.coinPackages || DIAMOND_PACKAGES
-  );
-  const [savingConfig, setSavingConfig] = useState(false);
-  const [savingProPlans, setSavingProPlans] = useState(false);
+  const adminUidRef = useRef(userProfile?.uid);
+  const onSuccessRef = useRef(onSuccess);
+  const onErrorRef = useRef(onError);
+  adminUidRef.current = userProfile?.uid;
+  onSuccessRef.current = onSuccess;
+  onErrorRef.current = onError;
 
-  const [accessDraft, setAccessDraft] = useState(() => resolveAccessPolicy(economyConfig));
-  const [savingAccess, setSavingAccess] = useState(false);
+  const initialRemoteRef = useRef(null);
+  if (!initialRemoteRef.current) {
+    initialRemoteRef.current = {
+      base: String(economyConfig?.baseDiamondValueUSD ?? 0.01),
+      sharePct: String(Math.round((economyConfig?.creatorShareRatio ?? 0.6) * 100)),
+      minWithdraw: String(economyConfig?.minWithdrawalDiamonds ?? 500),
+      proPlans: economyConfig?.proPlans || PRO_PLANS,
+      boostPlans: economyConfig?.boostPlans || BOOST_PLANS,
+      gifts: economyConfig?.virtualGifts || VIRTUAL_GIFTS,
+      packages:
+        economyConfig?.diamondPackages || economyConfig?.coinPackages || DIAMOND_PACKAGES,
+      access: resolveAccessPolicy(economyConfig),
+      channels: {
+        ...DEFAULT_LIVE_ECONOMY.paymentChannels,
+        ...(economyConfig?.paymentChannels || {}),
+      },
+    };
+  }
+  const initSnap = initialRemoteRef.current;
 
-  const [channelsDraft, setChannelsDraft] = useState(
-    () => economyConfig?.paymentChannels || DEFAULT_LIVE_ECONOMY.paymentChannels
-  );
-  const [savingChannels, setSavingChannels] = useState(false);
+  const [baseDiamondPrice, setBaseDiamondPrice] = useState(initSnap.base);
+  const [creatorSharePct, setCreatorSharePct] = useState(initSnap.sharePct);
+  const [minWithdrawDiamonds, setMinWithdrawDiamonds] = useState(initSnap.minWithdraw);
+  const [proPlansDraft, setProPlansDraft] = useState(initSnap.proPlans);
+  const [boostPlansDraft, setBoostPlansDraft] = useState(initSnap.boostPlans);
+  const [giftsDraft, setGiftsDraft] = useState(initSnap.gifts);
+  const [packagesDraft, setPackagesDraft] = useState(initSnap.packages);
+  const [accessDraft, setAccessDraft] = useState(initSnap.access);
+  const [channelsDraft, setChannelsDraft] = useState(initSnap.channels);
+
+  const [accessSaveStatus, setAccessSaveStatus] = useState({ state: 'idle', message: '' });
+  const [proPlansSaveStatus, setProPlansSaveStatus] = useState({ state: 'idle', message: '' });
+  const [economySaveStatus, setEconomySaveStatus] = useState({ state: 'idle', message: '' });
+  const [channelsSaveStatus, setChannelsSaveStatus] = useState({ state: 'idle', message: '' });
+
+  const draftsRef = useRef({
+    accessDraft: initSnap.access,
+    proPlansDraft: initSnap.proPlans,
+    boostPlansDraft: initSnap.boostPlans,
+    giftsDraft: initSnap.gifts,
+    baseDiamondPrice: initSnap.base,
+    creatorSharePct: initSnap.sharePct,
+    minWithdrawDiamonds: initSnap.minWithdraw,
+    packagesDraft: initSnap.packages,
+    channelsDraft: initSnap.channels,
+  });
+
+  const buildRemoteSections = (cfg) => {
+    const remoteBase = String(cfg?.baseDiamondValueUSD ?? 0.01);
+    const remoteSharePct = String(Math.round((cfg?.creatorShareRatio ?? 0.6) * 100));
+    const remoteMinWithdraw = String(cfg?.minWithdrawalDiamonds ?? 500);
+    const remoteProPlans = cfg?.proPlans || PRO_PLANS;
+    const remoteBoostPlans = cfg?.boostPlans || BOOST_PLANS;
+    const remoteGifts = cfg?.virtualGifts || VIRTUAL_GIFTS;
+    const remotePackages = cfg?.diamondPackages || cfg?.coinPackages || DIAMOND_PACKAGES;
+    const remoteAccess = resolveAccessPolicy(cfg);
+    const rawChannels = {
+      ...DEFAULT_LIVE_ECONOMY.paymentChannels,
+      ...(cfg?.paymentChannels || {}),
+    };
+    const canonicalChannels = {
+      enableZinli: Boolean(rawChannels.enableZinli),
+      zinliEmail: String(rawChannels.zinliEmail || '').trim(),
+      enablePagoMovil: Boolean(rawChannels.enablePagoMovil),
+      pagoMovilInfo: String(rawChannels.pagoMovilInfo || '').trim(),
+      enableBinancePay: Boolean(rawChannels.enableBinancePay),
+      binancePayId: String(rawChannels.binancePayId || '').trim(),
+    };
+    const accessVal = validateAccessPolicyDraft(remoteAccess);
+    const proVal = validateProPlansDraft({
+      proPlansDraft: remoteProPlans,
+      boostPlansDraft: remoteBoostPlans,
+      giftsDraft: remoteGifts,
+    });
+    const ecoVal = validateEconomyDraft({
+      baseDiamondPrice: remoteBase,
+      creatorSharePct: remoteSharePct,
+      minWithdrawDiamonds: remoteMinWithdraw,
+      packagesDraft: remotePackages,
+    });
+    return {
+      access: {
+        raw: remoteAccess,
+        sig: createSectionSignature(accessVal.valid ? accessVal.payload : remoteAccess),
+      },
+      proPlans: {
+        raw: { proPlans: remoteProPlans, boostPlans: remoteBoostPlans, gifts: remoteGifts },
+        sig: createSectionSignature(
+          proVal.valid
+            ? proVal.payload
+            : { proPlans: remoteProPlans, boostPlans: remoteBoostPlans, virtualGifts: remoteGifts }
+        ),
+      },
+      economy: {
+        raw: {
+          base: remoteBase,
+          sharePct: remoteSharePct,
+          minWithdraw: remoteMinWithdraw,
+          packages: remotePackages,
+        },
+        sig: createSectionSignature(ecoVal.valid ? ecoVal.payload : remotePackages),
+      },
+      channels: {
+        raw: rawChannels,
+        sig: createSectionSignature(canonicalChannels),
+      },
+    };
+  };
+
+  const initialSectionsSigs = useMemo(() => {
+    const s = buildRemoteSections(economyConfig);
+    return {
+      access: s.access.sig,
+      proPlans: s.proPlans.sig,
+      economy: s.economy.sig,
+      channels: s.channels.sig,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const lastRemoteSigRef = useRef({ ...initialSectionsSigs });
+  const lastSavedSigRef = useRef({ ...initialSectionsSigs });
+
+  const accessSaverRef = useRef(null);
+  const proPlansSaverRef = useRef(null);
+  const economySaverRef = useRef(null);
+  const channelsSaverRef = useRef(null);
+
+  if (!accessSaverRef.current) {
+    accessSaverRef.current = createDebouncedAutoSaver({
+      delayMs: 650,
+      onSave: async ({ payload, toastMessage }) => {
+        const adminId = adminUidRef.current;
+        if (!adminId) return;
+        const sig = createSectionSignature(payload);
+        if (sig === lastSavedSigRef.current.access) {
+          setAccessSaveStatus({ state: 'saved', message: '' });
+          return;
+        }
+        setAccessSaveStatus({ state: 'saving', message: '' });
+        try {
+          await updatePlatformAccessConfig({ adminId, ...payload });
+          lastSavedSigRef.current.access = sig;
+          setAccessSaveStatus({ state: 'saved', message: '' });
+          if (toastMessage) onSuccessRef.current?.(toastMessage);
+        } catch (err) {
+          const msg = err?.message || 'No se pudo guardar la política global.';
+          setAccessSaveStatus({ state: 'error', message: msg });
+          onErrorRef.current?.(msg);
+        }
+      },
+    });
+  }
+
+  if (!proPlansSaverRef.current) {
+    proPlansSaverRef.current = createDebouncedAutoSaver({
+      delayMs: 650,
+      onSave: async ({ payload, toastMessage }) => {
+        const adminId = adminUidRef.current;
+        if (!adminId) return;
+        const sig = createSectionSignature(payload);
+        if (sig === lastSavedSigRef.current.proPlans) {
+          setProPlansSaveStatus({ state: 'saved', message: '' });
+          return;
+        }
+        setProPlansSaveStatus({ state: 'saving', message: '' });
+        try {
+          await updateProPlansConfig({ adminId, ...payload });
+          lastSavedSigRef.current.proPlans = sig;
+          setProPlansSaveStatus({ state: 'saved', message: '' });
+          if (toastMessage) onSuccessRef.current?.(toastMessage);
+        } catch (err) {
+          const msg = err?.message || 'No se pudieron guardar los planes PRO y Boost.';
+          setProPlansSaveStatus({ state: 'error', message: msg });
+          onErrorRef.current?.(msg);
+        }
+      },
+    });
+  }
+
+  if (!economySaverRef.current) {
+    economySaverRef.current = createDebouncedAutoSaver({
+      delayMs: 650,
+      onSave: async ({ payload, toastMessage }) => {
+        const adminId = adminUidRef.current;
+        if (!adminId) return;
+        const sig = createSectionSignature(payload);
+        if (sig === lastSavedSigRef.current.economy) {
+          setEconomySaveStatus({ state: 'saved', message: '' });
+          return;
+        }
+        setEconomySaveStatus({ state: 'saving', message: '' });
+        try {
+          await updateEconomyConfig({ adminId, ...payload });
+          lastSavedSigRef.current.economy = sig;
+          setEconomySaveStatus({ state: 'saved', message: '' });
+          if (toastMessage) onSuccessRef.current?.(toastMessage);
+        } catch (err) {
+          const msg = err?.message || 'No se pudo guardar la configuración económica.';
+          setEconomySaveStatus({ state: 'error', message: msg });
+          onErrorRef.current?.(msg);
+        }
+      },
+    });
+  }
+
+  if (!channelsSaverRef.current) {
+    channelsSaverRef.current = createDebouncedAutoSaver({
+      delayMs: 650,
+      onSave: async ({ payload, toastMessage }) => {
+        const adminId = adminUidRef.current;
+        if (!adminId) return;
+        const sig = createSectionSignature(payload);
+        if (sig === lastSavedSigRef.current.channels) {
+          setChannelsSaveStatus({ state: 'saved', message: '' });
+          return;
+        }
+        setChannelsSaveStatus({ state: 'saving', message: '' });
+        try {
+          await updatePaymentChannelsConfig({ adminId, paymentChannels: payload });
+          lastSavedSigRef.current.channels = sig;
+          setChannelsSaveStatus({ state: 'saved', message: '' });
+          if (toastMessage) onSuccessRef.current?.(toastMessage);
+        } catch (err) {
+          const msg = err?.message || 'No se pudieron guardar los canales de cobro.';
+          setChannelsSaveStatus({ state: 'error', message: msg });
+          onErrorRef.current?.(msg);
+        }
+      },
+    });
+  }
+
+  // Sincronización por sección desde Firestore: nunca sobrescribe un bloque mientras tiene cambios pendientes/en vuelo
+  useEffect(() => {
+    const sections = buildRemoteSections(economyConfig);
+
+    if (sections.access.sig !== lastRemoteSigRef.current.access) {
+      lastRemoteSigRef.current.access = sections.access.sig;
+      if (
+        !accessSaverRef.current?.isBusyOrPending() &&
+        sections.access.sig !== lastSavedSigRef.current.access
+      ) {
+        lastSavedSigRef.current.access = sections.access.sig;
+        draftsRef.current.accessDraft = sections.access.raw;
+        setAccessDraft(sections.access.raw);
+      }
+    }
+
+    if (sections.proPlans.sig !== lastRemoteSigRef.current.proPlans) {
+      lastRemoteSigRef.current.proPlans = sections.proPlans.sig;
+      if (
+        !proPlansSaverRef.current?.isBusyOrPending() &&
+        sections.proPlans.sig !== lastSavedSigRef.current.proPlans
+      ) {
+        lastSavedSigRef.current.proPlans = sections.proPlans.sig;
+        draftsRef.current.proPlansDraft = sections.proPlans.raw.proPlans;
+        draftsRef.current.boostPlansDraft = sections.proPlans.raw.boostPlans;
+        draftsRef.current.giftsDraft = sections.proPlans.raw.gifts;
+        setProPlansDraft(sections.proPlans.raw.proPlans);
+        setBoostPlansDraft(sections.proPlans.raw.boostPlans);
+        setGiftsDraft(sections.proPlans.raw.gifts);
+      }
+    }
+
+    if (sections.economy.sig !== lastRemoteSigRef.current.economy) {
+      lastRemoteSigRef.current.economy = sections.economy.sig;
+      if (
+        !economySaverRef.current?.isBusyOrPending() &&
+        sections.economy.sig !== lastSavedSigRef.current.economy
+      ) {
+        lastSavedSigRef.current.economy = sections.economy.sig;
+        draftsRef.current.baseDiamondPrice = sections.economy.raw.base;
+        draftsRef.current.creatorSharePct = sections.economy.raw.sharePct;
+        draftsRef.current.minWithdrawDiamonds = sections.economy.raw.minWithdraw;
+        draftsRef.current.packagesDraft = sections.economy.raw.packages;
+        setBaseDiamondPrice(sections.economy.raw.base);
+        setCreatorSharePct(sections.economy.raw.sharePct);
+        setMinWithdrawDiamonds(sections.economy.raw.minWithdraw);
+        setPackagesDraft(sections.economy.raw.packages);
+      }
+    }
+
+    if (sections.channels.sig !== lastRemoteSigRef.current.channels) {
+      lastRemoteSigRef.current.channels = sections.channels.sig;
+      if (
+        !channelsSaverRef.current?.isBusyOrPending() &&
+        sections.channels.sig !== lastSavedSigRef.current.channels
+      ) {
+        lastSavedSigRef.current.channels = sections.channels.sig;
+        draftsRef.current.channelsDraft = sections.channels.raw;
+        setChannelsDraft(sections.channels.raw);
+      }
+    }
+  }, [economyConfig]);
+
+  const prevTabRef = useRef(activeTab);
+  useEffect(() => {
+    if (prevTabRef.current === 'settings' && activeTab !== 'settings') {
+      accessSaverRef.current?.flush();
+      proPlansSaverRef.current?.flush();
+      economySaverRef.current?.flush();
+      channelsSaverRef.current?.flush();
+    }
+    prevTabRef.current = activeTab;
+  }, [activeTab]);
 
   useEffect(() => {
-    setBaseDiamondPrice(String(economyConfig?.baseDiamondValueUSD ?? 0.01));
-    setCreatorSharePct(String(Math.round((economyConfig?.creatorShareRatio ?? 0.6) * 100)));
-    setMinWithdrawDiamonds(String(economyConfig?.minWithdrawalDiamonds ?? 500));
-    setProPlansDraft(economyConfig?.proPlans || PRO_PLANS);
-    setBoostPlansDraft(economyConfig?.boostPlans || BOOST_PLANS);
-    setGiftsDraft(economyConfig?.virtualGifts || VIRTUAL_GIFTS);
-    setPackagesDraft(
-      economyConfig?.diamondPackages || economyConfig?.coinPackages || DIAMOND_PACKAGES
-    );
-    setAccessDraft(resolveAccessPolicy(economyConfig));
-    setChannelsDraft({
-      ...DEFAULT_LIVE_ECONOMY.paymentChannels,
-      ...(economyConfig?.paymentChannels || {}),
-    });
-  }, [economyConfig]);
+    return () => {
+      accessSaverRef.current?.flush();
+      proPlansSaverRef.current?.flush();
+      economySaverRef.current?.flush();
+      channelsSaverRef.current?.flush();
+    };
+  }, []);
 
   useEffect(() => {
     const unsubUsers = subscribeAllUsersForAdmin(setUsers);
@@ -553,89 +834,165 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
     }
   };
 
-  const handleSaveEconomyConfig = async (e) => {
-    e.preventDefault();
-    if (savingConfig) return;
-    setSavingConfig(true);
-    try {
-      await updateEconomyConfig({
-        adminId: userProfile.uid,
-        baseDiamondValueUSD: Number(baseDiamondPrice),
-        creatorShareRatio: Number(creatorSharePct) / 100,
-        minWithdrawalDiamonds: Number(minWithdrawDiamonds),
-        diamondPackages: packagesDraft,
-      });
-      onSuccess?.('💎 Configuración económica y % de retiro actualizados en tiempo real.');
-    } catch (err) {
-      onError?.(err.message || 'No se pudo guardar la configuración económica.');
-    } finally {
-      setSavingConfig(false);
+  const handleAccessDraftChange = (updater, { immediate = false, toastMessage = '' } = {}) => {
+    const next = typeof updater === 'function' ? updater(draftsRef.current.accessDraft) : updater;
+    draftsRef.current.accessDraft = next;
+    setAccessDraft(next);
+
+    const check = validateAccessPolicyDraft(next);
+    if (!check.valid) {
+      accessSaverRef.current?.cancel();
+      setAccessSaveStatus({ state: 'error', message: check.reason });
+      return;
     }
+
+    const sig = createSectionSignature(check.payload);
+    if (sig === lastSavedSigRef.current.access) {
+      accessSaverRef.current?.cancel();
+      setAccessSaveStatus({ state: 'saved', message: '' });
+      return;
+    }
+
+    setAccessSaveStatus({ state: immediate ? 'saving' : 'pending', message: '' });
+    accessSaverRef.current?.schedule(
+      { payload: check.payload, toastMessage },
+      { immediate }
+    );
   };
 
-  const handleSaveProPlansConfig = async (e) => {
-    e.preventDefault();
-    if (savingProPlans) return;
-    setSavingProPlans(true);
-    try {
-      await updateProPlansConfig({
-        adminId: userProfile.uid,
-        proPlans: proPlansDraft,
-        boostPlans: boostPlansDraft,
-        virtualGifts: giftsDraft,
-      });
-      onSuccess?.('👑 Planes Conoscamosnos PRO, Boost VIP y Regalos actualizados en tiempo real.');
-    } catch (err) {
-      onError?.(err.message || 'No se pudieron guardar los planes PRO y Boost.');
-    } finally {
-      setSavingProPlans(false);
-    }
-  };
-
-  const persistPlatformPolicy = async (channels = null) => {
-    await updatePlatformAccessConfig({
-      adminId: userProfile.uid,
-      unlockMode: accessDraft.unlockMode,
-      enableDiamondCharges: accessDraft.enableDiamondCharges,
-      enableRewardedAds: accessDraft.enableRewardedAds,
-      adDurationSeconds: Number(accessDraft.adDurationSeconds),
-      monetagDirectLink: accessDraft.monetagDirectLink,
-      unlockLikeDiamonds: Number(accessDraft.unlockLikeDiamonds),
-      unlockAllLikesDiamonds: Number(accessDraft.unlockAllLikesDiamonds),
-      unlockChatDiamonds: Number(accessDraft.unlockChatDiamonds),
-      unlockExclusivePhotoDiamonds: Number(accessDraft.unlockExclusivePhotoDiamonds),
-      estimatedAdCpmUSD: Number(accessDraft.estimatedAdCpmUSD),
-      paymentChannels: channels,
+  const scheduleProPlansSave = ({ immediate = false, toastMessage = '' } = {}) => {
+    const check = validateProPlansDraft({
+      proPlansDraft: draftsRef.current.proPlansDraft,
+      boostPlansDraft: draftsRef.current.boostPlansDraft,
+      giftsDraft: draftsRef.current.giftsDraft,
     });
+    if (!check.valid) {
+      proPlansSaverRef.current?.cancel();
+      setProPlansSaveStatus({ state: 'error', message: check.reason });
+      return;
+    }
+
+    const sig = createSectionSignature(check.payload);
+    if (sig === lastSavedSigRef.current.proPlans) {
+      proPlansSaverRef.current?.cancel();
+      setProPlansSaveStatus({ state: 'saved', message: '' });
+      return;
+    }
+
+    setProPlansSaveStatus({ state: immediate ? 'saving' : 'pending', message: '' });
+    proPlansSaverRef.current?.schedule(
+      { payload: check.payload, toastMessage },
+      { immediate }
+    );
   };
 
-  const handleSaveAccessConfig = async (e) => {
-    e.preventDefault();
-    if (savingAccess) return;
-    setSavingAccess(true);
-    try {
-      await persistPlatformPolicy();
-      onSuccess?.('✅ Política global de cobros y anuncios aplicada en tiempo real.');
-    } catch (err) {
-      onError?.(err.message || 'No se pudo guardar la política global.');
-    } finally {
-      setSavingAccess(false);
-    }
+  const handleProPlansDraftChange = (updater, opts) => {
+    const next = typeof updater === 'function' ? updater(draftsRef.current.proPlansDraft) : updater;
+    draftsRef.current.proPlansDraft = next;
+    setProPlansDraft(next);
+    scheduleProPlansSave(opts);
   };
 
-  const handleSaveChannelsConfig = async (e) => {
-    e.preventDefault();
-    if (savingChannels) return;
-    setSavingChannels(true);
-    try {
-      await persistPlatformPolicy(channelsDraft);
-      onSuccess?.('💳 Canales de cobro directo actualizados en tiempo real.');
-    } catch (err) {
-      onError?.(err.message || 'No se pudieron guardar los canales de cobro.');
-    } finally {
-      setSavingChannels(false);
-    }
+  const handleBoostPlansDraftChange = (updater, opts) => {
+    const next =
+      typeof updater === 'function' ? updater(draftsRef.current.boostPlansDraft) : updater;
+    draftsRef.current.boostPlansDraft = next;
+    setBoostPlansDraft(next);
+    scheduleProPlansSave(opts);
   };
+
+  const handleGiftsDraftChange = (updater, opts) => {
+    const next = typeof updater === 'function' ? updater(draftsRef.current.giftsDraft) : updater;
+    draftsRef.current.giftsDraft = next;
+    setGiftsDraft(next);
+    scheduleProPlansSave(opts);
+  };
+
+  const scheduleEconomySave = ({ immediate = false, toastMessage = '' } = {}) => {
+    const check = validateEconomyDraft({
+      baseDiamondPrice: draftsRef.current.baseDiamondPrice,
+      creatorSharePct: draftsRef.current.creatorSharePct,
+      minWithdrawDiamonds: draftsRef.current.minWithdrawDiamonds,
+      packagesDraft: draftsRef.current.packagesDraft,
+    });
+    if (!check.valid) {
+      economySaverRef.current?.cancel();
+      setEconomySaveStatus({ state: 'error', message: check.reason });
+      return;
+    }
+
+    const sig = createSectionSignature(check.payload);
+    if (sig === lastSavedSigRef.current.economy) {
+      economySaverRef.current?.cancel();
+      setEconomySaveStatus({ state: 'saved', message: '' });
+      return;
+    }
+
+    setEconomySaveStatus({ state: immediate ? 'saving' : 'pending', message: '' });
+    economySaverRef.current?.schedule(
+      { payload: check.payload, toastMessage },
+      { immediate }
+    );
+  };
+
+  const handleBaseDiamondPriceChange = (val, opts) => {
+    draftsRef.current.baseDiamondPrice = val;
+    setBaseDiamondPrice(val);
+    scheduleEconomySave(opts);
+  };
+
+  const handleCreatorSharePctChange = (val, opts) => {
+    draftsRef.current.creatorSharePct = val;
+    setCreatorSharePct(val);
+    scheduleEconomySave(opts);
+  };
+
+  const handleMinWithdrawDiamondsChange = (val, opts) => {
+    draftsRef.current.minWithdrawDiamonds = val;
+    setMinWithdrawDiamonds(val);
+    scheduleEconomySave(opts);
+  };
+
+  const handlePackagesDraftChange = (updater, opts) => {
+    const next = typeof updater === 'function' ? updater(draftsRef.current.packagesDraft) : updater;
+    draftsRef.current.packagesDraft = next;
+    setPackagesDraft(next);
+    scheduleEconomySave(opts);
+  };
+
+  const handleChannelsDraftChange = (updater, { immediate = false, toastMessage = '' } = {}) => {
+    const next =
+      typeof updater === 'function' ? updater(draftsRef.current.channelsDraft) : updater;
+    draftsRef.current.channelsDraft = next;
+    setChannelsDraft(next);
+
+    const canonicalPayload = {
+      enableZinli: Boolean(next?.enableZinli),
+      zinliEmail: String(next?.zinliEmail || '').trim(),
+      enablePagoMovil: Boolean(next?.enablePagoMovil),
+      pagoMovilInfo: String(next?.pagoMovilInfo || '').trim(),
+      enableBinancePay: Boolean(next?.enableBinancePay),
+      binancePayId: String(next?.binancePayId || '').trim(),
+    };
+
+    const sig = createSectionSignature(canonicalPayload);
+    if (sig === lastSavedSigRef.current.channels) {
+      channelsSaverRef.current?.cancel();
+      setChannelsSaveStatus({ state: 'saved', message: '' });
+      return;
+    }
+
+    setChannelsSaveStatus({ state: immediate ? 'saving' : 'pending', message: '' });
+    channelsSaverRef.current?.schedule(
+      { payload: canonicalPayload, toastMessage },
+      { immediate }
+    );
+  };
+
+  const flushAccessSave = () => accessSaverRef.current?.flush();
+  const flushProPlansSave = () => proPlansSaverRef.current?.flush();
+  const flushEconomySave = () => economySaverRef.current?.flush();
+  const flushChannelsSave = () => channelsSaverRef.current?.flush();
 
   const webhookEndpointUrl =
     typeof window !== 'undefined'
@@ -811,31 +1168,31 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
         {activeTab === 'settings' && (
           <AdminSettingsTab
             baseDiamondPrice={baseDiamondPrice}
-            onBaseDiamondPriceChange={setBaseDiamondPrice}
+            onBaseDiamondPriceChange={handleBaseDiamondPriceChange}
             creatorSharePct={creatorSharePct}
-            onCreatorSharePctChange={setCreatorSharePct}
+            onCreatorSharePctChange={handleCreatorSharePctChange}
             minWithdrawDiamonds={minWithdrawDiamonds}
-            onMinWithdrawDiamondsChange={setMinWithdrawDiamonds}
+            onMinWithdrawDiamondsChange={handleMinWithdrawDiamondsChange}
             proPlansDraft={proPlansDraft}
-            onProPlansDraftChange={setProPlansDraft}
+            onProPlansDraftChange={handleProPlansDraftChange}
             boostPlansDraft={boostPlansDraft}
-            onBoostPlansDraftChange={setBoostPlansDraft}
+            onBoostPlansDraftChange={handleBoostPlansDraftChange}
             giftsDraft={giftsDraft}
-            onGiftsDraftChange={setGiftsDraft}
-            savingProPlans={savingProPlans}
-            onSaveProPlansConfig={handleSaveProPlansConfig}
+            onGiftsDraftChange={handleGiftsDraftChange}
+            proPlansSaveStatus={proPlansSaveStatus}
+            onFlushProPlans={flushProPlansSave}
             packagesDraft={packagesDraft}
-            onPackagesDraftChange={setPackagesDraft}
-            savingConfig={savingConfig}
-            onSaveEconomyConfig={handleSaveEconomyConfig}
+            onPackagesDraftChange={handlePackagesDraftChange}
+            economySaveStatus={economySaveStatus}
+            onFlushEconomy={flushEconomySave}
             accessDraft={accessDraft}
-            onAccessDraftChange={setAccessDraft}
-            savingAccess={savingAccess}
-            onSaveAccessConfig={handleSaveAccessConfig}
+            onAccessDraftChange={handleAccessDraftChange}
+            accessSaveStatus={accessSaveStatus}
+            onFlushAccess={flushAccessSave}
             channelsDraft={channelsDraft}
-            onChannelsDraftChange={setChannelsDraft}
-            savingChannels={savingChannels}
-            onSaveChannelsConfig={handleSaveChannelsConfig}
+            onChannelsDraftChange={handleChannelsDraftChange}
+            channelsSaveStatus={channelsSaveStatus}
+            onFlushChannels={flushChannelsSave}
             webhookEndpointUrl={webhookEndpointUrl}
             copiedKey={copiedKey}
             onCopyWebhook={() => handleCopyText('webhook_url', webhookEndpointUrl, 'Endpoint IPN')}

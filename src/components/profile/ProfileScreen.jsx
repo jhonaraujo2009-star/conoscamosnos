@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AlertCircle,
   BadgeCheck,
   Bell,
   Briefcase,
   CheckCircle2,
   Crown,
-  Download,
   Eye,
   Flame,
   Gem,
@@ -19,10 +19,8 @@ import {
   Plus,
   Quote,
   Ruler,
-  Save,
   Settings,
   ShieldCheck,
-  Smartphone,
   Sparkles,
   Unlock,
   X,
@@ -42,13 +40,17 @@ import {
   resolveAccessPolicy,
 } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
-import { usePwaInstall } from '../../hooks/usePwaInstall';
 import { getUserCloudinaryFolder, uploadImageToCloudinary } from '../../services/cloudinaryService';
 import {
   requestBlueCheckVerification,
   subscribeUserReports,
   updateUserProfile,
 } from '../../services/userService';
+import {
+  createDebouncedAutoSaver,
+  createSectionSignature,
+  validateProfileDraft,
+} from '../../utils/autoSaveHelpers';
 import {
   calculateProfileCompletion,
   calculateWithdrawalBreakdown,
@@ -98,14 +100,12 @@ export default function ProfileScreen({
   const [myReportsCount, setMyReportsCount] = useState(0);
   const [promptSheetIdx, setPromptSheetIdx] = useState(null);
   const [promptDraft, setPromptDraft] = useState('');
-  const [savingPrompt, setSavingPrompt] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [promptSaveStatus, setPromptSaveStatus] = useState({ state: 'idle', message: '' });
+  const [profileSaveStatus, setProfileSaveStatus] = useState({ state: 'idle', message: '' });
   const [togglingGiftGate, setTogglingGiftGate] = useState(false);
   const [requestingCheck, setRequestingCheck] = useState(false);
   const [uploadingQuickPhoto, setUploadingQuickPhoto] = useState(false);
-  const [showDownloadHint, setShowDownloadHint] = useState(false);
   const quickFileInputRef = useRef(null);
-  const { isInstalled, isIOS, downloadOrInstallApp } = usePwaInstall();
 
   const [name, setName] = useState(userProfile?.name || '');
   const [age, setAge] = useState(userProfile?.age || 18);
@@ -127,29 +127,148 @@ export default function ProfileScreen({
   const [prompts, setPrompts] = useState(userProfile?.prompts || ['', '']);
   const [togglingExclusiveUrl, setTogglingExclusiveUrl] = useState('');
 
+  const userProfileRef = useRef(userProfile);
+  const onErrorRef = useRef(onError);
+  userProfileRef.current = userProfile;
+  onErrorRef.current = onError;
+
+  const editorDraftRef = useRef({
+    name: userProfile?.name || '',
+    age: userProfile?.age || 18,
+    gender: userProfile?.gender || GENDERS[0],
+    interestedIn: userProfile?.interestedIn || 'Todos',
+    countryCode: userProfile?.country?.code || COUNTRIES[0].code,
+    city: userProfile?.city || '',
+    lookingFor: userProfile?.lookingFor || LOOKING_FOR_OPTIONS[0],
+    bio: userProfile?.bio || '',
+    height: userProfile?.height || '',
+    job: userProfile?.job || '',
+    education: userProfile?.education || '',
+    lifestyle: userProfile?.lifestyle || '',
+    interests: userProfile?.interests || [],
+    photos: userProfile?.photos || [],
+    exclusivePhotoUrls: userProfile?.exclusivePhotoUrls || [],
+    prompts: userProfile?.prompts || ['', ''],
+  });
+  const lastSavedProfileSigRef = useRef('');
+  const lastSavedPromptSigRef = useRef('');
+
+  const promptSaverRef = useRef(null);
+  if (!promptSaverRef.current) {
+    promptSaverRef.current = createDebouncedAutoSaver({
+      delayMs: 550,
+      onSave: async ({ idx, text }) => {
+        const uid = userProfileRef.current?.uid;
+        if (!uid || idx === null || idx === undefined) return;
+        const cleanText = String(text || '').trim();
+        const existingPrompts = Array.isArray(userProfileRef.current?.prompts)
+          ? [...userProfileRef.current.prompts]
+          : [...(editorDraftRef.current.prompts || ['', ''])];
+        while (existingPrompts.length < 2) existingPrompts.push('');
+        existingPrompts[idx] = cleanText;
+
+        const sig = createSectionSignature(existingPrompts);
+        if (sig === lastSavedPromptSigRef.current) {
+          setPromptSaveStatus({ state: 'saved', message: '' });
+          return;
+        }
+
+        setPromptSaveStatus({ state: 'saving', message: '' });
+        try {
+          await updateUserProfile(uid, { prompts: existingPrompts });
+          lastSavedPromptSigRef.current = sig;
+          editorDraftRef.current.prompts = existingPrompts;
+          setPrompts(existingPrompts);
+          setPromptSaveStatus({ state: 'saved', message: '' });
+        } catch (err) {
+          const msg = err?.message || 'No se pudo guardar la frase.';
+          setPromptSaveStatus({ state: 'error', message: msg });
+          onErrorRef.current?.(msg);
+        }
+      },
+    });
+  }
+
+  const profileSaverRef = useRef(null);
+  if (!profileSaverRef.current) {
+    profileSaverRef.current = createDebouncedAutoSaver({
+      delayMs: 650,
+      onSave: async ({ sig, updates }) => {
+        const uid = userProfileRef.current?.uid;
+        if (!uid) return;
+        if (sig === lastSavedProfileSigRef.current) {
+          setProfileSaveStatus({ state: 'saved', message: '' });
+          return;
+        }
+        setProfileSaveStatus({ state: 'saving', message: '' });
+        try {
+          await updateUserProfile(uid, updates);
+          lastSavedProfileSigRef.current = sig;
+          setProfileSaveStatus({ state: 'saved', message: '' });
+        } catch (err) {
+          const msg = err?.message || 'No se pudo actualizar tu perfil.';
+          setProfileSaveStatus({ state: 'error', message: msg });
+          onErrorRef.current?.(msg);
+        }
+      },
+    });
+  }
+
   useEffect(() => {
     if (!userProfile?.uid) return;
-    setName(userProfile.name || '');
-    setAge(userProfile.age || 18);
-    setGender(userProfile.gender || GENDERS[0]);
-    setInterestedIn(userProfile.interestedIn || 'Todos');
-    setCountryCode(userProfile.country?.code || COUNTRIES[0].code);
-    setCity(userProfile.city || '');
-    setLookingFor(userProfile.lookingFor || LOOKING_FOR_OPTIONS[0]);
-    setBio(userProfile.bio || '');
-    setHeight(userProfile.height || '');
-    setJob(userProfile.job || '');
-    setEducation(userProfile.education || '');
-    setLifestyle(userProfile.lifestyle || '');
-    setInterests(userProfile.interests || []);
-    setPhotos(userProfile.photos || []);
-    setExclusivePhotoUrls(userProfile.exclusivePhotoUrls || []);
-    setPrompts(
-      Array.isArray(userProfile.prompts) && userProfile.prompts.length >= 2
-        ? userProfile.prompts.slice(0, 2)
-        : [userProfile.prompts?.[0] || '', userProfile.prompts?.[1] || '']
-    );
+    if (!editorOpen && profileSaverRef.current?.isBusyOrPending()) return;
+    const hydrated = {
+      name: userProfile.name || '',
+      age: userProfile.age || 18,
+      gender: userProfile.gender || GENDERS[0],
+      interestedIn: userProfile.interestedIn || 'Todos',
+      countryCode: userProfile.country?.code || COUNTRIES[0].code,
+      city: userProfile.city || '',
+      lookingFor: userProfile.lookingFor || LOOKING_FOR_OPTIONS[0],
+      bio: userProfile.bio || '',
+      height: userProfile.height || '',
+      job: userProfile.job || '',
+      education: userProfile.education || '',
+      lifestyle: userProfile.lifestyle || '',
+      interests: userProfile.interests || [],
+      photos: userProfile.photos || [],
+      exclusivePhotoUrls: userProfile.exclusivePhotoUrls || [],
+      prompts:
+        Array.isArray(userProfile.prompts) && userProfile.prompts.length >= 2
+          ? userProfile.prompts.slice(0, 2)
+          : [userProfile.prompts?.[0] || '', userProfile.prompts?.[1] || ''],
+    };
+    editorDraftRef.current = hydrated;
+    setName(hydrated.name);
+    setAge(hydrated.age);
+    setGender(hydrated.gender);
+    setInterestedIn(hydrated.interestedIn);
+    setCountryCode(hydrated.countryCode);
+    setCity(hydrated.city);
+    setLookingFor(hydrated.lookingFor);
+    setBio(hydrated.bio);
+    setHeight(hydrated.height);
+    setJob(hydrated.job);
+    setEducation(hydrated.education);
+    setLifestyle(hydrated.lifestyle);
+    setInterests(hydrated.interests);
+    setPhotos(hydrated.photos);
+    setExclusivePhotoUrls(hydrated.exclusivePhotoUrls);
+    setPrompts(hydrated.prompts);
+
+    const check = validateProfileDraft(hydrated, MIN_AGE);
+    lastSavedProfileSigRef.current = check.valid ? createSectionSignature(check.payload) : '';
+    if (editorOpen) {
+      setProfileSaveStatus({ state: 'idle', message: '' });
+    }
   }, [userProfile?.uid, editorOpen]);
+
+  useEffect(() => {
+    return () => {
+      promptSaverRef.current?.flush();
+      profileSaverRef.current?.flush();
+    };
+  }, []);
 
   const { photoLikeCounts, bestPhotoUrl } = useMemo(() => {
     const counts = {};
@@ -226,69 +345,102 @@ export default function ProfileScreen({
     }
   };
 
-  const toggleInterest = (item) => {
-    setInterests((prev) =>
-      prev.includes(item) ? prev.filter((x) => x !== item) : [...prev, item].slice(0, 10)
+  const updateEditorField = (patch, { immediate = false } = {}) => {
+    const nextDraft = {
+      ...editorDraftRef.current,
+      ...patch,
+    };
+    editorDraftRef.current = nextDraft;
+
+    if ('name' in patch) setName(patch.name);
+    if ('age' in patch) setAge(patch.age);
+    if ('gender' in patch) setGender(patch.gender);
+    if ('interestedIn' in patch) setInterestedIn(patch.interestedIn);
+    if ('countryCode' in patch) setCountryCode(patch.countryCode);
+    if ('city' in patch) setCity(patch.city);
+    if ('lookingFor' in patch) setLookingFor(patch.lookingFor);
+    if ('bio' in patch) setBio(patch.bio);
+    if ('height' in patch) setHeight(patch.height);
+    if ('job' in patch) setJob(patch.job);
+    if ('education' in patch) setEducation(patch.education);
+    if ('lifestyle' in patch) setLifestyle(patch.lifestyle);
+    if ('interests' in patch) setInterests(patch.interests);
+    if ('photos' in patch) setPhotos(patch.photos);
+    if ('exclusivePhotoUrls' in patch) setExclusivePhotoUrls(patch.exclusivePhotoUrls);
+    if ('prompts' in patch) setPrompts(patch.prompts);
+
+    const check = validateProfileDraft(nextDraft, MIN_AGE);
+    if (!check.valid) {
+      profileSaverRef.current?.cancel();
+      setProfileSaveStatus({ state: 'error', message: check.reason });
+      return;
+    }
+
+    const sig = createSectionSignature(check.payload);
+    if (sig === lastSavedProfileSigRef.current) {
+      profileSaverRef.current?.cancel();
+      setProfileSaveStatus({ state: 'saved', message: '' });
+      return;
+    }
+
+    const { countryCode: chosenCode, ...restPayload } = check.payload;
+    const country = COUNTRIES.find((c) => c.code === chosenCode) || COUNTRIES[0];
+    setProfileSaveStatus({ state: immediate ? 'saving' : 'pending', message: '' });
+    profileSaverRef.current?.schedule(
+      { sig, updates: { ...restPayload, country } },
+      { immediate }
     );
+  };
+
+  const toggleInterest = (item) => {
+    const prev = Array.isArray(editorDraftRef.current.interests)
+      ? editorDraftRef.current.interests
+      : [];
+    const next = prev.includes(item)
+      ? prev.filter((x) => x !== item)
+      : [...prev, item].slice(0, 10);
+    updateEditorField({ interests: next }, { immediate: true });
   };
 
   const openQuickPrompt = (slotIdx) => {
     const existing = userProfile?.prompts?.[slotIdx] || prompts[slotIdx] || '';
+    const basePrompts = Array.isArray(userProfile?.prompts)
+      ? [...userProfile.prompts]
+      : [...(prompts || ['', ''])];
+    while (basePrompts.length < 2) basePrompts.push('');
+    basePrompts[slotIdx] = String(existing).trim();
+    lastSavedPromptSigRef.current = createSectionSignature(basePrompts);
     setPromptDraft(existing);
+    setPromptSaveStatus({ state: 'idle', message: '' });
     setPromptSheetIdx(slotIdx);
   };
 
-  const handleSaveQuickPrompt = async (e) => {
-    e.preventDefault();
+  const handleQuickPromptChange = (nextText, { immediate = false } = {}) => {
+    setPromptDraft(nextText);
     if (promptSheetIdx === null) return;
-    setSavingPrompt(true);
-    try {
-      const nextPrompts = [
-        userProfile?.prompts?.[0] ?? prompts[0] ?? '',
-        userProfile?.prompts?.[1] ?? prompts[1] ?? '',
-      ];
-      nextPrompts[promptSheetIdx] = promptDraft.trim();
-      setPrompts(nextPrompts);
-      await updateUserProfile(userProfile.uid, { prompts: nextPrompts });
-      setPromptSheetIdx(null);
-      onSuccess?.('Frase guardada en tu perfil.');
-    } catch (err) {
-      onError?.(err.message || 'No se pudo guardar la frase.');
-    } finally {
-      setSavingPrompt(false);
+    const basePrompts = Array.isArray(userProfileRef.current?.prompts)
+      ? [...userProfileRef.current.prompts]
+      : [...(editorDraftRef.current.prompts || ['', ''])];
+    while (basePrompts.length < 2) basePrompts.push('');
+    basePrompts[promptSheetIdx] = String(nextText || '').trim();
+    const sig = createSectionSignature(basePrompts);
+    if (sig === lastSavedPromptSigRef.current) {
+      promptSaverRef.current?.cancel();
+      setPromptSaveStatus({ state: 'saved', message: '' });
+      return;
     }
+    setPromptSaveStatus({ state: immediate ? 'saving' : 'pending', message: '' });
+    promptSaverRef.current?.schedule({ idx: promptSheetIdx, text: nextText }, { immediate });
   };
 
-  const handleSave = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      const country = COUNTRIES.find((c) => c.code === countryCode) || COUNTRIES[0];
-      await updateUserProfile(userProfile.uid, {
-        name,
-        age: Math.max(MIN_AGE, Number(age || MIN_AGE)),
-        gender,
-        interestedIn,
-        country,
-        city,
-        lookingFor,
-        bio,
-        height,
-        job,
-        education,
-        lifestyle,
-        interests,
-        photos,
-        exclusivePhotoUrls,
-        prompts,
-      });
-      setEditorOpen(false);
-      onSuccess?.('Perfil actualizado correctamente.');
-    } catch (err) {
-      onError?.(err.message || 'No se pudo actualizar tu perfil.');
-    } finally {
-      setSaving(false);
-    }
+  const closePromptSheet = () => {
+    promptSaverRef.current?.flush();
+    setPromptSheetIdx(null);
+  };
+
+  const closeEditor = () => {
+    profileSaverRef.current?.flush();
+    setEditorOpen(false);
   };
 
   const handleQuickToggleExclusive = async (e, url, idx) => {
@@ -1021,55 +1173,6 @@ export default function ProfileScreen({
           </section>
         )}
 
-        {/* 6.8 DESCARGA DIRECTA DE LA APLICACIÓN */}
-        {isOwnerSession && !isInstalled && (
-          <div className="rounded-[24px] bg-white border border-emerald-200/80 p-3.5 shadow-[0_8px_24px_-10px_rgba(15,23,42,0.08)] space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center shrink-0">
-                  <Smartphone className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-black text-zinc-900 truncate">
-                    Descargar Aplicación
-                  </p>
-                  <p className="text-[10.5px] font-medium text-zinc-500 truncate">
-                    Instala Conoscamosnos directo en tu teléfono
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={async () => {
-                  const res = await downloadOrInstallApp({ customApkUrl: liveEconomy?.androidApkUrl });
-                  if (res.status === 'downloading_apk') {
-                    setShowDownloadHint(false);
-                    onSuccess?.('⬇️ Descargando Conoscamosnos...');
-                  } else if (res.status === 'accepted') {
-                    setShowDownloadHint(false);
-                    onSuccess?.('✅ ¡Conoscamosnos se está instalando en tu dispositivo!');
-                  } else if (res.status === 'manual_required') {
-                    setShowDownloadHint((v) => !v);
-                  }
-                }}
-                className="px-3.5 py-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-[11px] font-black flex items-center gap-1.5 shadow-sm hover:brightness-105 active:scale-95 transition shrink-0"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Descargar App
-              </button>
-            </div>
-
-            {showDownloadHint && (
-              <p className="px-3 py-2 rounded-xl bg-zinc-50 border border-zinc-200/80 text-[11px] font-medium text-zinc-700 leading-snug">
-                {isIOS
-                  ? 'En Safari toca Compartir (↑) y luego "Agregar a pantalla de inicio".'
-                  : 'En Chrome toca el menú ⋮ → "Instalar aplicación".'}
-              </p>
-            )}
-          </div>
-        )}
-
         {/* 7. BOTÓN DE EDICIÓN COMPLETA DE PERFIL */}
         <button
           type="button"
@@ -1081,13 +1184,10 @@ export default function ProfileScreen({
         </button>
       </div>
 
-      {/* Sheet rápido para editar "Mis frases" con ideas */}
+      {/* Sheet rápido para editar "Mis frases" con auto-guardado */}
       {promptSheetIdx !== null && (
         <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <form
-            onSubmit={handleSaveQuickPrompt}
-            className="w-full max-w-md bg-white rounded-t-[32px] sm:rounded-[32px] p-6 space-y-4 shadow-2xl animate-sheet-up"
-          >
+          <div className="w-full max-w-md bg-white rounded-t-[32px] sm:rounded-[32px] p-6 space-y-4 shadow-2xl animate-sheet-up">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-2xl bg-rose-50 border border-rose-200/80 text-[#FF2E54] flex items-center justify-center">
@@ -1104,8 +1204,9 @@ export default function ProfileScreen({
               </div>
               <button
                 type="button"
-                onClick={() => setPromptSheetIdx(null)}
+                onClick={closePromptSheet}
                 className="p-2 rounded-full bg-zinc-100 text-zinc-600 hover:bg-zinc-200 transition"
+                aria-label="Cerrar"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1115,21 +1216,22 @@ export default function ProfileScreen({
               rows={3}
               maxLength={140}
               value={promptDraft}
-              onChange={(e) => setPromptDraft(e.target.value)}
+              onChange={(e) => handleQuickPromptChange(e.target.value, { immediate: false })}
+              onBlur={() => promptSaverRef.current?.flush()}
               placeholder="Escribe algo auténtico que llame la atención..."
               className="w-full px-4 py-3 rounded-2xl bg-zinc-50 border border-zinc-200 text-sm font-semibold text-zinc-900 focus:outline-none focus:bg-white focus:border-[#FF2E54] focus:ring-4 focus:ring-rose-500/10 resize-none transition"
             />
 
             <div className="space-y-1.5">
               <p className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-400">
-                Ideas rápidas (toca para usar)
+                Ideas rápidas (toca para aplicar al instante)
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {PROMPT_SUGGESTIONS.map((sugg, idx) => (
                   <button
                     key={idx}
                     type="button"
-                    onClick={() => setPromptDraft(sugg)}
+                    onClick={() => handleQuickPromptChange(sugg, { immediate: true })}
                     className="px-3 py-1.5 rounded-full bg-zinc-100 hover:bg-rose-50 hover:text-[#FF2E54] text-zinc-700 text-[11px] font-bold text-left transition"
                   >
                     {sugg}
@@ -1138,15 +1240,37 @@ export default function ProfileScreen({
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={savingPrompt}
-              className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#FF2E54] to-rose-500 text-white text-xs sm:text-sm font-extrabold flex items-center justify-center gap-1.5 shadow-lg shadow-[#FF2E54]/20 hover:brightness-105 disabled:opacity-60 transition"
-            >
-              <Save className="w-4 h-4" />
-              {savingPrompt ? 'Guardando...' : 'Guardar frase'}
-            </button>
-          </form>
+            <div className="flex items-center justify-between gap-3 pt-1">
+              {promptSaveStatus.state === 'saving' || promptSaveStatus.state === 'pending' ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-extrabold">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Guardando...
+                </span>
+              ) : promptSaveStatus.state === 'error' ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-extrabold">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  {promptSaveStatus.message || 'Error al guardar'}
+                </span>
+              ) : promptSaveStatus.state === 'saved' ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-extrabold">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Guardado automáticamente
+                </span>
+              ) : (
+                <span className="text-[11px] font-semibold text-zinc-400">
+                  Auto-guardado en vivo
+                </span>
+              )}
+
+              <button
+                type="button"
+                onClick={closePromptSheet}
+                className="px-5 py-2.5 rounded-full bg-gradient-to-r from-[#FF2E54] to-rose-500 text-white text-xs sm:text-sm font-extrabold shadow-md shadow-[#FF2E54]/20 hover:brightness-105 transition"
+              >
+                Listo
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1154,8 +1278,8 @@ export default function ProfileScreen({
       {editorOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="w-full max-w-md max-h-[92dvh] bg-white rounded-t-[32px] sm:rounded-[32px] flex flex-col overflow-hidden shadow-2xl animate-sheet-up">
-            <div className="px-5 py-4 border-b border-zinc-200/80 flex items-center justify-between bg-white">
-              <div>
+            <div className="px-5 py-4 border-b border-zinc-200/80 flex items-center justify-between gap-2 bg-white">
+              <div className="min-w-0">
                 <h3 className="font-display text-base font-black text-zinc-900">
                   Editar Perfil Público
                 </h3>
@@ -1163,23 +1287,49 @@ export default function ProfileScreen({
                   Completitud actual: {completion.percent}%
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setEditorOpen(false)}
-                className="p-2 rounded-full bg-zinc-100 text-zinc-600 hover:bg-zinc-200 transition"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                {profileSaveStatus.state === 'saving' || profileSaveStatus.state === 'pending' ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-extrabold">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Guardando...
+                  </span>
+                ) : profileSaveStatus.state === 'error' ? (
+                  <span
+                    title={profileSaveStatus.message}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-extrabold max-w-[140px] truncate"
+                  >
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    <span className="truncate">{profileSaveStatus.message}</span>
+                  </span>
+                ) : profileSaveStatus.state === 'saved' ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-extrabold">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Guardado
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={closeEditor}
+                  className="p-2 rounded-full bg-zinc-100 text-zinc-600 hover:bg-zinc-200 transition"
+                  aria-label="Cerrar editor"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto no-scrollbar p-5 space-y-5 bg-[#FAF8FA]">
-              <form onSubmit={handleSave} className="space-y-4">
+              <div onBlurCapture={() => profileSaverRef.current?.flush()} className="space-y-4">
                 <div className="p-4 rounded-3xl bg-white border border-zinc-200/80 shadow-sm">
                   <PhotoUploader
                     photos={photos}
-                    onChange={setPhotos}
+                    onChange={(nextPhotos) =>
+                      updateEditorField({ photos: nextPhotos }, { immediate: true })
+                    }
                     exclusivePhotoUrls={exclusivePhotoUrls}
-                    onExclusiveChange={setExclusivePhotoUrls}
+                    onExclusiveChange={(nextExclusive) =>
+                      updateEditorField({ exclusivePhotoUrls: nextExclusive }, { immediate: true })
+                    }
                     exclusiveCostDiamonds={exclusiveCostDiamonds}
                     onError={onError}
                     smartPhotos={Boolean(userProfile?.smartPhotos)}
@@ -1192,7 +1342,7 @@ export default function ProfileScreen({
                   <button
                     type="button"
                     onClick={() => {
-                      setEditorOpen(false);
+                      closeEditor();
                       setSettingsOpen(true);
                     }}
                     className="w-full p-3.5 rounded-2xl bg-white border border-zinc-200/80 hover:border-rose-200 flex items-center justify-between gap-3 text-left shadow-sm transition"
@@ -1223,7 +1373,7 @@ export default function ProfileScreen({
                       <input
                         type="text"
                         value={name}
-                        onChange={(e) => setName(e.target.value)}
+                        onChange={(e) => updateEditorField({ name: e.target.value })}
                         required
                         className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-bold text-zinc-900 focus:outline-none focus:bg-white focus:border-[#FF2E54]"
                       />
@@ -1235,7 +1385,7 @@ export default function ProfileScreen({
                         min={MIN_AGE}
                         max={99}
                         value={age}
-                        onChange={(e) => setAge(e.target.value)}
+                        onChange={(e) => updateEditorField({ age: e.target.value })}
                         required
                         className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-bold text-zinc-900 focus:outline-none focus:bg-white focus:border-[#FF2E54]"
                       />
@@ -1247,7 +1397,9 @@ export default function ProfileScreen({
                       <label className="text-xs font-bold text-zinc-600 block mb-1">Género</label>
                       <select
                         value={gender}
-                        onChange={(e) => setGender(e.target.value)}
+                        onChange={(e) =>
+                          updateEditorField({ gender: e.target.value }, { immediate: true })
+                        }
                         className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-bold text-zinc-900 focus:outline-none focus:bg-white focus:border-[#FF2E54]"
                       >
                         {GENDERS.map((g) => (
@@ -1259,7 +1411,9 @@ export default function ProfileScreen({
                       <label className="text-xs font-bold text-zinc-600 block mb-1">Me interesa</label>
                       <select
                         value={interestedIn}
-                        onChange={(e) => setInterestedIn(e.target.value)}
+                        onChange={(e) =>
+                          updateEditorField({ interestedIn: e.target.value }, { immediate: true })
+                        }
                         className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-bold text-zinc-900 focus:outline-none focus:bg-white focus:border-[#FF2E54]"
                       >
                         {INTERESTED_IN_OPTIONS.map((o) => (
@@ -1274,7 +1428,9 @@ export default function ProfileScreen({
                       <label className="text-xs font-bold text-zinc-600 block mb-1">País</label>
                       <select
                         value={countryCode}
-                        onChange={(e) => setCountryCode(e.target.value)}
+                        onChange={(e) =>
+                          updateEditorField({ countryCode: e.target.value }, { immediate: true })
+                        }
                         className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-bold text-zinc-900 focus:outline-none focus:bg-white focus:border-[#FF2E54]"
                       >
                         {COUNTRIES.map((c) => (
@@ -1289,7 +1445,7 @@ export default function ProfileScreen({
                       <input
                         type="text"
                         value={city}
-                        onChange={(e) => setCity(e.target.value)}
+                        onChange={(e) => updateEditorField({ city: e.target.value })}
                         placeholder="Ej. Caracas, Bogotá..."
                         className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-bold text-zinc-900 focus:outline-none focus:bg-white focus:border-[#FF2E54]"
                       />
@@ -1307,7 +1463,7 @@ export default function ProfileScreen({
                       <button
                         type="button"
                         key={opt}
-                        onClick={() => setLookingFor(opt)}
+                        onClick={() => updateEditorField({ lookingFor: opt }, { immediate: true })}
                         className={`py-2.5 px-3 rounded-xl text-xs font-bold border text-left transition ${
                           lookingFor === opt
                             ? 'bg-zinc-900 text-white border-zinc-900 shadow-sm'
@@ -1328,7 +1484,7 @@ export default function ProfileScreen({
                       <input
                         type="text"
                         value={height}
-                        onChange={(e) => setHeight(e.target.value)}
+                        onChange={(e) => updateEditorField({ height: e.target.value })}
                         placeholder="Ej. 1.75 m"
                         className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-bold text-zinc-900 focus:outline-none focus:bg-white focus:border-[#FF2E54]"
                       />
@@ -1338,7 +1494,7 @@ export default function ProfileScreen({
                       <input
                         type="text"
                         value={job}
-                        onChange={(e) => setJob(e.target.value)}
+                        onChange={(e) => updateEditorField({ job: e.target.value })}
                         placeholder="Ej. Diseñador, Médico"
                         className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-bold text-zinc-900 focus:outline-none focus:bg-white focus:border-[#FF2E54]"
                       />
@@ -1351,7 +1507,7 @@ export default function ProfileScreen({
                       <input
                         type="text"
                         value={education}
-                        onChange={(e) => setEducation(e.target.value)}
+                        onChange={(e) => updateEditorField({ education: e.target.value })}
                         placeholder="Ej. Universitaria"
                         className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-bold text-zinc-900 focus:outline-none focus:bg-white focus:border-[#FF2E54]"
                       />
@@ -1360,7 +1516,9 @@ export default function ProfileScreen({
                       <label className="text-xs font-bold text-zinc-600 block mb-1">Estilo de vida</label>
                       <select
                         value={lifestyle}
-                        onChange={(e) => setLifestyle(e.target.value)}
+                        onChange={(e) =>
+                          updateEditorField({ lifestyle: e.target.value }, { immediate: true })
+                        }
                         className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-bold text-zinc-900 focus:outline-none focus:bg-white focus:border-[#FF2E54]"
                       >
                         <option value="">Seleccionar...</option>
@@ -1376,7 +1534,7 @@ export default function ProfileScreen({
                     <textarea
                       rows={3}
                       value={bio}
-                      onChange={(e) => setBio(e.target.value)}
+                      onChange={(e) => updateEditorField({ bio: e.target.value })}
                       placeholder="Cuéntale a la comunidad quién eres..."
                       className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-bold text-zinc-900 focus:outline-none focus:bg-white focus:border-[#FF2E54] resize-none"
                     />
@@ -1388,14 +1546,22 @@ export default function ProfileScreen({
                       type="text"
                       placeholder="Frase 1: Mi plan ideal de fin de semana es..."
                       value={prompts[0] || ''}
-                      onChange={(e) => setPrompts([e.target.value, prompts[1] || ''])}
+                      onChange={(e) =>
+                        updateEditorField({
+                          prompts: [e.target.value, editorDraftRef.current.prompts?.[1] || ''],
+                        })
+                      }
                       className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-bold text-zinc-900 focus:outline-none focus:bg-white focus:border-[#FF2E54]"
                     />
                     <input
                       type="text"
                       placeholder="Frase 2: Algo que debes saber sobre mí es..."
                       value={prompts[1] || ''}
-                      onChange={(e) => setPrompts([prompts[0] || '', e.target.value])}
+                      onChange={(e) =>
+                        updateEditorField({
+                          prompts: [editorDraftRef.current.prompts?.[0] || '', e.target.value],
+                        })
+                      }
                       className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-bold text-zinc-900 focus:outline-none focus:bg-white focus:border-[#FF2E54]"
                     />
                   </div>
@@ -1426,15 +1592,21 @@ export default function ProfileScreen({
                   </div>
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="w-full py-3.5 rounded-full bg-zinc-900 text-white text-xs sm:text-sm font-extrabold flex items-center justify-center gap-1.5 shadow-lg hover:bg-zinc-800 disabled:opacity-60 transition"
-                >
-                  <Save className="w-4 h-4" />
-                  {saving ? 'Guardando cambios...' : 'Guardar Cambios'}
-                </button>
-              </form>
+                <div className="flex items-center justify-between gap-3 pt-1">
+                  <span className="text-[11px] font-semibold text-zinc-500">
+                    {profileSaveStatus.state === 'error'
+                      ? profileSaveStatus.message
+                      : 'Todos tus cambios se guardan automáticamente'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={closeEditor}
+                    className="px-6 py-3 rounded-full bg-zinc-900 text-white text-xs sm:text-sm font-extrabold shadow-lg hover:bg-zinc-800 transition shrink-0"
+                  >
+                    Listo
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

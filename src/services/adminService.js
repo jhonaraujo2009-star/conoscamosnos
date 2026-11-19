@@ -195,6 +195,32 @@ export async function updatePlatformAccessConfig({
 }
 
 /**
+ * Super Admin: actualiza únicamente los canales de cobro directo (Zinli, Pago Móvil, Binance Pay)
+ * en appConfig/economy sin interferir con ediciones simultáneas en otros bloques.
+ */
+export async function updatePaymentChannelsConfig({ adminId, paymentChannels }) {
+  if (!adminId) throw new Error('Sesión de Super Admin inválida.');
+  if (!paymentChannels || typeof paymentChannels !== 'object') return;
+
+  await setDoc(
+    doc(db, 'appConfig', 'economy'),
+    {
+      paymentChannels: {
+        enableZinli: Boolean(paymentChannels.enableZinli),
+        zinliEmail: String(paymentChannels.zinliEmail || '').trim(),
+        enablePagoMovil: Boolean(paymentChannels.enablePagoMovil),
+        pagoMovilInfo: String(paymentChannels.pagoMovilInfo || '').trim(),
+        enableBinancePay: Boolean(paymentChannels.enableBinancePay),
+        binancePayId: String(paymentChannels.binancePayId || '').trim(),
+      },
+      updatedBy: adminId,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+/**
  * Super Admin: actualiza el precio base, % de retiro de creadores y paquetes de Diamantes en appConfig/economy.
  */
 export async function updateEconomyConfig({

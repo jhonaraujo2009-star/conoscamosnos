@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   AlertCircle,
   ArrowRight,
+  CheckCircle2,
   Crown,
   Download,
   Eye,
@@ -9,6 +10,7 @@ import {
   Flame,
   Lock,
   Mail,
+  Smartphone,
   User,
   X,
 } from 'lucide-react';
@@ -69,7 +71,7 @@ export default function AuthScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [installHint, setInstallHint] = useState('');
-  const { isInstalled, canInstallNative, isIOS, promptInstall } = usePwaInstall();
+  const { isInstalled, isIOS, downloadOrInstallApp } = usePwaInstall();
 
   const openAuthModal = (targetMode = 'register') => {
     setMode(targetMode);
@@ -113,14 +115,18 @@ export default function AuthScreen() {
     }
   };
 
-  const handleInstallAndroid = async () => {
-    if (canInstallNative) {
-      const res = await promptInstall();
-      if (res?.status === 'accepted') {
-        setInstallHint('¡Listo! La app se está instalando en tu dispositivo.');
-      } else {
-        setInstallHint('Si cerraste el aviso, abre el menú (⋮) de Chrome → «Instalar aplicación».');
-      }
+  const handleDownloadApp = async () => {
+    const res = await downloadOrInstallApp();
+    if (res?.status === 'downloading_apk') {
+      setInstallHint('⬇️ Descargando Conoscamosnos en tu dispositivo...');
+      return;
+    }
+    if (res?.status === 'accepted') {
+      setInstallHint('✅ ¡Listo! Conoscamosnos se está instalando en tu dispositivo.');
+      return;
+    }
+    if (res?.status === 'dismissed') {
+      setInstallHint('');
       return;
     }
 
@@ -188,7 +194,7 @@ export default function AuthScreen() {
       </header>
 
       {/* Escenario Principal Inferior Ultra-Limpio */}
-      <main className="relative z-10 h-full flex flex-col justify-end pb-24 sm:pb-20 px-5 sm:px-8">
+      <main className="relative z-10 h-full flex flex-col justify-end pb-28 sm:pb-24 px-5 sm:px-8">
         <div className="w-full max-w-md sm:max-w-[500px] mx-auto text-center space-y-5">
           {!isFirebaseConfigured && (
             <div className="p-3 rounded-2xl bg-amber-50/95 border border-amber-200 text-amber-900 text-xs font-semibold flex items-center justify-center gap-2 shadow-sm">
@@ -246,34 +252,61 @@ export default function AuthScreen() {
               <Crown className="w-3.5 h-3.5 text-[#C58A32]" />
               <span>Creador VIP · Retiros $ USD</span>
             </button>
-
-            {!isInstalled && (
-              <button
-                type="button"
-                onClick={handleInstallAndroid}
-                className="px-3 py-1.5 rounded-full bg-[#EFFAF4]/95 hover:bg-[#E2F5EB] border border-[#C6E6D4] text-[#176843] text-[11px] font-extrabold inline-flex items-center gap-1 shadow-sm transition"
-              >
-                <Download className="w-3 h-3" />
-                <span>App Android</span>
-              </button>
-            )}
           </div>
+        </div>
+      </main>
 
+      {/* Footer con Descarga Directa de la App */}
+      <footer className="absolute bottom-0 inset-x-0 z-20 px-4 sm:px-6 pt-2 pb-3 sm:pb-4">
+        <div className="w-full max-w-md sm:max-w-[500px] mx-auto space-y-2">
           {installHint && (
-            <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-[#FFFDF9]/95 border border-[#EADCD3] text-[11px] font-medium text-[#5A4942] shadow-sm">
-              <span>{installHint}</span>
+            <div className="flex items-center justify-between gap-2 px-3.5 py-2 rounded-2xl bg-[#FFFDF9]/95 backdrop-blur-md border border-[#EADCD3] text-[11px] font-medium text-[#5A4942] shadow-md">
+              <span className="leading-snug">{installHint}</span>
               <button
                 type="button"
                 onClick={() => setInstallHint('')}
-                className="p-0.5 text-[#8E7970] hover:text-[#1E1514]"
+                className="p-1 text-[#8E7970] hover:text-[#1E1514] shrink-0"
                 aria-label="Ocultar aviso"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
           )}
+
+          <div className="rounded-2xl bg-white/85 backdrop-blur-md border border-[#EEDBD4] px-3.5 py-2.5 shadow-[0_10px_28px_-14px_rgba(68,38,32,0.22)] flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center shrink-0">
+                <Smartphone className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 text-left">
+                <p className="text-xs font-extrabold text-[#1E1514] truncate">
+                  Descargar Conoscamosnos
+                </p>
+                <p className="text-[10.5px] text-[#6A5951] truncate">
+                  {isInstalled
+                    ? 'Instalada en este dispositivo'
+                    : 'Instala la app directo en tu teléfono'}
+                </p>
+              </div>
+            </div>
+
+            {isInstalled ? (
+              <span className="px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-extrabold inline-flex items-center gap-1 shrink-0">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Instalada
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={handleDownloadApp}
+                className="px-3.5 py-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-[11px] font-black inline-flex items-center gap-1.5 shadow-sm hover:brightness-105 active:scale-95 transition shrink-0"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Descargar App
+              </button>
+            )}
+          </div>
         </div>
-      </main>
+      </footer>
 
       {/* Sheet Modal Porcelana de Registro / Acceso */}
       {authModalOpen && (
