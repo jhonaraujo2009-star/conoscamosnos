@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { isFirebaseConfigured } from '../../config/firebase';
+import { useAuth } from '../../contexts/AuthContext';
 import { usePwaInstall } from '../../hooks/usePwaInstall';
 import { loginWithEmail, loginWithGoogle, registerWithEmail } from '../../services/authService';
 
@@ -70,8 +71,17 @@ export default function AuthScreen() {
   const [adultConfirmed, setAdultConfirmed] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const { economyConfig } = useAuth();
   const [installHint, setInstallHint] = useState('');
-  const { isInstalled, isIOS, downloadOrInstallApp } = usePwaInstall();
+  const {
+    isInstalled,
+    canInstallNative,
+    isAndroid,
+    isIOS,
+    isInAppBrowser,
+    directDownloadUrl,
+    downloadOrInstallApp,
+  } = usePwaInstall();
 
   const openAuthModal = (targetMode = 'register') => {
     setMode(targetMode);
@@ -115,14 +125,24 @@ export default function AuthScreen() {
     }
   };
 
+  const hasDirectApk = Boolean(economyConfig?.androidApkUrl || directDownloadUrl);
+
   const handleDownloadApp = async () => {
-    const res = await downloadOrInstallApp();
+    const res = await downloadOrInstallApp({ customApkUrl: economyConfig?.androidApkUrl });
     if (res?.status === 'downloading_apk') {
       setInstallHint('⬇️ Descargando Conoscamosnos en tu dispositivo...');
       return;
     }
     if (res?.status === 'accepted') {
       setInstallHint('✅ ¡Listo! Conoscamosnos se está instalando en tu dispositivo.');
+      return;
+    }
+    if (res?.status === 'already_installed') {
+      setInstallHint('✅ Conoscamosnos ya está instalada en tu dispositivo.');
+      return;
+    }
+    if (res?.status === 'opening_chrome') {
+      setInstallHint('Abriendo Conoscamosnos en Google Chrome para instalar en 1 toque...');
       return;
     }
     if (res?.status === 'dismissed') {
@@ -139,10 +159,19 @@ export default function AuthScreen() {
       return;
     }
 
+    if (isAndroid) {
+      setInstallHint((prev) =>
+        prev
+          ? ''
+          : 'Si Chrome no abrió el cuadro automático (por modo incógnito o cancelación previa), toca menú (⋮) → «Instalar aplicación».'
+      );
+      return;
+    }
+
     setInstallHint((prev) =>
       prev
         ? ''
-        : 'En Android: abre en Google Chrome, toca menú (⋮) y elige «Instalar aplicación».'
+        : 'En tu navegador, haz clic en el ícono de instalar (⊕) de la barra de direcciones o menú (⋮) → «Instalar Conoscamosnos».'
     );
   };
 
@@ -285,6 +314,12 @@ export default function AuthScreen() {
                 <p className="text-[10.5px] text-[#6A5951] truncate">
                   {isInstalled
                     ? 'Instalada en este dispositivo'
+                    : hasDirectApk
+                    ? 'Descarga e instala directo en tu teléfono'
+                    : isAndroid && isInAppBrowser
+                    ? 'Ábrela en Chrome para instalar en 1 toque'
+                    : canInstallNative
+                    ? 'Lista para instalar en 1 clic'
                     : 'Instala la app directo en tu teléfono'}
                 </p>
               </div>
@@ -301,7 +336,13 @@ export default function AuthScreen() {
                 className="px-3.5 py-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-[11px] font-black inline-flex items-center gap-1.5 shadow-sm hover:brightness-105 active:scale-95 transition shrink-0"
               >
                 <Download className="w-3.5 h-3.5" />
-                Descargar App
+                {hasDirectApk
+                  ? 'Descargar App'
+                  : isAndroid && isInAppBrowser
+                  ? 'Abrir en Chrome'
+                  : canInstallNative
+                  ? 'Instalar App'
+                  : 'Descargar App'}
               </button>
             )}
           </div>

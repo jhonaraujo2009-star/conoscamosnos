@@ -23,10 +23,15 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
 
   const checkForSwUpdate = () => {
     navigator.serviceWorker
-      .getRegistration()
+      .getRegistration('/')
       .then((reg) => reg?.update?.())
       .catch(() => {});
   };
+
+  navigator.serviceWorker
+    .register('/pwa-sw.js', { scope: '/' })
+    .then((reg) => reg?.update?.())
+    .catch(() => {});
 
   window.addEventListener('load', checkForSwUpdate, { once: true });
   document.addEventListener('visibilitychange', () => {

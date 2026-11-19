@@ -34,7 +34,7 @@ export async function showLocalServiceWorkerNotification({
   try {
     if ('serviceWorker' in navigator) {
       const reg =
-        (await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js')) ||
+        (await navigator.serviceWorker.getRegistration('/firebase-cloud-messaging-push-scope')) ||
         (await navigator.serviceWorker.ready.catch(() => null));
       if (reg && typeof reg.showNotification === 'function') {
         await reg.showNotification(title, {
@@ -89,7 +89,9 @@ export async function enablePushNotifications(uid) {
   let swReg = null;
   if ('serviceWorker' in navigator) {
     swReg = await navigator.serviceWorker
-      .register('/firebase-messaging-sw.js')
+      .register('/firebase-messaging-sw.js', {
+        scope: '/firebase-cloud-messaging-push-scope',
+      })
       .catch(() => null);
   }
 

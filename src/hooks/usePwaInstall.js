@@ -31,6 +31,9 @@ function checkIsStandalone() {
   );
 }
 
+const IN_APP_BROWSER_RE =
+  /FBAN|FBAV|Instagram|Line\/|MicroMessenger|Snapchat|Twitter|TikTok|BytedanceWebview|WhatsApp|Telegram|; wv\)/i;
+
 const directDownloadUrl = String(import.meta.env.VITE_ANDROID_APK_URL || '').trim();
 
 export function usePwaInstall() {
@@ -41,8 +44,10 @@ export function usePwaInstall() {
     return deferredInstallPrompt;
   });
   const [isInstalled, setIsInstalled] = useState(checkIsStandalone);
+  const [isRelatedAppInstalled, setIsRelatedAppInstalled] = useState(false);
 
   useEffect(() => {
+    let active = true;
     if (typeof window !== 'undefined' && !deferredInstallPrompt && window.__conoscamosnosInstallPrompt) {
       deferredInstallPrompt = window.__conoscamosnosInstallPrompt;
       setDeferred(deferredInstallPrompt);
@@ -54,6 +59,13 @@ export function usePwaInstall() {
     };
     listeners.add(sync);
 
+    const onInstallReady = () => {
+      if (typeof window !== 'undefined' && window.__conoscamosnosInstallPrompt) {
+        deferredInstallPrompt = window.__conoscamosnosInstallPrompt;
+        notifyListeners();
+      }
+    };
+
     const onInstalled = () => {
       setIsInstalled(true);
       deferredInstallPrompt = null;
@@ -63,16 +75,40 @@ export function usePwaInstall() {
       setDeferred(null);
     };
     window.addEventListener('appinstalled', onInstalled);
+    window.addEventListener('conoscamosnos:install-ready', onInstallReady);
+    window.addEventListener('conoscamosnos:app-installed', onInstalled);
+
+    if (typeof navigator !== 'undefined' && typeof navigator.getInstalledRelatedApps === 'function') {
+      navigator
+        .getInstalledRelatedApps()
+        .then((apps) => {
+          if (active && Array.isArray(apps) && apps.length > 0) {
+            setIsRelatedAppInstalled(true);
+          }
+        })
+        .catch(() => {});
+    }
 
     return () => {
+      active = false;
       listeners.delete(sync);
       window.removeEventListener('appinstalled', onInstalled);
+      window.removeEventListener('conoscamosnos:install-ready', onInstallReady);
+      window.removeEventListener('conoscamosnos:app-installed', onInstalled);
     };
   }, []);
 
   const ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
   const isAndroid = /Android/i.test(ua);
   const isIOS = /iPhone|iPad|iPod/i.test(ua);
+  const isInAppBrowser = IN_APP_BROWSER_RE.test(ua);
+
+  const openInAndroidChrome = useCallback(() => {
+    if (typeof window === 'undefined') return false;
+    const target = `${window.location.host}${window.location.pathname}${window.location.search}`;
+    window.location.href = `intent://${target}#Intent;scheme=https;package=com.android.chrome;end`;
+    return true;
+  }, []);
 
   const promptInstall = useCallback(async () => {
     const promptEvt =
@@ -121,18 +157,29 @@ export function usePwaInstall() {
         return promptInstall();
       }
 
+      if (isInstalled || isRelatedAppInstalled) {
+        return { status: 'already_installed' };
+      }
+
+      if (isAndroid && isInAppBrowser) {
+        openInAndroidChrome();
+        return { status: 'opening_chrome' };
+      }
+
       return { status: 'manual_required' };
     },
-    [promptInstall]
+    [isAndroid, isInAppBrowser, isInstalled, isRelatedAppInstalled, openInAndroidChrome, promptInstall]
   );
 
   return {
-    isInstalled,
+    isInstalled: isInstalled || isRelatedAppInstalled,
     canInstallNative: Boolean(deferred),
     isAndroid,
     isIOS,
+    isInAppBrowser,
     directDownloadUrl,
     promptInstall,
     downloadOrInstallApp,
+    openInAndroidChrome,
   };
 }

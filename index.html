@@ -22,9 +22,11 @@
       window.addEventListener('beforeinstallprompt', function (e) {
         e.preventDefault();
         window.__conoscamosnosInstallPrompt = e;
+        window.dispatchEvent(new Event('conoscamosnos:install-ready'));
       });
       window.addEventListener('appinstalled', function () {
         window.__conoscamosnosInstallPrompt = null;
+        window.dispatchEvent(new Event('conoscamosnos:app-installed'));
       });
     </script>
   </head>

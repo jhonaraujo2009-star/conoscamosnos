@@ -1,0 +1,49 @@
+{
+  "packageId": "app.vercel.conoscamosnos.twa",
+  "host": "conoscamosnos.vercel.app",
+  "name": "Conoscamosnos",
+  "launcherName": "Conoscamosnos",
+  "display": "standalone",
+  "themeColor": "#FBF6F0",
+  "themeColorDark": "#171026",
+  "navigationColor": "#FBF6F0",
+  "navigationColorDark": "#171026",
+  "navigationDividerColor": "#FBF6F0",
+  "navigationDividerColorDark": "#171026",
+  "backgroundColor": "#FBF6F0",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://conoscamosnos.vercel.app/icons/icon-512.png",
+  "maskableIconUrl": "https://conoscamosnos.vercel.app/icons/icon-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "/tmp/conoscamosnos-release.keystore",
+    "alias": "conoscamosnos"
+  },
+  "appVersionCode": 1,
+  "appVersion": "1.0.0",
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://conoscamosnos.vercel.app/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {
+    "locationDelegation": {
+      "enabled": true
+    },
+    "playBilling": {
+      "enabled": false
+    }
+  },
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://conoscamosnos.vercel.app/",
+  "minSdkVersion": 21,
+  "orientation": "portrait",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": []
+}

@@ -15,8 +15,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: false,
       filename: 'pwa-sw.js',
-      includeAssets: ['favicon.svg', 'icons/icon-192.png', 'icons/icon-512.png'],
+      includeAssets: [],
       manifest: {
         id: '/',
         name: 'Conoscamosnos — Citas, Amistad y Chat Global',
@@ -31,6 +32,12 @@ export default defineConfig({
         scope: '/',
         categories: ['social', 'lifestyle'],
         prefer_related_applications: false,
+        related_applications: [
+          {
+            platform: 'webapp',
+            url: 'https://conoscamosnos.vercel.app/manifest.webmanifest',
+          },
+        ],
         icons: [
           {
             src: '/icons/icon-192.png',
