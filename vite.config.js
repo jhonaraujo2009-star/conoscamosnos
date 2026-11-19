@@ -34,6 +34,10 @@ export default defineConfig({
         prefer_related_applications: false,
         related_applications: [
           {
+            platform: 'play',
+            id: 'app.vercel.conoscamosnos.twa',
+          },
+          {
             platform: 'webapp',
             url: 'https://conoscamosnos.vercel.app/manifest.webmanifest',
           },
@@ -64,13 +68,15 @@ export default defineConfig({
         clientsClaim: true,
         skipWaiting: true,
         globPatterns: ['**/*.{js,css,ico,png,svg,woff2}'],
-        globIgnores: ['sw.js', 'firebase-messaging-sw.js', 'ad-viewer.html'],
+        globIgnores: ['sw.js', 'firebase-messaging-sw.js', 'ad-viewer.html', 'downloads/**'],
         navigateFallback: null,
         runtimeCaching: [
           {
             urlPattern: ({ request, url }) =>
               request.mode === 'navigate' &&
               !url.pathname.startsWith('/api/') &&
+              !url.pathname.startsWith('/downloads/') &&
+              !url.pathname.startsWith('/.well-known/') &&
               url.pathname !== '/ad-viewer.html',
             handler: 'NetworkFirst',
             options: {

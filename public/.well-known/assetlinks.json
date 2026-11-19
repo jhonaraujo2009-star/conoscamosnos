@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.vercel.conoscamosnos.twa",
+      "sha256_cert_fingerprints": [
+        "D8:62:F2:74:1B:00:99:EB:8A:6B:B2:CB:03:F4:B0:1F:2D:E4:C8:8D:69:15:DD:72:8E:88:51:51:18:B2:5A:01"
+      ]
+    }
+  }
+]

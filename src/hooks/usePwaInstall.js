@@ -34,7 +34,10 @@ function checkIsStandalone() {
 const IN_APP_BROWSER_RE =
   /FBAN|FBAV|Instagram|Line\/|MicroMessenger|Snapchat|Twitter|TikTok|BytedanceWebview|WhatsApp|Telegram|; wv\)/i;
 
-const directDownloadUrl = String(import.meta.env.VITE_ANDROID_APK_URL || '').trim();
+const DEFAULT_ANDROID_APK_URL = '/downloads/Conoscamosnos.apk';
+const directDownloadUrl = String(
+  import.meta.env.VITE_ANDROID_APK_URL || DEFAULT_ANDROID_APK_URL
+).trim();
 
 export function usePwaInstall() {
   const [deferred, setDeferred] = useState(() => {
@@ -137,11 +140,11 @@ export function usePwaInstall() {
 
   const downloadOrInstallApp = useCallback(
     async ({ customApkUrl = '' } = {}) => {
-      const cleanApkUrl = String(customApkUrl || directDownloadUrl || '').trim();
+      const cleanApkUrl = isAndroid ? String(customApkUrl || directDownloadUrl || '').trim() : '';
       if (cleanApkUrl && typeof document !== 'undefined') {
         const link = document.createElement('a');
         link.href = cleanApkUrl;
-        link.download = '';
+        link.download = 'Conoscamosnos.apk';
         link.rel = 'noopener noreferrer';
         document.body.appendChild(link);
         link.click();

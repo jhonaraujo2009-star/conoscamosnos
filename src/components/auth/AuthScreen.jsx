@@ -125,7 +125,10 @@ export default function AuthScreen() {
     }
   };
 
-  const hasDirectApk = Boolean(economyConfig?.androidApkUrl || directDownloadUrl);
+  const activeAndroidApkUrl = isAndroid
+    ? String(economyConfig?.androidApkUrl || directDownloadUrl || '').trim()
+    : '';
+  const hasDirectApk = Boolean(activeAndroidApkUrl);
 
   const handleDownloadApp = async () => {
     const res = await downloadOrInstallApp({ customApkUrl: economyConfig?.androidApkUrl });
@@ -329,6 +332,20 @@ export default function AuthScreen() {
               <span className="px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-extrabold inline-flex items-center gap-1 shrink-0">
                 <CheckCircle2 className="w-3.5 h-3.5" /> Instalada
               </span>
+            ) : activeAndroidApkUrl ? (
+              <a
+                href={activeAndroidApkUrl}
+                download="Conoscamosnos.apk"
+                onClick={() =>
+                  setInstallHint(
+                    '⬇️ Descargando Conoscamosnos.apk... Cuando termine, tócalo para instalar.'
+                  )
+                }
+                className="px-3.5 py-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-[11px] font-black inline-flex items-center gap-1.5 shadow-sm hover:brightness-105 active:scale-95 transition shrink-0"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Descargar App
+              </a>
             ) : (
               <button
                 type="button"
@@ -336,13 +353,7 @@ export default function AuthScreen() {
                 className="px-3.5 py-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-[11px] font-black inline-flex items-center gap-1.5 shadow-sm hover:brightness-105 active:scale-95 transition shrink-0"
               >
                 <Download className="w-3.5 h-3.5" />
-                {hasDirectApk
-                  ? 'Descargar App'
-                  : isAndroid && isInAppBrowser
-                  ? 'Abrir en Chrome'
-                  : canInstallNative
-                  ? 'Instalar App'
-                  : 'Descargar App'}
+                {canInstallNative ? 'Instalar App' : 'Descargar App'}
               </button>
             )}
           </div>
