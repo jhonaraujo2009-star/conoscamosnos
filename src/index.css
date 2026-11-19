@@ -51,6 +51,30 @@
       radial-gradient(at 80% 95%, rgba(244, 187, 224, 0.55) 0px, transparent 55%),
       radial-gradient(at 10% 100%, rgba(255, 228, 232, 0.65) 0px, transparent 50%);
   }
+  .bg-welcome-pastel {
+    background-color: #FFF9F4;
+    background-image:
+      radial-gradient(circle at 8% 10%, rgba(255, 206, 218, 0.58) 0%, transparent 45%),
+      radial-gradient(circle at 92% 14%, rgba(255, 229, 200, 0.60) 0%, transparent 46%),
+      radial-gradient(circle at 75% 88%, rgba(232, 220, 255, 0.48) 0%, transparent 48%),
+      radial-gradient(circle at 15% 85%, rgba(216, 238, 255, 0.45) 0%, transparent 46%);
+  }
+  @keyframes softFloat {
+    0%, 100% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(-5px);
+    }
+  }
+  .animate-soft-float {
+    animation: softFloat 5.5s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .animate-soft-float {
+      animation: none;
+    }
+  }
   .gpu-card {
     will-change: transform;
     transform: translate3d(0, 0, 0);

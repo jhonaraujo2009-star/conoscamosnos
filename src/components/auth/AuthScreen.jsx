@@ -1,28 +1,25 @@
 import { useState } from 'react';
 import {
   AlertCircle,
-  Crown,
+  ArrowLeft,
+  ArrowRight,
   Download,
   Eye,
   EyeOff,
   Flame,
-  Gem,
-  Globe,
   Lock,
   Mail,
-  MessageCircleHeart,
-  ShieldCheck,
   Smartphone,
-  Sparkles,
   User,
 } from 'lucide-react';
 import { isFirebaseConfigured } from '../../config/firebase';
 import { usePwaInstall } from '../../hooks/usePwaInstall';
 import { loginWithEmail, loginWithGoogle, registerWithEmail } from '../../services/authService';
+import AuthWelcomeShowcase from './AuthWelcomeShowcase';
 
 function GoogleLogo() {
   return (
-    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
       <path
         fill="#EA4335"
         d="M12 5.04c1.64 0 3.12.56 4.28 1.66l3.2-3.2C17.53 1.72 14.98.68 12 .68 7.56.68 3.74 3.22 1.88 6.95l3.73 2.9C6.49 7.21 9.02 5.04 12 5.04z"
@@ -46,16 +43,23 @@ function GoogleLogo() {
 function mapAuthError(err) {
   const code = err?.code || '';
   if (code.includes('email-already-in-use')) return 'Este correo ya está registrado. Inicia sesión.';
-  if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) {
+  if (
+    code.includes('invalid-credential') ||
+    code.includes('wrong-password') ||
+    code.includes('user-not-found')
+  ) {
     return 'Correo o contraseña incorrectos.';
   }
   if (code.includes('weak-password')) return 'La contraseña debe tener al menos 6 caracteres.';
-  if (code.includes('popup-closed-by-user')) return 'Se cerró la ventana de Google antes de completar el ingreso.';
+  if (code.includes('popup-closed-by-user')) {
+    return 'Se cerró la ventana de Google antes de completar el ingreso.';
+  }
   return err?.message || 'Ocurrió un error al autenticar.';
 }
 
 export default function AuthScreen() {
-  const [mode, setMode] = useState('login'); // 'login' | 'register'
+  const [mode, setMode] = useState('register'); // 'register' | 'login'
+  const [mobileView, setMobileView] = useState('welcome'); // 'welcome' | 'auth'
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -115,7 +119,9 @@ export default function AuthScreen() {
 
     if (isIOS) {
       setInstallHint((prev) =>
-        prev ? '' : 'En iPhone/iPad: abre en Safari, toca Compartir (↑) y selecciona «Agregar a pantalla de inicio».'
+        prev
+          ? ''
+          : 'En iPhone/iPad: abre en Safari, toca Compartir (↑) y selecciona «Agregar a pantalla de inicio».'
       );
       return;
     }
@@ -127,227 +133,357 @@ export default function AuthScreen() {
     );
   };
 
-  return (
-    <div className="h-[100dvh] w-screen overflow-y-auto bg-luxury-mesh flex items-start sm:items-center justify-center p-4 sm:p-6 relative">
-      <div className="w-full max-w-md my-auto bg-white/95 border border-zinc-200/80 rounded-[32px] p-6 sm:p-8 shadow-luxury backdrop-blur-xl relative z-10 animate-sheet-up">
-        {/* Brand Hero */}
-        <div className="flex flex-col items-center text-center mb-5">
-          <div className="w-16 h-16 rounded-[22px] bg-gradient-to-br from-[#FF2E54] via-rose-500 to-amber-400 flex items-center justify-center shadow-lg shadow-[#FF2E54]/30 mb-3.5 ring-4 ring-rose-100/80">
-            <Flame className="w-8 h-8 text-white fill-white" />
-          </div>
+  const openMobileAuth = (targetMode) => {
+    setMode(targetMode);
+    setMobileView('auth');
+    setError('');
+  };
 
-          <h1 className="font-display text-3xl font-black tracking-tight text-zinc-900">
-            Conoscamosnos
-          </h1>
-          <p className="text-xs sm:text-sm font-medium text-zinc-500 mt-1 max-w-[290px] leading-relaxed">
-            Conexiones románticas reales, diseño elegante y privacidad total 1-a-1.
+  const mobileWelcomeCtaSlot = (
+    <div className="rounded-[26px] bg-white/90 backdrop-blur-xl border border-[#F1E1D9] p-4 space-y-2.5 shadow-[0_14px_34px_-18px_rgba(190,115,128,0.22)]">
+      {!isFirebaseConfigured && (
+        <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
+          <div className="flex items-center gap-1.5 font-bold text-amber-800">
+            <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+            Configuración de Firebase requerida
+          </div>
+          <p className="text-[11px] leading-snug text-amber-800/90">
+            Agrega tus credenciales de Firebase en <code className="px-1 py-0.5 rounded bg-white border border-amber-200">.env</code>.
           </p>
-
-          {/* Trust & Value Pills */}
-          <div className="flex flex-wrap items-center justify-center gap-1.5 mt-3.5">
-            <span className="px-2.5 py-1 rounded-full bg-rose-50 border border-rose-100 text-[11px] font-bold text-[#FF2E54] flex items-center gap-1">
-              <MessageCircleHeart className="w-3 h-3" /> Chats 1-a-1
-            </span>
-            <span className="px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-100 text-[11px] font-bold text-emerald-700 flex items-center gap-1">
-              <ShieldCheck className="w-3 h-3" /> 100% Privado
-            </span>
-            <span className="px-2.5 py-1 rounded-full bg-zinc-100 border border-zinc-200/80 text-[11px] font-bold text-zinc-700 flex items-center gap-1">
-              <Globe className="w-3 h-3 text-zinc-500" /> Global
-            </span>
-          </div>
         </div>
+      )}
 
-        {/* Luxury VIP Creator Monetization Highlight Banner */}
-        <div className="mb-5 relative overflow-hidden rounded-[24px] p-4 bg-gradient-to-br from-[#190913] via-[#280B1C] to-[#120A14] border border-amber-300/30 shadow-lg text-white">
-          <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-amber-400/15 blur-2xl pointer-events-none" />
-          <div className="absolute -left-6 -bottom-6 w-20 h-20 rounded-full bg-[#FF2E54]/20 blur-2xl pointer-events-none" />
-          <div className="relative flex items-start gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-300 via-amber-400 to-rose-500 text-zinc-950 flex items-center justify-center shrink-0 shadow-md">
-              <Crown className="w-5 h-5 stroke-[2.3]" />
-            </div>
-            <div className="min-w-0 space-y-1">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="px-2 py-0.5 rounded-full bg-amber-400/20 border border-amber-300/35 text-amber-200 text-[9.5px] font-black uppercase tracking-wider inline-flex items-center gap-1">
-                  <Sparkles className="w-2.5 h-2.5" /> Programa Creador VIP
-                </span>
-                <span className="text-[10px] font-bold text-emerald-300 inline-flex items-center gap-0.5">
-                  <Gem className="w-3 h-3 text-sky-300" /> Retiros en $ USD
-                </span>
-              </div>
-              <p className="font-display text-[13px] font-extrabold text-white leading-snug">
-                Convierte los regalos y diamantes que recibas en dinero real
-              </p>
-              <p className="text-[11px] text-rose-100/80 leading-relaxed">
-                Monetiza tu perfil de forma opcional y cobra tus ganancias directo a <strong>Binance Pay</strong>, <strong>Zinli (USD)</strong> o <strong>Pago Móvil</strong>.
-              </p>
-            </div>
-          </div>
+      {error && (
+        <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 text-[#FF2E54]" />
+          <span>{error}</span>
         </div>
+      )}
 
-        {!isFirebaseConfigured && (
-          <div className="mb-5 p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1.5">
-            <div className="flex items-center gap-2 font-bold text-amber-800">
-              <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
-              Configuración de Firebase requerida
-            </div>
-            <p className="leading-relaxed text-amber-800/90">
-              Agrega tus credenciales de Firebase y Cloudinary en <code className="px-1.5 py-0.5 rounded bg-white border border-amber-200">.env</code> para activar el acceso.
-            </p>
-          </div>
-        )}
+      <button
+        type="button"
+        onClick={() => openMobileAuth('register')}
+        className="w-full py-3.5 px-5 rounded-full bg-gradient-to-r from-[#FF3B66] via-[#FF5A79] to-[#FF7B6B] text-white font-extrabold text-sm shadow-lg shadow-[#FF3B66]/25 hover:brightness-105 active:scale-[0.99] transition flex items-center justify-center gap-2"
+      >
+        <span>Crear mi cuenta gratis</span>
+        <ArrowRight className="w-4 h-4" />
+      </button>
 
-        {/* Mode Switcher */}
-        <div className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-zinc-100 border border-zinc-200/60 mb-5">
-          <button
-            type="button"
-            onClick={() => { setMode('login'); setError(''); }}
-            className={`py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all ${
-              mode === 'login'
-                ? 'bg-white text-zinc-900 shadow-sm'
-                : 'text-zinc-500 hover:text-zinc-800'
-            }`}
-          >
-            Iniciar Sesión
-          </button>
-          <button
-            type="button"
-            onClick={() => { setMode('register'); setError(''); }}
-            className={`py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all ${
-              mode === 'register'
-                ? 'bg-white text-zinc-900 shadow-sm'
-                : 'text-zinc-500 hover:text-zinc-800'
-            }`}
-          >
-            Crear Cuenta
-          </button>
-        </div>
+      <button
+        type="button"
+        onClick={handleGoogle}
+        disabled={busy || !isFirebaseConfigured}
+        className="w-full py-3 px-4 rounded-full bg-[#FFFDFB] hover:bg-[#FFF7F3] border border-[#EAD9D0] text-[#3B2C28] font-bold text-sm shadow-sm disabled:opacity-50 transition flex items-center justify-center gap-2.5"
+      >
+        <GoogleLogo />
+        <span>Continuar con Google</span>
+      </button>
 
-        {error && (
-          <div className="mb-4 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0 text-[#FF2E54]" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-3">
-          {mode === 'register' && (
-            <div className="relative">
-              <User className="w-4 h-4 text-zinc-400 absolute left-4 top-3.5" />
-              <input
-                type="text"
-                placeholder="Tu nombre visible"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                className="w-full pl-11 pr-4 py-3 rounded-2xl bg-zinc-50 border border-zinc-200 text-zinc-900 placeholder:text-zinc-400 text-sm font-medium focus:outline-none focus:bg-white focus:border-zinc-900 transition"
-              />
-            </div>
-          )}
-
-          <div className="relative">
-            <Mail className="w-4 h-4 text-zinc-400 absolute left-4 top-3.5" />
-            <input
-              type="email"
-              placeholder="Correo electrónico"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full pl-11 pr-4 py-3 rounded-2xl bg-zinc-50 border border-zinc-200 text-zinc-900 placeholder:text-zinc-400 text-sm font-medium focus:outline-none focus:bg-white focus:border-zinc-900 transition"
-            />
-          </div>
-
-          <div className="relative">
-            <Lock className="w-4 h-4 text-zinc-400 absolute left-4 top-3.5" />
-            <input
-              type={showPassword ? 'text' : 'password'}
-              placeholder="Contraseña (mín. 6 caracteres)"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
-              className="w-full pl-11 pr-11 py-3 rounded-2xl bg-zinc-50 border border-zinc-200 text-zinc-900 placeholder:text-zinc-400 text-sm font-medium focus:outline-none focus:bg-white focus:border-zinc-900 transition"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-3.5 top-3 p-0.5 text-zinc-400 hover:text-zinc-700"
-              aria-label={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
-            >
-              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-
-          {mode === 'register' && (
-            <label className="flex items-start gap-2.5 text-xs text-zinc-600 cursor-pointer pt-1">
-              <input
-                type="checkbox"
-                checked={adultConfirmed}
-                onChange={(e) => setAdultConfirmed(e.target.checked)}
-                className="mt-0.5 rounded accent-[#FF2E54]"
-              />
-              <span>Confirmo ser mayor de 18 años y acepto las normas de respeto y privacidad.</span>
-            </label>
-          )}
-
-          <button
-            type="submit"
-            disabled={busy || !isFirebaseConfigured}
-            className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#FF2E54] to-[#FF5E7E] text-white font-extrabold text-sm shadow-lg shadow-[#FF2E54]/25 hover:brightness-105 active:scale-[0.99] disabled:opacity-50 transition flex items-center justify-center gap-2 mt-1"
-          >
-            {busy
-              ? 'Conectando...'
-              : mode === 'register'
-              ? 'Crear mi Perfil Independiente'
-              : 'Entrar a Conoscamosnos'}
-          </button>
-        </form>
-
-        <div className="my-5 flex items-center gap-3 text-xs text-zinc-400 font-medium">
-          <div className="h-px flex-1 bg-zinc-200" />
-          <span>o continúa con</span>
-          <div className="h-px flex-1 bg-zinc-200" />
-        </div>
-
+      <p className="text-center text-xs text-[#6B5A53] pt-0.5">
+        ¿Ya tienes cuenta?{' '}
         <button
           type="button"
-          onClick={handleGoogle}
-          disabled={busy || !isFirebaseConfigured}
-          className="w-full py-3 rounded-full bg-white border border-zinc-200 text-zinc-800 font-bold text-sm hover:bg-zinc-50 hover:border-zinc-300 shadow-sm disabled:opacity-50 transition flex items-center justify-center gap-2.5"
+          onClick={() => openMobileAuth('login')}
+          className="font-black text-[#E63961] hover:underline"
         >
-          <GoogleLogo />
-          Continuar con Google
+          Iniciar sesión
         </button>
+      </p>
+    </div>
+  );
 
-        {!isInstalled && (
-          <div className="mt-3.5 space-y-2">
+  return (
+    <div className="h-[100dvh] w-screen overflow-y-auto overflow-x-hidden bg-welcome-pastel text-[#2B201E] relative">
+      {/* Cabecera ligera pastel */}
+      <header className="max-w-6xl mx-auto px-4 sm:px-6 pt-4 pb-2 flex items-center justify-between gap-3 relative z-10">
+        <div className="flex items-center gap-2.5 min-w-0">
+          {mobileView === 'auth' ? (
+            <button
+              type="button"
+              onClick={() => {
+                setMobileView('welcome');
+                setError('');
+              }}
+              className="lg:hidden px-3 py-1.5 rounded-full bg-white/90 hover:bg-white border border-[#EEDCD4] text-[#4E3B35] text-xs font-extrabold inline-flex items-center gap-1.5 shadow-sm transition"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Volver</span>
+            </button>
+          ) : null}
+
+          <div
+            className={`${
+              mobileView === 'auth' ? 'hidden lg:flex' : 'flex'
+            } items-center gap-2.5 min-w-0`}
+          >
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#FF3B66] via-[#FF5E7E] to-[#FF9B6A] flex items-center justify-center shadow-md shadow-[#FF3B66]/20 ring-2 ring-white/80 shrink-0">
+              <Flame className="w-5 h-5 text-white fill-white" />
+            </div>
+            <span className="font-display text-base sm:text-lg font-black tracking-tight text-[#2B201E] truncate">
+              Conoscamosnos
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          {!isInstalled && (
             <button
               type="button"
               onClick={handleInstallAndroid}
-              className="w-full py-2.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200/90 text-emerald-900 font-extrabold text-xs hover:brightness-95 transition flex items-center justify-between gap-2"
+              className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#EAF7F0] hover:bg-[#DFF3E8] border border-[#BDE5CF] text-[#176843] text-xs font-extrabold transition"
             >
-              <span className="flex items-center gap-2 min-w-0">
-                <Smartphone className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span className="truncate">
-                  {canInstallNative ? 'Descargar App para Android ahora' : 'Descargar App para Android'}
-                </span>
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-black shrink-0 inline-flex items-center gap-1">
-                <Download className="w-3 h-3" /> App
-              </span>
+              <Download className="w-3.5 h-3.5" />
+              <span>Instalar App</span>
             </button>
+          )}
 
-            {installHint && (
-              <p className="text-[11px] text-zinc-600 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 leading-relaxed">
-                {installHint}
-              </p>
-            )}
+          {/* Switch rápido móvil */}
+          <button
+            type="button"
+            onClick={() => {
+              if (mobileView === 'welcome') {
+                openMobileAuth('login');
+              } else {
+                setMode((m) => (m === 'register' ? 'login' : 'register'));
+                setError('');
+              }
+            }}
+            className="lg:hidden px-3.5 py-1.5 rounded-full bg-white/90 hover:bg-white border border-[#EEDCD4] text-[#4E3B35] text-xs font-extrabold shadow-sm transition"
+          >
+            {mobileView === 'welcome'
+              ? 'Iniciar sesión'
+              : mode === 'register'
+              ? '¿Ya tienes cuenta?'
+              : 'Crear cuenta'}
+          </button>
+
+          {/* Switch rápido escritorio */}
+          <button
+            type="button"
+            onClick={() => {
+              setMode((m) => (m === 'register' ? 'login' : 'register'));
+              setError('');
+            }}
+            className="hidden lg:inline-flex px-4 py-2 rounded-full bg-white/85 hover:bg-white border border-[#EEDCD4] text-[#4E3B35] text-xs font-extrabold shadow-sm transition"
+          >
+            {mode === 'register' ? '¿Ya tienes cuenta? Entrar' : 'Crear cuenta nueva'}
+          </button>
+        </div>
+      </header>
+
+      {/* Contenido Principal Responsive */}
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-6 pb-12 relative z-10">
+        <div className="grid grid-cols-1 lg:grid-cols-12 lg:gap-10 lg:items-center">
+          {/* Columna Izquierda: Bienvenida Editorial & Programa Creador VIP Pastel */}
+          <div
+            className={`${
+              mobileView === 'welcome' ? 'block' : 'hidden lg:block'
+            } lg:col-span-7`}
+          >
+            <AuthWelcomeShowcase mobileCtaSlot={mobileWelcomeCtaSlot} />
           </div>
-        )}
 
-        <p className="text-[11px] text-center text-zinc-400 mt-5 leading-relaxed">
-          Cada perfil es independiente y tus conversaciones privadas son visibles únicamente para ti y tu contacto.
-        </p>
-      </div>
+          {/* Columna Derecha: Tarjeta Porcelana Luminosa de Acceso */}
+          <div
+            className={`${
+              mobileView === 'auth' ? 'block' : 'hidden lg:block'
+            } lg:col-span-5`}
+          >
+            <div className="bg-white/90 backdrop-blur-2xl border border-[#F1E1D9] rounded-[34px] p-6 sm:p-7 shadow-[0_24px_60px_-20px_rgba(190,115,128,0.22)] animate-sheet-up">
+              {/* Encabezado cálido de acceso */}
+              <div className="text-center sm:text-left mb-5 space-y-1">
+                <h2 className="font-display text-xl sm:text-2xl font-black tracking-tight text-[#2B201E]">
+                  {mode === 'register'
+                    ? 'Crea tu perfil en 1 minuto'
+                    : 'Qué alegría verte de nuevo'}
+                </h2>
+                <p className="text-xs sm:text-[13px] text-[#7A675F] font-medium">
+                  {mode === 'register'
+                    ? 'Gratis, privado y listo para conectar hoy.'
+                    : 'Ingresa para continuar tus conversaciones.'}
+                </p>
+              </div>
+
+              {!isFirebaseConfigured && (
+                <div className="mb-4 p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1.5">
+                  <div className="flex items-center gap-2 font-bold text-amber-800">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+                    Configuración de Firebase requerida
+                  </div>
+                  <p className="leading-relaxed text-amber-800/90">
+                    Agrega tus credenciales de Firebase y Cloudinary en{' '}
+                    <code className="px-1.5 py-0.5 rounded bg-white border border-amber-200">.env</code>{' '}
+                    para activar el acceso.
+                  </p>
+                </div>
+              )}
+
+              {/* Selector de Modo */}
+              <div className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-[#F7EFEA] border border-[#EDE0D8] mb-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('register');
+                    setError('');
+                  }}
+                  className={`py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all ${
+                    mode === 'register'
+                      ? 'bg-white text-[#2B201E] shadow-sm'
+                      : 'text-[#7A675F] hover:text-[#2B201E]'
+                  }`}
+                >
+                  Crear Cuenta
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('login');
+                    setError('');
+                  }}
+                  className={`py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all ${
+                    mode === 'login'
+                      ? 'bg-white text-[#2B201E] shadow-sm'
+                      : 'text-[#7A675F] hover:text-[#2B201E]'
+                  }`}
+                >
+                  Iniciar Sesión
+                </button>
+              </div>
+
+              {/* Acceso en 1 clic con Google */}
+              <button
+                type="button"
+                onClick={handleGoogle}
+                disabled={busy || !isFirebaseConfigured}
+                className="w-full py-3 rounded-full bg-[#FFFDFB] hover:bg-[#FFF7F3] border border-[#EAD9D0] text-[#3B2C28] font-bold text-sm shadow-sm disabled:opacity-50 transition flex items-center justify-center gap-2.5"
+              >
+                <GoogleLogo />
+                <span>Continuar con Google</span>
+              </button>
+
+              <div className="my-4 flex items-center gap-3 text-[11px] text-[#9A857C] font-semibold">
+                <div className="h-px flex-1 bg-[#EFE1DA]" />
+                <span>o usa tu correo</span>
+                <div className="h-px flex-1 bg-[#EFE1DA]" />
+              </div>
+
+              {error && (
+                <div className="mb-4 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-[#FF2E54]" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="space-y-3">
+                {mode === 'register' && (
+                  <div className="relative">
+                    <User className="w-4 h-4 text-[#A48E84] absolute left-4 top-3.5" />
+                    <input
+                      type="text"
+                      placeholder="Tu nombre visible"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      required
+                      className="w-full pl-11 pr-4 py-3 rounded-2xl bg-[#FCF7F3] border border-[#EBDCD3] text-[#2B201E] placeholder:text-[#9F8B82] text-sm font-medium focus:outline-none focus:bg-white focus:border-[#F0627F] focus:ring-2 focus:ring-rose-100 transition"
+                    />
+                  </div>
+                )}
+
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-[#A48E84] absolute left-4 top-3.5" />
+                  <input
+                    type="email"
+                    placeholder="Correo electrónico"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="w-full pl-11 pr-4 py-3 rounded-2xl bg-[#FCF7F3] border border-[#EBDCD3] text-[#2B201E] placeholder:text-[#9F8B82] text-sm font-medium focus:outline-none focus:bg-white focus:border-[#F0627F] focus:ring-2 focus:ring-rose-100 transition"
+                  />
+                </div>
+
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-[#A48E84] absolute left-4 top-3.5" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Contraseña (mín. 6 caracteres)"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    className="w-full pl-11 pr-11 py-3 rounded-2xl bg-[#FCF7F3] border border-[#EBDCD3] text-[#2B201E] placeholder:text-[#9F8B82] text-sm font-medium focus:outline-none focus:bg-white focus:border-[#F0627F] focus:ring-2 focus:ring-rose-100 transition"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-3.5 top-3 p-0.5 text-[#9A857C] hover:text-[#2B201E] transition"
+                    aria-label={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                {mode === 'register' && (
+                  <label className="flex items-start gap-2.5 text-xs text-[#6B5A53] cursor-pointer pt-1">
+                    <input
+                      type="checkbox"
+                      checked={adultConfirmed}
+                      onChange={(e) => setAdultConfirmed(e.target.checked)}
+                      className="mt-0.5 rounded accent-[#FF3B66]"
+                    />
+                    <span>
+                      Confirmo ser mayor de 18 años y acepto las normas de respeto y privacidad.
+                    </span>
+                  </label>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={busy || !isFirebaseConfigured}
+                  className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#FF3B66] via-[#FF5A79] to-[#FF7B6B] text-white font-extrabold text-sm shadow-lg shadow-[#FF3B66]/25 hover:brightness-105 active:scale-[0.99] disabled:opacity-50 transition flex items-center justify-center gap-2 mt-1"
+                >
+                  {busy
+                    ? 'Conectando...'
+                    : mode === 'register'
+                    ? 'Crear mi perfil gratis'
+                    : 'Entrar a Conoscamosnos'}
+                </button>
+              </form>
+
+              {!isInstalled && (
+                <div className="mt-4 space-y-2">
+                  <button
+                    type="button"
+                    onClick={handleInstallAndroid}
+                    className="w-full py-2.5 px-4 rounded-2xl bg-gradient-to-r from-[#ECF9F2] to-[#E6F6F5] border border-[#BDE5CF] text-[#176843] font-extrabold text-xs hover:brightness-95 transition flex items-center justify-between gap-2"
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      <Smartphone className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span className="truncate">
+                        {canInstallNative
+                          ? 'Descargar App para Android ahora'
+                          : 'Descargar App para Android'}
+                      </span>
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-black shrink-0 inline-flex items-center gap-1">
+                      <Download className="w-3 h-3" /> App
+                    </span>
+                  </button>
+
+                  {installHint && (
+                    <p className="text-[11px] text-[#5C4E41] bg-[#FAF4EE] border border-[#EBDCD3] rounded-xl px-3 py-2 leading-relaxed">
+                      {installHint}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <p className="text-[11px] text-center text-[#8E7970] mt-4 leading-relaxed">
+                Cada perfil es independiente y tus conversaciones privadas son visibles únicamente para ti y tu contacto.
+              </p>
+            </div>
+          </div>
+        </div>
+      </main>
     </div>
   );
 }
