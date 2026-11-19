@@ -140,22 +140,23 @@ export default function AuthScreen() {
   };
 
   const mobileWelcomeCtaSlot = (
-    <div className="rounded-[26px] bg-white/90 backdrop-blur-xl border border-[#F1E1D9] p-4 space-y-2.5 shadow-[0_14px_34px_-18px_rgba(190,115,128,0.22)]">
+    <div className="space-y-3 py-1">
       {!isFirebaseConfigured && (
-        <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
+        <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
           <div className="flex items-center gap-1.5 font-bold text-amber-800">
             <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
             Configuración de Firebase requerida
           </div>
           <p className="text-[11px] leading-snug text-amber-800/90">
-            Agrega tus credenciales de Firebase en <code className="px-1 py-0.5 rounded bg-white border border-amber-200">.env</code>.
+            Agrega tus credenciales de Firebase en{' '}
+            <code className="px-1 py-0.5 rounded bg-white border border-amber-200">.env</code>.
           </p>
         </div>
       )}
 
       {error && (
-        <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0 text-[#FF2E54]" />
+        <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 text-[#C93254]" />
           <span>{error}</span>
         </div>
       )}
@@ -163,9 +164,9 @@ export default function AuthScreen() {
       <button
         type="button"
         onClick={() => openMobileAuth('register')}
-        className="w-full py-3.5 px-5 rounded-full bg-gradient-to-r from-[#FF3B66] via-[#FF5A79] to-[#FF7B6B] text-white font-extrabold text-sm shadow-lg shadow-[#FF3B66]/25 hover:brightness-105 active:scale-[0.99] transition flex items-center justify-center gap-2"
+        className="w-full py-4 px-5 rounded-full bg-[#C93254] hover:bg-[#B42747] text-white font-extrabold text-sm shadow-[0_16px_34px_-12px_rgba(201,50,84,0.45)] active:scale-[0.99] transition flex items-center justify-center gap-2"
       >
-        <span>Crear mi cuenta gratis</span>
+        <span>Crear mi perfil gratis</span>
         <ArrowRight className="w-4 h-4" />
       </button>
 
@@ -173,18 +174,18 @@ export default function AuthScreen() {
         type="button"
         onClick={handleGoogle}
         disabled={busy || !isFirebaseConfigured}
-        className="w-full py-3 px-4 rounded-full bg-[#FFFDFB] hover:bg-[#FFF7F3] border border-[#EAD9D0] text-[#3B2C28] font-bold text-sm shadow-sm disabled:opacity-50 transition flex items-center justify-center gap-2.5"
+        className="w-full py-3.5 px-4 rounded-full bg-[#FFFDF9] hover:bg-[#FFF7F0] border border-[#E4D5CA] text-[#1F1715] font-bold text-sm shadow-sm disabled:opacity-50 transition flex items-center justify-center gap-2.5"
       >
         <GoogleLogo />
         <span>Continuar con Google</span>
       </button>
 
-      <p className="text-center text-xs text-[#6B5A53] pt-0.5">
+      <p className="text-center text-xs text-[#6A5951] pt-0.5">
         ¿Ya tienes cuenta?{' '}
         <button
           type="button"
           onClick={() => openMobileAuth('login')}
-          className="font-black text-[#E63961] hover:underline"
+          className="font-bold text-[#C93254] hover:underline"
         >
           Iniciar sesión
         </button>
@@ -193,9 +194,11 @@ export default function AuthScreen() {
   );
 
   return (
-    <div className="h-[100dvh] w-screen overflow-y-auto overflow-x-hidden bg-welcome-pastel text-[#2B201E] relative">
-      {/* Cabecera ligera pastel */}
-      <header className="max-w-6xl mx-auto px-4 sm:px-6 pt-4 pb-2 flex items-center justify-between gap-3 relative z-10">
+    <div className="h-[100dvh] w-screen overflow-y-auto overflow-x-hidden bg-editorial-cream text-[#1F1715] relative">
+      <div className="editorial-grain pointer-events-none fixed inset-0 z-0" aria-hidden="true" />
+
+      {/* Cabecera minimal editorial */}
+      <header className="max-w-[1200px] mx-auto px-5 sm:px-8 pt-4 sm:pt-5 pb-2 flex items-center justify-between gap-3 relative z-10">
         <div className="flex items-center gap-2.5 min-w-0">
           {mobileView === 'auth' ? (
             <button
@@ -204,7 +207,7 @@ export default function AuthScreen() {
                 setMobileView('welcome');
                 setError('');
               }}
-              className="lg:hidden px-3 py-1.5 rounded-full bg-white/90 hover:bg-white border border-[#EEDCD4] text-[#4E3B35] text-xs font-extrabold inline-flex items-center gap-1.5 shadow-sm transition"
+              className="lg:hidden px-3.5 py-1.5 rounded-full bg-[#FFFDF9] hover:bg-[#FFF7F0] border border-[#E6D6C7] text-[#3B2C28] text-xs font-extrabold inline-flex items-center gap-1.5 shadow-sm transition"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Volver</span>
@@ -216,10 +219,10 @@ export default function AuthScreen() {
               mobileView === 'auth' ? 'hidden lg:flex' : 'flex'
             } items-center gap-2.5 min-w-0`}
           >
-            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#FF3B66] via-[#FF5E7E] to-[#FF9B6A] flex items-center justify-center shadow-md shadow-[#FF3B66]/20 ring-2 ring-white/80 shrink-0">
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#C93254] via-[#E54D6E] to-[#E68A5C] flex items-center justify-center shadow-sm ring-1 ring-white/80 shrink-0">
               <Flame className="w-5 h-5 text-white fill-white" />
             </div>
-            <span className="font-display text-base sm:text-lg font-black tracking-tight text-[#2B201E] truncate">
+            <span className="font-display text-base sm:text-lg font-black tracking-tight text-[#1F1715] truncate">
               Conoscamosnos
             </span>
           </div>
@@ -230,14 +233,14 @@ export default function AuthScreen() {
             <button
               type="button"
               onClick={handleInstallAndroid}
-              className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#EAF7F0] hover:bg-[#DFF3E8] border border-[#BDE5CF] text-[#176843] text-xs font-extrabold transition"
+              className="hidden lg:inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#FFFDF9] hover:bg-[#F3FAF6] border border-[#D4E6DA] text-[#176843] text-xs font-bold transition shadow-sm"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Instalar App</span>
             </button>
           )}
 
-          {/* Switch rápido móvil */}
+          {/* Switch móvil */}
           <button
             type="button"
             onClick={() => {
@@ -248,7 +251,7 @@ export default function AuthScreen() {
                 setError('');
               }
             }}
-            className="lg:hidden px-3.5 py-1.5 rounded-full bg-white/90 hover:bg-white border border-[#EEDCD4] text-[#4E3B35] text-xs font-extrabold shadow-sm transition"
+            className="lg:hidden px-3.5 py-1.5 rounded-full bg-[#FFFDF9] hover:bg-[#FFF7F0] border border-[#E6D6C7] text-[#3B2C28] text-xs font-extrabold shadow-sm transition"
           >
             {mobileView === 'welcome'
               ? 'Iniciar sesión'
@@ -257,24 +260,24 @@ export default function AuthScreen() {
               : 'Crear cuenta'}
           </button>
 
-          {/* Switch rápido escritorio */}
+          {/* Switch escritorio */}
           <button
             type="button"
             onClick={() => {
               setMode((m) => (m === 'register' ? 'login' : 'register'));
               setError('');
             }}
-            className="hidden lg:inline-flex px-4 py-2 rounded-full bg-white/85 hover:bg-white border border-[#EEDCD4] text-[#4E3B35] text-xs font-extrabold shadow-sm transition"
+            className="hidden lg:inline-flex px-4 py-2 rounded-full bg-[#FFFDF9] hover:bg-[#FFF7F0] border border-[#E6D6C7] text-[#3B2C28] text-xs font-extrabold shadow-sm transition"
           >
             {mode === 'register' ? '¿Ya tienes cuenta? Entrar' : 'Crear cuenta nueva'}
           </button>
         </div>
       </header>
 
-      {/* Contenido Principal Responsive */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-6 pb-12 relative z-10">
-        <div className="grid grid-cols-1 lg:grid-cols-12 lg:gap-10 lg:items-center">
-          {/* Columna Izquierda: Bienvenida Editorial & Programa Creador VIP Pastel */}
+      {/* Composición Principal */}
+      <main className="max-w-[1200px] mx-auto px-5 sm:px-8 py-4 sm:py-6 pb-12 relative z-10">
+        <div className="grid grid-cols-1 lg:grid-cols-12 lg:gap-12 lg:items-center">
+          {/* Columna Izquierda: Editorial Storytelling & Champagne Pearl VIP */}
           <div
             className={`${
               mobileView === 'welcome' ? 'block' : 'hidden lg:block'
@@ -283,21 +286,18 @@ export default function AuthScreen() {
             <AuthWelcomeShowcase mobileCtaSlot={mobileWelcomeCtaSlot} />
           </div>
 
-          {/* Columna Derecha: Tarjeta Porcelana Luminosa de Acceso */}
+          {/* Columna Derecha: Porcelain Auth Atelier */}
           <div
             className={`${
               mobileView === 'auth' ? 'block' : 'hidden lg:block'
             } lg:col-span-5`}
           >
-            <div className="bg-white/90 backdrop-blur-2xl border border-[#F1E1D9] rounded-[34px] p-6 sm:p-7 shadow-[0_24px_60px_-20px_rgba(190,115,128,0.22)] animate-sheet-up">
-              {/* Encabezado cálido de acceso */}
-              <div className="text-center sm:text-left mb-5 space-y-1">
-                <h2 className="font-display text-xl sm:text-2xl font-black tracking-tight text-[#2B201E]">
-                  {mode === 'register'
-                    ? 'Crea tu perfil en 1 minuto'
-                    : 'Qué alegría verte de nuevo'}
+            <div className="bg-[#FFFDF9]/95 backdrop-blur-2xl border border-[#EAE0D7] rounded-[34px] p-6 sm:p-8 shadow-[0_28px_70px_-28px_rgba(68,38,32,0.18)] animate-sheet-up">
+              <div className="mb-5 space-y-1.5">
+                <h2 className="font-editorial text-[30px] sm:text-[34px] font-semibold text-[#1F1715] leading-none">
+                  {mode === 'register' ? 'Empieza tu historia' : 'Bienvenido de vuelta'}
                 </h2>
-                <p className="text-xs sm:text-[13px] text-[#7A675F] font-medium">
+                <p className="text-xs sm:text-[13px] text-[#7D6A61] font-medium">
                   {mode === 'register'
                     ? 'Gratis, privado y listo para conectar hoy.'
                     : 'Ingresa para continuar tus conversaciones.'}
@@ -318,21 +318,21 @@ export default function AuthScreen() {
                 </div>
               )}
 
-              {/* Selector de Modo */}
-              <div className="grid grid-cols-2 gap-1 p-1 rounded-2xl bg-[#F7EFEA] border border-[#EDE0D8] mb-4">
+              {/* Pestañas minimalistas con subrayado */}
+              <div className="grid grid-cols-2 border-b border-[#EFE3DA] mb-5">
                 <button
                   type="button"
                   onClick={() => {
                     setMode('register');
                     setError('');
                   }}
-                  className={`py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all ${
+                  className={`-mb-px pb-3 text-xs sm:text-sm font-extrabold transition border-b-2 ${
                     mode === 'register'
-                      ? 'bg-white text-[#2B201E] shadow-sm'
-                      : 'text-[#7A675F] hover:text-[#2B201E]'
+                      ? 'border-[#C93254] text-[#1F1715]'
+                      : 'border-transparent text-[#8E7970] hover:text-[#1F1715]'
                   }`}
                 >
-                  Crear Cuenta
+                  Crear cuenta
                 </button>
                 <button
                   type="button"
@@ -340,36 +340,36 @@ export default function AuthScreen() {
                     setMode('login');
                     setError('');
                   }}
-                  className={`py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all ${
+                  className={`-mb-px pb-3 text-xs sm:text-sm font-extrabold transition border-b-2 ${
                     mode === 'login'
-                      ? 'bg-white text-[#2B201E] shadow-sm'
-                      : 'text-[#7A675F] hover:text-[#2B201E]'
+                      ? 'border-[#C93254] text-[#1F1715]'
+                      : 'border-transparent text-[#8E7970] hover:text-[#1F1715]'
                   }`}
                 >
-                  Iniciar Sesión
+                  Iniciar sesión
                 </button>
               </div>
 
-              {/* Acceso en 1 clic con Google */}
+              {/* Botón Google porcelana */}
               <button
                 type="button"
                 onClick={handleGoogle}
                 disabled={busy || !isFirebaseConfigured}
-                className="w-full py-3 rounded-full bg-[#FFFDFB] hover:bg-[#FFF7F3] border border-[#EAD9D0] text-[#3B2C28] font-bold text-sm shadow-sm disabled:opacity-50 transition flex items-center justify-center gap-2.5"
+                className="w-full py-3.5 rounded-full bg-[#FFFDF9] hover:bg-[#FFF7F0] border border-[#E4D5CA] text-[#1F1715] font-bold text-sm shadow-sm disabled:opacity-50 transition flex items-center justify-center gap-2.5"
               >
                 <GoogleLogo />
                 <span>Continuar con Google</span>
               </button>
 
               <div className="my-4 flex items-center gap-3 text-[11px] text-[#9A857C] font-semibold">
-                <div className="h-px flex-1 bg-[#EFE1DA]" />
-                <span>o usa tu correo</span>
-                <div className="h-px flex-1 bg-[#EFE1DA]" />
+                <div className="h-px flex-1 bg-[#EFE3DA]" />
+                <span>o con tu correo</span>
+                <div className="h-px flex-1 bg-[#EFE3DA]" />
               </div>
 
               {error && (
                 <div className="mb-4 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-[#FF2E54]" />
+                  <AlertCircle className="w-4 h-4 shrink-0 text-[#C93254]" />
                   <span>{error}</span>
                 </div>
               )}
@@ -377,32 +377,32 @@ export default function AuthScreen() {
               <form onSubmit={handleSubmit} className="space-y-3">
                 {mode === 'register' && (
                   <div className="relative">
-                    <User className="w-4 h-4 text-[#A48E84] absolute left-4 top-3.5" />
+                    <User className="w-4 h-4 text-[#9E8B81] absolute left-4 top-3.5" />
                     <input
                       type="text"
                       placeholder="Tu nombre visible"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       required
-                      className="w-full pl-11 pr-4 py-3 rounded-2xl bg-[#FCF7F3] border border-[#EBDCD3] text-[#2B201E] placeholder:text-[#9F8B82] text-sm font-medium focus:outline-none focus:bg-white focus:border-[#F0627F] focus:ring-2 focus:ring-rose-100 transition"
+                      className="w-full pl-11 pr-4 py-3 rounded-2xl bg-[#FBF6F1] border border-[#E8DAD0] text-[#1F1715] placeholder:text-[#9E8B81] text-sm font-medium focus:outline-none focus:bg-white focus:border-[#C93254] focus:ring-2 focus:ring-[#C93254]/10 transition"
                     />
                   </div>
                 )}
 
                 <div className="relative">
-                  <Mail className="w-4 h-4 text-[#A48E84] absolute left-4 top-3.5" />
+                  <Mail className="w-4 h-4 text-[#9E8B81] absolute left-4 top-3.5" />
                   <input
                     type="email"
                     placeholder="Correo electrónico"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
-                    className="w-full pl-11 pr-4 py-3 rounded-2xl bg-[#FCF7F3] border border-[#EBDCD3] text-[#2B201E] placeholder:text-[#9F8B82] text-sm font-medium focus:outline-none focus:bg-white focus:border-[#F0627F] focus:ring-2 focus:ring-rose-100 transition"
+                    className="w-full pl-11 pr-4 py-3 rounded-2xl bg-[#FBF6F1] border border-[#E8DAD0] text-[#1F1715] placeholder:text-[#9E8B81] text-sm font-medium focus:outline-none focus:bg-white focus:border-[#C93254] focus:ring-2 focus:ring-[#C93254]/10 transition"
                   />
                 </div>
 
                 <div className="relative">
-                  <Lock className="w-4 h-4 text-[#A48E84] absolute left-4 top-3.5" />
+                  <Lock className="w-4 h-4 text-[#9E8B81] absolute left-4 top-3.5" />
                   <input
                     type={showPassword ? 'text' : 'password'}
                     placeholder="Contraseña (mín. 6 caracteres)"
@@ -410,12 +410,12 @@ export default function AuthScreen() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     minLength={6}
-                    className="w-full pl-11 pr-11 py-3 rounded-2xl bg-[#FCF7F3] border border-[#EBDCD3] text-[#2B201E] placeholder:text-[#9F8B82] text-sm font-medium focus:outline-none focus:bg-white focus:border-[#F0627F] focus:ring-2 focus:ring-rose-100 transition"
+                    className="w-full pl-11 pr-11 py-3 rounded-2xl bg-[#FBF6F1] border border-[#E8DAD0] text-[#1F1715] placeholder:text-[#9E8B81] text-sm font-medium focus:outline-none focus:bg-white focus:border-[#C93254] focus:ring-2 focus:ring-[#C93254]/10 transition"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((v) => !v)}
-                    className="absolute right-3.5 top-3 p-0.5 text-[#9A857C] hover:text-[#2B201E] transition"
+                    className="absolute right-3.5 top-3 p-0.5 text-[#9E8B81] hover:text-[#1F1715] transition"
                     aria-label={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -423,12 +423,12 @@ export default function AuthScreen() {
                 </div>
 
                 {mode === 'register' && (
-                  <label className="flex items-start gap-2.5 text-xs text-[#6B5A53] cursor-pointer pt-1">
+                  <label className="flex items-start gap-2.5 text-xs text-[#6A5951] cursor-pointer pt-1">
                     <input
                       type="checkbox"
                       checked={adultConfirmed}
                       onChange={(e) => setAdultConfirmed(e.target.checked)}
-                      className="mt-0.5 rounded accent-[#FF3B66]"
+                      className="mt-0.5 rounded accent-[#C93254]"
                     />
                     <span>
                       Confirmo ser mayor de 18 años y acepto las normas de respeto y privacidad.
@@ -439,7 +439,7 @@ export default function AuthScreen() {
                 <button
                   type="submit"
                   disabled={busy || !isFirebaseConfigured}
-                  className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#FF3B66] via-[#FF5A79] to-[#FF7B6B] text-white font-extrabold text-sm shadow-lg shadow-[#FF3B66]/25 hover:brightness-105 active:scale-[0.99] disabled:opacity-50 transition flex items-center justify-center gap-2 mt-1"
+                  className="w-full py-3.5 rounded-full bg-[#C93254] hover:bg-[#B42747] text-white font-extrabold text-sm shadow-[0_16px_34px_-12px_rgba(201,50,84,0.45)] active:scale-[0.99] disabled:opacity-50 transition flex items-center justify-center gap-2 mt-1"
                 >
                   {busy
                     ? 'Conectando...'
@@ -454,7 +454,7 @@ export default function AuthScreen() {
                   <button
                     type="button"
                     onClick={handleInstallAndroid}
-                    className="w-full py-2.5 px-4 rounded-2xl bg-gradient-to-r from-[#ECF9F2] to-[#E6F6F5] border border-[#BDE5CF] text-[#176843] font-extrabold text-xs hover:brightness-95 transition flex items-center justify-between gap-2"
+                    className="w-full py-2.5 px-4 rounded-2xl bg-[#F2FBF6] hover:bg-[#E7F7EE] border border-[#CBE7D6] text-[#176843] font-extrabold text-xs transition flex items-center justify-between gap-2"
                   >
                     <span className="flex items-center gap-2 min-w-0">
                       <Smartphone className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -470,14 +470,14 @@ export default function AuthScreen() {
                   </button>
 
                   {installHint && (
-                    <p className="text-[11px] text-[#5C4E41] bg-[#FAF4EE] border border-[#EBDCD3] rounded-xl px-3 py-2 leading-relaxed">
+                    <p className="text-[11px] text-[#5A4942] bg-[#FBF6F1] border border-[#E8DAD0] rounded-xl px-3 py-2 leading-relaxed">
                       {installHint}
                     </p>
                   )}
                 </div>
               )}
 
-              <p className="text-[11px] text-center text-[#8E7970] mt-4 leading-relaxed">
+              <p className="text-[11px] text-center text-[#948074] mt-4 leading-relaxed">
                 Cada perfil es independiente y tus conversaciones privadas son visibles únicamente para ti y tu contacto.
               </p>
             </div>
