@@ -255,7 +255,7 @@ export default function HomeFeed({
               className="shrink-0 px-3.5 py-2 rounded-full bg-gradient-to-r from-[#FF2E54] to-rose-500 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm active:scale-95 transition-transform"
             >
               <Flame className="w-3.5 h-3.5 fill-white" />
-              Modo Swipe
+              Ir a Descubrir
             </button>
           )}
         </div>

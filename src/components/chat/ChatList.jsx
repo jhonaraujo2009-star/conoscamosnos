@@ -345,7 +345,7 @@ export default function ChatList({
                   className="w-full py-3 rounded-full bg-zinc-900 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 shadow active:scale-95 transition-transform"
                 >
                   <Flame className="w-4 h-4 text-[#FF2E54] fill-[#FF2E54]" />
-                  Ir a Swipe
+                  Ir a Descubrir
                 </button>
               )}
               {communityUsers.length > 0 && (

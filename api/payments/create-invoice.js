@@ -4,7 +4,12 @@ export async function POST(request) {
   try {
     const body = await request.json().catch(() => ({}));
     const url = new URL(request.url);
-    const origin = `${url.protocol}//${url.host}`;
+    const forwardedProto = request.headers.get('x-forwarded-proto');
+    const forwardedHost = request.headers.get('x-forwarded-host');
+    const origin =
+      forwardedProto && forwardedHost
+        ? `${forwardedProto}://${forwardedHost}`
+        : `${url.protocol}//${url.host}`;
 
     const result = await createNowPaymentsInvoice({
       authHeader: request.headers.get('authorization') || '',

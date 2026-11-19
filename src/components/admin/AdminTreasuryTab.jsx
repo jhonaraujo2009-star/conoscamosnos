@@ -415,6 +415,18 @@ export default function AdminTreasuryTab({
                           >
                             {isPending ? 'Pendiente' : isApproved ? 'Aprobada' : 'Rechazada'}
                           </span>
+                          {isApproved && req.creditedDiamonds > 0 && (
+                            <span className="px-2 py-0.5 rounded-full text-[9.5px] font-black bg-sky-50 border border-sky-200 text-sky-800 inline-flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              +{req.creditedDiamonds} 💎 acreditados
+                            </span>
+                          )}
+                          {isApproved && req.creditedProDays > 0 && (
+                            <span className="px-2 py-0.5 rounded-full text-[9.5px] font-black bg-amber-50 border border-amber-200 text-amber-900 inline-flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              PRO +{req.creditedProDays}d acreditado
+                            </span>
+                          )}
                           {isChecked && (
                             <span className="px-2 py-0.5 rounded-full text-[9.5px] font-black uppercase bg-teal-50 border border-teal-200 text-teal-800 inline-flex items-center gap-1">
                               <CheckCheck className="w-3 h-3" />

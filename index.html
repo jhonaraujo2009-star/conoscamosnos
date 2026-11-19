@@ -17,6 +17,16 @@
       rel="stylesheet"
     />
     <title>Conoscamosnos — Todo empezó en un Conoscamosnos</title>
+    <script>
+      window.__conoscamosnosInstallPrompt = null;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        window.__conoscamosnosInstallPrompt = e;
+      });
+      window.addEventListener('appinstalled', function () {
+        window.__conoscamosnosInstallPrompt = null;
+      });
+    </script>
   </head>
   <body class="bg-[#FBF6F0] text-zinc-900 antialiased selection:bg-[#FF2E54] selection:text-white overflow-hidden">
     <div id="root"></div>

@@ -433,14 +433,17 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
   const handleApproveRecharge = async (req) => {
     setBusyId(req.id);
     try {
-      await approvePaymentRequest({ requestId: req.id, adminId: userProfile.uid });
+      const approval = await approvePaymentRequest({ requestId: req.id, adminId: userProfile.uid });
       if (req.creditTarget === 'pro') {
         onSuccess?.(
-          `👑 Aprobado: Membresía Conoscamosnos PRO (${req.proDurationDays || 7} días) activada para ${req.userName}.`
+          `👑 Aprobado: Membresía Conoscamosnos PRO (${approval?.durationDays || req.proDurationDays || 7} días) activada para ${req.userName}.`
         );
       } else {
-        const units = req.diamondsToCredit || req.coinsToCredit || 0;
-        onSuccess?.(`✅ Aprobado: +${units} 💎 a ${req.userName}.`);
+        const units = approval?.unitsCredited || req.diamondsToCredit || req.coinsToCredit || 0;
+        const balanceSuffix = Number.isFinite(approval?.newDiamondsBalance)
+          ? ` (saldo: ${approval.newDiamondsBalance} 💎)`
+          : '';
+        onSuccess?.(`✅ Aprobado: +${units} 💎 acreditados a ${req.userName}${balanceSuffix}.`);
       }
     } catch (err) {
       onError?.(err.message || 'No se pudo aprobar la recarga.');

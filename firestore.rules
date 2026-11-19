@@ -59,7 +59,9 @@ service cloud.firestore {
     function proFieldsUnchanged() {
       return request.resource.data.get('isPro', false) == resource.data.get('isPro', false)
         && request.resource.data.get('proExpiresAt', null) == resource.data.get('proExpiresAt', null)
-        && request.resource.data.get('proPlanId', null) == resource.data.get('proPlanId', null);
+        && request.resource.data.get('proPlanId', null) == resource.data.get('proPlanId', null)
+        && request.resource.data.get('proPaymentSource', null) == resource.data.get('proPaymentSource', null)
+        && request.resource.data.get('proLastPaymentId', null) == resource.data.get('proLastPaymentId', null);
     }
 
     // ==================== USERS (BLINDAJE ANTI-ALTERACIÓN DE DIAMANTES, PRO Y BOOST) ====================
@@ -80,6 +82,10 @@ service cloud.firestore {
         && request.resource.data.giftsReceivedCount == 0
         && request.resource.data.isBoosted == false
         && request.resource.data.get('isPro', false) == false
+        && request.resource.data.get('proExpiresAt', null) == null
+        && request.resource.data.get('proPlanId', null) == null
+        && request.resource.data.get('proPaymentSource', null) == null
+        && request.resource.data.get('proLastPaymentId', null) == null
         && request.resource.data.get('isBanned', false) == false
         && request.resource.data.get('verifiedBadge', false) == false
         && request.resource.data.get('accountStatus', 'active') == 'active';
@@ -207,9 +213,33 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.status == 'pending'
-        && isValidPackageDiamonds(request.resource.data.get('diamondsToCredit', request.resource.data.get('coinsToCredit', 0)))
-        && isValidPackagePrice(request.resource.data.get('diamondsToCredit', request.resource.data.get('coinsToCredit', 0)), request.resource.data.amountUSD);
-      allow update: if isAdmin();
+        && request.resource.data.get('creditTarget', 'diamonds') in ['diamonds', 'pro']
+        && request.resource.data.referenceNumber is string
+        && request.resource.data.referenceNumber.size() >= 3
+        && request.resource.data.proofUrl is string
+        && request.resource.data.proofUrl.size() >= 10
+        && (
+          (
+            request.resource.data.get('creditTarget', 'diamonds') == 'pro'
+            && request.resource.data.packageId in ['pro_weekly', 'pro_monthly']
+            && request.resource.data.proDurationDays is int
+            && request.resource.data.proDurationDays >= 1
+            && request.resource.data.proDurationDays <= 365
+            && request.resource.data.amountUSD is number
+            && request.resource.data.amountUSD >= 0.99
+            && request.resource.data.amountUSD <= 1000
+          )
+          || (
+            request.resource.data.get('creditTarget', 'diamonds') == 'diamonds'
+            && isValidPackageDiamonds(request.resource.data.get('diamondsToCredit', request.resource.data.get('coinsToCredit', 0)))
+            && isValidPackagePrice(request.resource.data.get('diamondsToCredit', request.resource.data.get('coinsToCredit', 0)), request.resource.data.amountUSD)
+          )
+        );
+      allow update: if isAdmin()
+        && (
+          request.resource.data.status == resource.data.status
+          || request.resource.data.status == 'rejected'
+        );
       allow delete: if false;
     }
 
@@ -219,10 +249,8 @@ service cloud.firestore {
         resource.data.userId == request.auth.uid || isAdmin()
       );
       allow create: if isAdmin()
-        && (
-          request.resource.data.get('creditField', '') == 'pro'
-          || isValidPackageDiamonds(request.resource.data.get('diamondsCredited', request.resource.data.get('coinsCredited', 0)))
-        );
+        && request.resource.data.get('creditField', 'diamonds') != 'pro'
+        && isValidPackageDiamonds(request.resource.data.get('diamondsCredited', request.resource.data.get('coinsCredited', 0)));
       allow update, delete: if false;
     }
 

@@ -58,7 +58,7 @@ export default function BoostModal({
           iconClassName="bg-gradient-to-br from-fuchsia-500 via-purple-500 to-[#FF2E54] text-white shadow-lg shadow-purple-500/30"
           eyebrow="Visibilidad Destacada"
           title={`Boost VIP en ${userProfile?.country?.flag || ''} ${userProfile?.country?.name || 'Tu país'}`}
-          subtitle="Aparece primero en Swipe y Explorar"
+          subtitle="Aparece primero en Descubrir"
           onClose={onClose}
         />
 

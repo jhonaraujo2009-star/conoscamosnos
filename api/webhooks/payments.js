@@ -1,3 +1,4 @@
+import { checkAdminHealth } from '../../server/config/firebaseAdmin.js';
 import { verifyWebhookSignature } from '../../server/middleware/verifyPaymentSignature.js';
 import { processVerifiedPaymentWebhook } from '../../server/controllers/paymentWebhookController.js';
 
@@ -24,6 +25,7 @@ export async function GET() {
   );
   const hasApiKey = Boolean(process.env.NOWPAYMENTS_API_KEY);
   const hasIpnSecret = Boolean(process.env.NOWPAYMENTS_IPN_SECRET);
+  const adminHealth = checkAdminHealth();
 
   return Response.json(
     {
@@ -34,7 +36,9 @@ export async function GET() {
         apiKey: hasApiKey,
         ipnSecret: hasIpnSecret,
         firebaseAdmin: hasFirebaseAdmin,
-        ready: hasApiKey && hasIpnSecret && hasFirebaseAdmin,
+        firebaseAdminInitialized: adminHealth.ok,
+        firebaseAdminError: adminHealth.ok ? null : adminHealth.error,
+        ready: hasApiKey && hasIpnSecret && adminHealth.ok,
       },
     },
     { status: 200 }

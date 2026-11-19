@@ -47,11 +47,11 @@ import ProfileScreen from './components/profile/ProfileScreen';
 import GiftNotificationsModal from './components/monetization/GiftNotificationsModal';
 import RewardedAdModal from './components/monetization/RewardedAdModal';
 import UnlockChoiceModal from './components/monetization/UnlockChoiceModal';
+import DiamondStoreModal from './components/monetization/DiamondStoreModal';
 import BoostModal from './components/home/BoostModal';
 
 const AdminDashboardPage = lazy(() => import('./components/admin/AdminDashboardPage'));
 const OnboardingWizard = lazy(() => import('./components/auth/OnboardingWizard'));
-const DiamondStoreModal = lazy(() => import('./components/monetization/DiamondStoreModal'));
 const EarningsWithdrawModal = lazy(() => import('./components/monetization/EarningsWithdrawModal'));
 const SafetyCenterModal = lazy(() => import('./components/profile/SafetyCenterModal'));
 
@@ -791,17 +791,15 @@ function UserAppView({ onSuccess, onError }) {
       />
 
       {diamondStoreOpen && (
-        <Suspense fallback={null}>
-          <DiamondStoreModal
-            key={`diamonds-${userProfile.uid}`}
-            isOpen={diamondStoreOpen}
-            initialSection={diamondStoreSection}
-            onClose={() => setDiamondStoreOpen(false)}
-            userProfile={userProfile}
-            onSuccess={handleSuccess}
-            onError={handleError}
-          />
-        </Suspense>
+        <DiamondStoreModal
+          key={`diamonds-${userProfile.uid}`}
+          isOpen={diamondStoreOpen}
+          initialSection={diamondStoreSection}
+          onClose={() => setDiamondStoreOpen(false)}
+          userProfile={userProfile}
+          onSuccess={handleSuccess}
+          onError={handleError}
+        />
       )}
 
       {withdrawalsOpen && (

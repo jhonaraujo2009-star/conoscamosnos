@@ -53,6 +53,9 @@ function normalizePaymentEvent(payload) {
   const settled = status === 'finished' || status === 'confirmed';
   const meta = parseOrderMetadata(payload.order_id);
   const amountUSD = Number(payload.price_amount || payload.outcome_amount || 0);
+  const payAmount = Number(payload.pay_amount || 0);
+  const actuallyPaid = Number(payload.actually_paid || 0);
+  const priceCurrency = String(payload.price_currency || '').trim().toUpperCase();
   const resolvedTarget =
     payload.credit_target === 'pro' || meta.creditTarget === 'pro' ? 'pro' : 'diamonds';
   return {
@@ -64,6 +67,9 @@ function normalizePaymentEvent(payload) {
     packageId: payload.package_id || meta.packageId,
     creditTarget: resolvedTarget,
     amountUSD,
+    payAmount,
+    actuallyPaid,
+    priceCurrency,
     currency: String(payload.price_currency || payload.pay_currency || 'USD').toUpperCase(),
   };
 }
@@ -97,6 +103,30 @@ export async function processVerifiedPaymentWebhook({ payload }) {
     return {
       statusCode: 400,
       body: { ok: false, error: 'No se pudo identificar el userId del comprador en order_id.' },
+    };
+  }
+
+  if (event.priceCurrency && event.priceCurrency !== 'USD') {
+    return {
+      statusCode: 400,
+      body: {
+        ok: false,
+        error: `Moneda de precio inválida (${event.priceCurrency}). Solo se acepta USD.`,
+      },
+    };
+  }
+
+  if (
+    event.payAmount > 0 &&
+    event.actuallyPaid > 0 &&
+    event.actuallyPaid < event.payAmount * 0.98
+  ) {
+    return {
+      statusCode: 400,
+      body: {
+        ok: false,
+        error: `Pago cripto incompleto (${event.actuallyPaid} recibido vs ${event.payAmount} requerido).`,
+      },
     };
   }
 
@@ -136,14 +166,16 @@ export async function processVerifiedPaymentWebhook({ payload }) {
     const userData = userSnap.data() || {};
 
     if (event.creditTarget === 'pro') {
-      const matchedPro =
-        proPlans.find((p) => p.id === event.packageId) || proPlans[0] || DEFAULT_PRO_PLANS[0];
+      const matchedPro = proPlans.find((p) => p.id === event.packageId);
+      if (!matchedPro) {
+        throw new Error(`Plan PRO desconocido en webhook (${event.packageId || 'vacío'}).`);
+      }
       if (event.amountUSD + 0.05 < Number(matchedPro.priceUSD || 0)) {
         throw new Error(
           `Monto pagado (${event.amountUSD} USD) es inferior al precio del plan PRO ${matchedPro.id} (${matchedPro.priceUSD} USD).`
         );
       }
-      const durationDays = Math.max(1, Math.floor(Number(matchedPro.durationDays || 7)));
+      const durationDays = Math.max(1, Math.min(365, Math.floor(Number(matchedPro.durationDays || 7))));
       const rawExisting = userData.proExpiresAt;
       const existingMs =
         typeof rawExisting?.toMillis === 'function'
@@ -158,6 +190,8 @@ export async function processVerifiedPaymentWebhook({ payload }) {
         isPro: true,
         proPlanId: matchedPro.id,
         proExpiresAt: newExpiryDate,
+        proPaymentSource: 'nowpayments_webhook',
+        proLastPaymentId: txDocId,
         updatedAt: FieldValue.serverTimestamp(),
       });
 

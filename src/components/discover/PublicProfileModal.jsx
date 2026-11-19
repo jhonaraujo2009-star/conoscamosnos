@@ -58,6 +58,7 @@ import {
 import GiftAnimationOverlay from '../chat/GiftAnimationOverlay';
 import GiftShowcaseCard from '../monetization/GiftShowcaseCard';
 import GiftPickerModal from '../chat/GiftPickerModal';
+import ProCrownBadge from '../monetization/ProCrownBadge';
 
 export default function PublicProfileModal({
   targetUser,
@@ -440,11 +441,7 @@ export default function PublicProfileModal({
                 {verified && (
                   <BadgeCheck className="w-5 h-5 text-sky-400 fill-sky-400 stroke-white shrink-0" />
                 )}
-                {targetIsPro && (
-                  <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white text-[10px] font-black flex items-center gap-0.5 shadow">
-                    <Crown className="w-3 h-3" /> PRO
-                  </span>
-                )}
+                {targetIsPro && <ProCrownBadge variant="compact" />}
                 {boosted && (
                   <span className="px-2 py-0.5 rounded-full bg-amber-400 text-zinc-950 text-[10px] font-black flex items-center gap-0.5 shadow">
                     <Zap className="w-3 h-3 fill-zinc-950" /> VIP

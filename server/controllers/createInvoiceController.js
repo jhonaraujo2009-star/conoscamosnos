@@ -56,15 +56,41 @@ export async function createNowPaymentsInvoice({
     };
   }
 
+  let db;
+  let adminAuth;
+  try {
+    db = getAdminFirestore();
+    adminAuth = getAdminAuth();
+  } catch (err) {
+    console.error('[NowPayments Invoice] Error inicializando Firebase Admin:', err);
+    return {
+      statusCode: 500,
+      body: {
+        ok: false,
+        error:
+          'Error de configuración del servidor (Firebase Admin SDK). Verifica FIREBASE_SERVICE_ACCOUNT_JSON en Vercel.',
+      },
+    };
+  }
+
   let uid = '';
+  try {
+    const decoded = await adminAuth.verifyIdToken(bearerMatch[1]);
+    uid = decoded.uid;
+  } catch (err) {
+    console.error('[NowPayments Invoice] Error verificando token:', err);
+    return {
+      statusCode: 401,
+      body: {
+        ok: false,
+        error: 'Tu sesión expiró o es inválida. Cierra sesión y vuelve a entrar.',
+      },
+    };
+  }
+
   let packages = DEFAULT_PACKAGES;
   let proPlans = DEFAULT_PRO_PLANS;
-
   try {
-    const db = getAdminFirestore();
-    const decoded = await getAdminAuth().verifyIdToken(bearerMatch[1]);
-    uid = decoded.uid;
-
     const configSnap = await db.collection('appConfig').doc('economy').get();
     if (configSnap.exists) {
       const cfg = configSnap.data();
@@ -78,13 +104,12 @@ export async function createNowPaymentsInvoice({
       }
     }
   } catch (err) {
-    console.error('[NowPayments Invoice] Error verificando Firebase Admin/Token:', err);
+    console.error('[NowPayments Invoice] Error leyendo appConfig/economy:', err);
     return {
-      statusCode: 401,
+      statusCode: 500,
       body: {
         ok: false,
-        error:
-          'No se pudo verificar tu sesión en el servidor. Verifica FIREBASE_SERVICE_ACCOUNT_JSON en Vercel.',
+        error: 'No se pudo consultar el catálogo de precios en el servidor.',
       },
     };
   }
@@ -99,14 +124,29 @@ export async function createNowPaymentsInvoice({
     };
   }
 
+  const priceUSD = Number(pkg.priceUSD);
+  if (!Number.isFinite(priceUSD) || priceUSD <= 0) {
+    return {
+      statusCode: 400,
+      body: { ok: false, error: 'El precio USD del plan seleccionado es inválido.' },
+    };
+  }
+
   const safeTarget = isProOrder ? 'pro' : 'diamonds';
-  const cleanOrigin = String(origin || process.env.APP_PUBLIC_URL || 'https://conoscamosnos.vercel.app').replace(/\/$/, '');
-  const orderId = `uid:${uid}|pkg:${pkg.id}|target:${safeTarget}`;
+  const publicFallbackOrigin = String(
+    process.env.APP_PUBLIC_URL || 'https://conoscamosnos.vercel.app'
+  ).replace(/\/$/, '');
+  const rawOrigin = String(origin || '').trim().replace(/\/$/, '');
+  const isValidPublicHttpsOrigin =
+    /^https:\/\/[^/\s]+$/i.test(rawOrigin) &&
+    !/localhost|127\.0\.0\.1/i.test(rawOrigin);
+  const cleanOrigin = isValidPublicHttpsOrigin ? rawOrigin : publicFallbackOrigin;
+  const orderId = `uid:${uid}|pkg:${pkg.id}|target:${safeTarget}|ts:${Date.now()}`;
   const packageUnits = Number(pkg.diamonds ?? pkg.priceDiamonds ?? pkg.coins ?? 0);
   const durationDays = Number(pkg.durationDays || 0);
 
   const nowPaymentsPayload = {
-    price_amount: Number(pkg.priceUSD),
+    price_amount: priceUSD,
     price_currency: 'usd',
     order_id: orderId,
     order_description: isProOrder

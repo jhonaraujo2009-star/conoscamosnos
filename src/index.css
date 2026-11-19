@@ -134,4 +134,32 @@
     );
     background-size: 200% 100%;
   }
+  @keyframes proCrownSheen {
+    0%, 64% {
+      transform: translateX(-140%) skewX(-18deg);
+      opacity: 0;
+    }
+    74% {
+      opacity: 0.7;
+    }
+    92%, 100% {
+      transform: translateX(180%) skewX(-18deg);
+      opacity: 0;
+    }
+  }
+  .pro-crown-sheen {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 245, 204, 0.24) 50%,
+      transparent 100%
+    );
+    animation: proCrownSheen 5.5s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pro-crown-sheen {
+      animation: none;
+      opacity: 0;
+    }
+  }
 }

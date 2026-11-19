@@ -21,7 +21,7 @@ export const DIAMOND_PACKAGES = [
     priceUSD: 14.99,
     label: 'VIP Pro',
     badge: 'Más Vendido',
-    bonusText: 'Ahorra 25% + alcanza para Conoscamosnos PRO',
+    bonusText: 'Ahorra 25% en regalos, chats, Likes y Boost',
   },
   {
     id: 'pack_3000',

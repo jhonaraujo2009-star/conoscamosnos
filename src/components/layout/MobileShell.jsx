@@ -1,4 +1,4 @@
-import { Compass, Flame, Heart, MessageCircle, User } from 'lucide-react';
+import { Flame, Heart, MessageCircle, User } from 'lucide-react';
 
 export default function MobileShell({
   activeTab,
@@ -11,10 +11,9 @@ export default function MobileShell({
   const isSwipeDark = activeTab === 'swipe';
 
   const navItems = [
-    { id: 'swipe', label: 'Swipe', icon: Flame },
-    { id: 'explore', label: 'Explorar', icon: Compass },
+    { id: 'swipe', label: 'Descubrir', icon: Flame },
     { id: 'likes', label: 'Likes', icon: Heart, badge: likesBadgeCount },
-    { id: 'chat', label: 'Chat', icon: MessageCircle, badge: unreadBadgeCount },
+    { id: 'chat', label: 'Chats', icon: MessageCircle, badge: unreadBadgeCount },
     { id: 'profile', label: 'Perfil', icon: User },
   ];
 
@@ -25,8 +24,8 @@ export default function MobileShell({
 
   const navSwipeStyle = isSwipeDark
     ? {
-        backgroundColor: themeMood?.navBg || '#14060D',
-        borderColor: themeMood?.navBorder || 'rgba(255, 46, 84, 0.2)',
+        backgroundColor: themeMood?.navBg || '#12050B',
+        borderColor: themeMood?.navBorder || 'rgba(255, 255, 255, 0.08)',
       }
     : undefined;
 
@@ -34,7 +33,7 @@ export default function MobileShell({
     <div
       style={outerSwipeStyle}
       className={`h-[100dvh] w-screen overflow-hidden overscroll-none flex justify-center transition-colors duration-500 ${
-        isSwipeDark ? 'bg-[#16060E] text-white' : 'bg-[#FAF7F9] text-zinc-900'
+        isSwipeDark ? 'bg-[#12050B] text-white' : 'bg-[#FAF7F9] text-zinc-900'
       }`}
     >
       <div
@@ -53,26 +52,29 @@ export default function MobileShell({
           {children}
         </main>
 
-        {/* BottomNav Fixed (5 Tabs with Dynamic Theme) */}
+        {/* BottomNav Minimalista (4 Pestañas: Descubrir, Likes, Chats, Perfil) */}
         <nav
           style={navSwipeStyle}
-          className={`shrink-0 z-30 border-t px-2 pt-1.5 pb-2 pb-safe transition-colors duration-500 ${
+          className={`shrink-0 z-30 border-t px-3 pt-1.5 pb-2 pb-safe transition-colors duration-500 ${
             isSwipeDark
-              ? 'bg-[#14060D] border-rose-500/20'
-              : 'bg-[#FFFFFF] border-zinc-200/70'
+              ? 'bg-[#12050B]/95 border-white/10 backdrop-blur-xl'
+              : 'bg-white/95 border-zinc-200/70 backdrop-blur-xl'
           }`}
         >
-          <div className="grid grid-cols-5 items-center">
+          <div className="grid grid-cols-4 items-center">
             {navItems.map((item) => {
               const Icon = item.icon;
               const active = activeTab === item.id;
+              const isWarmAccent = item.id === 'swipe' || item.id === 'likes';
 
-              const colorClass = isSwipeDark
-                ? active
+              const colorClass = active
+                ? isWarmAccent
+                  ? 'text-[#FF2E54]'
+                  : isSwipeDark
                   ? 'text-white'
-                  : 'text-zinc-500 hover:text-zinc-300'
-                : active
-                ? 'text-zinc-900'
+                  : 'text-zinc-900'
+                : isSwipeDark
+                ? 'text-zinc-500 hover:text-zinc-300'
                 : 'text-zinc-400 hover:text-zinc-700';
 
               return (
@@ -80,22 +82,24 @@ export default function MobileShell({
                   key={item.id}
                   type="button"
                   onClick={() => onChangeTab(item.id)}
-                  className={`relative flex flex-col items-center justify-center py-1.5 transition-colors ${colorClass}`}
+                  className={`relative flex flex-col items-center justify-center py-1 transition-colors ${colorClass}`}
                 >
-                  <div className="relative">
+                  <div className="relative flex items-center justify-center">
                     <Icon
-                      className={`w-6 h-6 transition-transform ${
-                        active ? 'stroke-[2.5] scale-105' : 'stroke-[1.9]'
+                      className={`w-[23px] h-[23px] transition-transform duration-150 ${
+                        active ? 'stroke-[2.4] scale-110' : 'stroke-[1.85]'
                       } ${
-                        active && item.id === 'swipe' && !isSwipeDark
-                          ? 'text-[#FF2E54]'
+                        active && item.id === 'swipe'
+                          ? 'fill-[#FF2E54]/20 drop-shadow-[0_0_8px_rgba(255,46,84,0.45)]'
+                          : active && item.id === 'likes'
+                          ? 'fill-[#FF2E54]/15 drop-shadow-[0_0_8px_rgba(255,46,84,0.35)]'
                           : ''
                       }`}
                     />
                     {item.badge > 0 && (
                       <span
                         className={`absolute -top-1.5 -right-2.5 min-w-[18px] h-[18px] px-1 rounded-full bg-gradient-to-r from-[#FF2E54] to-rose-500 text-[9.5px] font-black text-white flex items-center justify-center shadow-[0_2px_8px_rgba(255,46,84,0.55)] ring-2 ${
-                          isSwipeDark ? 'ring-[#14060D]' : 'ring-white'
+                          isSwipeDark ? 'ring-[#12050B]' : 'ring-white'
                         }`}
                       >
                         {item.badge > 99 ? '99+' : item.badge}
@@ -104,11 +108,22 @@ export default function MobileShell({
                   </div>
                   <span
                     className={`text-[10px] mt-1 tracking-tight ${
-                      active ? 'font-bold' : 'font-medium'
+                      active ? 'font-extrabold' : 'font-medium'
                     }`}
                   >
                     {item.label}
                   </span>
+                  <span
+                    className={`mt-0.5 h-[3px] rounded-full transition-all duration-200 ${
+                      active
+                        ? isWarmAccent
+                          ? 'w-4 bg-[#FF2E54] shadow-[0_0_8px_rgba(255,46,84,0.8)]'
+                          : isSwipeDark
+                          ? 'w-4 bg-white shadow-[0_0_8px_rgba(255,255,255,0.65)]'
+                          : 'w-4 bg-zinc-900'
+                        : 'w-0 bg-transparent'
+                    }`}
+                  />
                 </button>
               );
             })}

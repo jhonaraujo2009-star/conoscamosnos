@@ -69,7 +69,19 @@ export async function activateStorePlan({
 
   const normalizedKind = String(kind || '').trim().toLowerCase();
   const normalizedPlanId = String(planId || '').trim();
-  if ((normalizedKind !== 'pro' && normalizedKind !== 'boost') || !normalizedPlanId) {
+
+  if (normalizedKind === 'pro') {
+    return {
+      statusCode: 403,
+      body: {
+        ok: false,
+        error:
+          'La Membresía PRO solo se puede obtener mediante pago real verificado en pasarela (NowPayments) o comprobante aprobado por administración.',
+      },
+    };
+  }
+
+  if (normalizedKind !== 'boost' || !normalizedPlanId) {
     return {
       statusCode: 400,
       body: { ok: false, error: 'Tipo de plan o identificador inválido.' },
@@ -77,25 +89,49 @@ export async function activateStorePlan({
   }
 
   let db;
-  let uid = '';
-  let economyCfg = {};
-
+  let adminAuth;
   try {
     db = getAdminFirestore();
-    const decoded = await getAdminAuth().verifyIdToken(bearerMatch[1]);
-    uid = decoded.uid;
+    adminAuth = getAdminAuth();
+  } catch (err) {
+    console.error('[Store Activate] Error inicializando Firebase Admin:', err);
+    return {
+      statusCode: 500,
+      body: {
+        ok: false,
+        error: 'Error de configuración del servidor (Firebase Admin SDK).',
+      },
+    };
+  }
 
+  let uid = '';
+  try {
+    const decoded = await adminAuth.verifyIdToken(bearerMatch[1]);
+    uid = decoded.uid;
+  } catch (err) {
+    console.error('[Store Activate] Error verificando token:', err);
+    return {
+      statusCode: 401,
+      body: {
+        ok: false,
+        error: 'Tu sesión expiró o es inválida. Cierra sesión y vuelve a entrar.',
+      },
+    };
+  }
+
+  let economyCfg = {};
+  try {
     const cfgSnap = await db.collection('appConfig').doc('economy').get();
     if (cfgSnap.exists) {
       economyCfg = cfgSnap.data() || {};
     }
   } catch (err) {
-    console.error('[Store Activate] Error verificando Firebase Admin/Token:', err);
+    console.error('[Store Activate] Error leyendo appConfig/economy:', err);
     return {
-      statusCode: 401,
+      statusCode: 500,
       body: {
         ok: false,
-        error: 'No se pudo validar tu sesión en el servidor.',
+        error: 'No se pudo consultar la configuración de planes en el servidor.',
       },
     };
   }

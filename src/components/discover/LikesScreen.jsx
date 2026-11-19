@@ -705,7 +705,7 @@ export default function LikesScreen({
               className="bg-zinc-900 text-white rounded-full py-3.5 text-xs sm:text-sm font-extrabold shadow-md flex items-center justify-center gap-1.5 active:scale-[0.99] transition-transform"
             >
               <Flame className="w-4 h-4 text-[#FF2E54] fill-[#FF2E54]" />
-              Ir a Swipe
+              Ir a Descubrir
             </button>
             <button
               type="button"

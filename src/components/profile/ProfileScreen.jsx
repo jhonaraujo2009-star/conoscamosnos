@@ -5,6 +5,7 @@ import {
   Briefcase,
   CheckCircle2,
   Crown,
+  Download,
   Eye,
   Flame,
   Gem,
@@ -21,6 +22,7 @@ import {
   Save,
   Settings,
   ShieldCheck,
+  Smartphone,
   Sparkles,
   Unlock,
   X,
@@ -40,6 +42,7 @@ import {
   resolveAccessPolicy,
 } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePwaInstall } from '../../hooks/usePwaInstall';
 import { getUserCloudinaryFolder, uploadImageToCloudinary } from '../../services/cloudinaryService';
 import {
   requestBlueCheckVerification,
@@ -58,6 +61,7 @@ import {
   optimizeCloudinaryUrl,
 } from '../../utils/formatters';
 import GiftShowcaseCard from '../monetization/GiftShowcaseCard';
+import ProCrownBadge from '../monetization/ProCrownBadge';
 import AccountSettingsModal from './AccountSettingsModal';
 import PhotoUploader from './PhotoUploader';
 
@@ -99,7 +103,9 @@ export default function ProfileScreen({
   const [togglingGiftGate, setTogglingGiftGate] = useState(false);
   const [requestingCheck, setRequestingCheck] = useState(false);
   const [uploadingQuickPhoto, setUploadingQuickPhoto] = useState(false);
+  const [showDownloadHint, setShowDownloadHint] = useState(false);
   const quickFileInputRef = useRef(null);
+  const { isInstalled, isIOS, downloadOrInstallApp } = usePwaInstall();
 
   const [name, setName] = useState(userProfile?.name || '');
   const [age, setAge] = useState(userProfile?.age || 18);
@@ -453,11 +459,7 @@ export default function ProfileScreen({
                     }`}
                     title={verified ? 'Perfil Verificado' : 'Perfil sin verificar'}
                   />
-                  {proActive && (
-                    <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white text-[10px] font-black inline-flex items-center gap-0.5 shrink-0 shadow-xs">
-                      <Crown className="w-3 h-3" /> PRO
-                    </span>
-                  )}
+                  {proActive && <ProCrownBadge variant="compact" />}
                 </div>
 
                 <p className="text-[11px] font-bold text-zinc-500 truncate">
@@ -590,7 +592,7 @@ export default function ProfileScreen({
                     </div>
                   </div>
                   <span className="px-2 py-0.5 rounded-full bg-white border border-rose-200 text-[9.5px] font-extrabold text-[#FF2E54] shrink-0">
-                    {proActive ? 'Ver' : 'Activar'}
+                    {proActive ? 'Ver' : 'Obtener'}
                   </span>
                 </button>
               </div>
@@ -648,7 +650,7 @@ export default function ProfileScreen({
                           ? ` (+${completion.missingItems.length - 3})`
                           : ''
                       }`
-                    : 'Tu tarjeta luce impecable en Descubrir y Swipe'}
+                    : 'Tu tarjeta luce impecable en Descubrir'}
                 </p>
               </div>
             </div>
@@ -1017,6 +1019,55 @@ export default function ProfileScreen({
               </button>
             </div>
           </section>
+        )}
+
+        {/* 6.8 DESCARGA DIRECTA DE LA APLICACIÓN */}
+        {isOwnerSession && !isInstalled && (
+          <div className="rounded-[24px] bg-white border border-emerald-200/80 p-3.5 shadow-[0_8px_24px_-10px_rgba(15,23,42,0.08)] space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center shrink-0">
+                  <Smartphone className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-black text-zinc-900 truncate">
+                    Descargar Aplicación
+                  </p>
+                  <p className="text-[10.5px] font-medium text-zinc-500 truncate">
+                    Instala Conoscamosnos directo en tu teléfono
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  const res = await downloadOrInstallApp({ customApkUrl: liveEconomy?.androidApkUrl });
+                  if (res.status === 'downloading_apk') {
+                    setShowDownloadHint(false);
+                    onSuccess?.('⬇️ Descargando Conoscamosnos...');
+                  } else if (res.status === 'accepted') {
+                    setShowDownloadHint(false);
+                    onSuccess?.('✅ ¡Conoscamosnos se está instalando en tu dispositivo!');
+                  } else if (res.status === 'manual_required') {
+                    setShowDownloadHint((v) => !v);
+                  }
+                }}
+                className="px-3.5 py-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-[11px] font-black flex items-center gap-1.5 shadow-sm hover:brightness-105 active:scale-95 transition shrink-0"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Descargar App
+              </button>
+            </div>
+
+            {showDownloadHint && (
+              <p className="px-3 py-2 rounded-xl bg-zinc-50 border border-zinc-200/80 text-[11px] font-medium text-zinc-700 leading-snug">
+                {isIOS
+                  ? 'En Safari toca Compartir (↑) y luego "Agregar a pantalla de inicio".'
+                  : 'En Chrome toca el menú ⋮ → "Instalar aplicación".'}
+              </p>
+            )}
+          </div>
         )}
 
         {/* 7. BOTÓN DE EDICIÓN COMPLETA DE PERFIL */}

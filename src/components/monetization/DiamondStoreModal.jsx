@@ -35,7 +35,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { subscribeSentGiftTransactions } from '../../services/chatService';
 import { getUserCloudinaryFolder, uploadImageToCloudinary } from '../../services/cloudinaryService';
 import {
-  activateProWithDiamonds,
   createNowPaymentsCheckout,
   simulateAutoPaymentConfirmation,
   submitManualPaymentRequest,
@@ -138,14 +137,13 @@ export default function DiamondStoreModal({
   );
   const selectedProPlan =
     liveProPlans.find((p) => p.id === selectedProId) || liveProPlans[0] || PRO_PLANS[0];
-  const [proPayMode, setProPayMode] = useState('diamonds'); // 'diamonds' | 'gateway'
-  const [activatingProDiamonds, setActivatingProDiamonds] = useState(false);
 
   const [activeTab, setActiveTab] = useState('auto'); // 'auto' | 'direct'
   const [rulesOpen, setRulesOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(Boolean(liveDirectMethods[0]?.qrImageUrl));
   const [simulating, setSimulating] = useState(false);
   const [creatingInvoice, setCreatingInvoice] = useState(false);
+  const [generatedInvoice, setGeneratedInvoice] = useState(null);
 
   const [selectedMethodId, setSelectedMethodId] = useState(liveDirectMethods[0]?.id || 'zinli');
   const selectedMethod =
@@ -166,8 +164,13 @@ export default function DiamondStoreModal({
       setStoreSection(
         initialSection === 'pro' ? 'pro' : initialSection === 'history' ? 'history' : 'buy'
       );
+      setGeneratedInvoice(null);
     }
   }, [isOpen, initialSection]);
+
+  useEffect(() => {
+    setGeneratedInvoice(null);
+  }, [storeSection, selectedPkgId, selectedProId]);
 
   useEffect(() => {
     if (liveDirectMethods.length > 0 && !liveDirectMethods.some((m) => m.id === selectedMethodId)) {
@@ -289,7 +292,7 @@ export default function DiamondStoreModal({
 
   if (!isOpen) return null;
 
-  const isProGatewayCheckout = storeSection === 'pro' && proPayMode === 'gateway';
+  const isProGatewayCheckout = storeSection === 'pro';
   const activeCheckoutItem = isProGatewayCheckout ? selectedProPlan : selectedPkg;
   const activeCreditTarget = isProGatewayCheckout ? 'pro' : 'diamonds';
 
@@ -301,11 +304,22 @@ export default function DiamondStoreModal({
         pkg: activeCheckoutItem,
         creditTarget: activeCreditTarget,
       });
-      window.open(res.invoiceUrl, '_blank', 'noopener,noreferrer');
+      setGeneratedInvoice({
+        url: res.invoiceUrl,
+        amountUSD: activeCheckoutItem.priceUSD,
+        label: isProGatewayCheckout ? selectedProPlan.shortLabel : `+${selectedPkgUnits} 💎`,
+        target: activeCreditTarget,
+      });
+
+      const popup = window.open(res.invoiceUrl, '_blank', 'noopener,noreferrer');
+      if (!popup || popup.closed) {
+        window.location.assign(res.invoiceUrl);
+      }
+
       onSuccess?.(
         isProGatewayCheckout
-          ? `👑 Factura NowPayments abierta por ${formatUSD(selectedProPlan.priceUSD)}. Tu membresía ${selectedProPlan.shortLabel} se activará al confirmarse.`
-          : `⚡ Factura NowPayments abierta por ${formatUSD(selectedPkg.priceUSD)}. Tus +${selectedPkgUnits} 💎 se acreditarán automáticamente.`
+          ? `👑 Factura NowPayments generada por ${formatUSD(selectedProPlan.priceUSD)}. Tu membresía ${selectedProPlan.shortLabel} se activará al confirmarse el pago.`
+          : `⚡ Factura NowPayments generada por ${formatUSD(selectedPkg.priceUSD)}. Tus +${selectedPkgUnits} 💎 se acreditarán automáticamente.`
       );
     } catch (err) {
       onError?.(err.message || 'No se pudo abrir la pasarela NowPayments.');
@@ -315,6 +329,10 @@ export default function DiamondStoreModal({
   };
 
   const handleSimulateWebhook = async (provider) => {
+    if (isProGatewayCheckout) {
+      onError?.('La Membresía PRO solo se puede activar mediante pago real verificado.');
+      return;
+    }
     setSimulating(true);
     try {
       const res = await simulateAutoPaymentConfirmation({
@@ -322,43 +340,13 @@ export default function DiamondStoreModal({
         userName: userProfile.name,
         pkg: activeCheckoutItem,
         provider,
-        creditTarget: activeCreditTarget,
+        creditTarget: 'diamonds',
       });
-      onSuccess?.(
-        isProGatewayCheckout
-          ? `👑 ¡Conoscamosnos PRO activado por ${res.proDaysAdded} días!`
-          : `✅ ¡Recarga acreditada! Se sumaron +${res.diamondsAdded} 💎 a tu billetera.`
-      );
+      onSuccess?.(`✅ ¡Recarga acreditada! Se sumaron +${res.diamondsAdded} 💎 a tu billetera.`);
     } catch (err) {
       onError?.(err.message || 'No se pudo simular el pago.');
     } finally {
       setSimulating(false);
-    }
-  };
-
-  const handleActivateProWithDiamonds = async () => {
-    if (!userProfile?.uid || activatingProDiamonds) return;
-    const cost = Number(selectedProPlan.priceDiamonds || 250);
-    if (spendableDiamonds < cost) {
-      onError?.(
-        `Necesitas ${cost} 💎 para activar ${selectedProPlan.shortLabel}. Recarga Diamantes o paga directo con pasarela.`
-      );
-      setProPayMode('gateway');
-      return;
-    }
-    setActivatingProDiamonds(true);
-    try {
-      await activateProWithDiamonds({
-        plan: selectedProPlan,
-      });
-      onSuccess?.(
-        `👑 ¡Felicidades! Ya eres miembro ${selectedProPlan.shortLabel} (${selectedProPlan.durationDays} días VIP sin límites).`
-      );
-      onClose?.();
-    } catch (err) {
-      onError?.(err.message || 'No se pudo activar Conoscamosnos PRO.');
-    } finally {
-      setActivatingProDiamonds(false);
     }
   };
 
@@ -500,7 +488,24 @@ export default function DiamondStoreModal({
             )}
           </button>
 
-          {(ENABLE_DEMO_PAYMENTS || isSuperAdmin) && (
+          {generatedInvoice?.url && (
+            <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 space-y-2">
+              <p className="text-[11px] font-bold text-emerald-900">
+                Factura lista ({generatedInvoice.label} · {formatUSD(generatedInvoice.amountUSD)}). Si no se abrió automáticamente:
+              </p>
+              <a
+                href={generatedInvoice.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-2.5 px-3 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-sm transition"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Abrir factura en NowPayments →
+              </a>
+            </div>
+          )}
+
+          {!isProGatewayCheckout && (ENABLE_DEMO_PAYMENTS || isSuperAdmin) && (
             <button
               type="button"
               disabled={simulating}
@@ -509,8 +514,6 @@ export default function DiamondStoreModal({
             >
               {simulating
                 ? 'Simulando IPN...'
-                : isProGatewayCheckout
-                ? `⚡ Simular activación ${selectedProPlan.shortLabel} (Admin)`
                 : `⚡ Simular pago confirmado +${selectedPkgUnits} 💎 (Admin)`}
             </button>
           )}
@@ -749,9 +752,8 @@ export default function DiamondStoreModal({
                   <strong className="text-zinc-900">Todo con 💎 Diamantes:</strong> úsalos para{' '}
                   <strong className="text-[#FF2E54]">chatear directo ({policy.unlockChatDiamonds} 💎)</strong>,{' '}
                   <strong className="text-amber-700">ver Likes ({policy.unlockLikeDiamonds} 💎)</strong>, fotos VIP, enviar{' '}
-                  <strong className="text-sky-700">Regalos</strong>, activar{' '}
-                  <strong className="text-purple-700">Boost VIP</strong> o{' '}
-                  <strong className="text-rose-700">PRO</strong>.
+                  <strong className="text-sky-700">Regalos</strong> o activar{' '}
+                  <strong className="text-purple-700">Boost VIP</strong>.
                 </div>
                 <button
                   type="button"
@@ -868,7 +870,7 @@ export default function DiamondStoreModal({
                 </div>
               </div>
 
-              {/* Selección de Plan PRO (Semanal vs Mensual) */}
+              {/* Selección de Plan PRO (Semanal vs Mensual · Solo Pago Real) */}
               <div className="grid grid-cols-2 gap-2.5">
                 {liveProPlans.map((plan) => {
                   const selected = selectedProPlan.id === plan.id;
@@ -898,11 +900,11 @@ export default function DiamondStoreModal({
                       </div>
 
                       <div className="mt-2.5 pt-2 border-t border-zinc-100 flex items-baseline justify-between gap-1">
-                        <span className="font-display text-sm font-black text-sky-700 tabular-nums">
-                          {plan.priceDiamonds} 💎
+                        <span className="font-display text-base font-black text-emerald-700 tabular-nums">
+                          {formatUSD(plan.priceUSD)}
                         </span>
-                        <span className="text-xs font-black text-emerald-700 tabular-nums">
-                          o {formatUSD(plan.priceUSD)}
+                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-amber-700">
+                          Pago único
                         </span>
                       </div>
                     </button>
@@ -910,67 +912,11 @@ export default function DiamondStoreModal({
                 })}
               </div>
 
-              {/* Cómo activar PRO: Con Diamantes 💎 vs Pasarela Directa USD */}
-              <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-zinc-200/70 border border-zinc-200">
-                <button
-                  type="button"
-                  onClick={() => setProPayMode('diamonds')}
-                  className={`py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
-                    proPayMode === 'diamonds'
-                      ? 'bg-white text-zinc-900 shadow-sm'
-                      : 'text-zinc-600 hover:text-zinc-900'
-                  }`}
-                >
-                  <Gem className="w-3.5 h-3.5 text-sky-500" />
-                  Activar con 💎
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setProPayMode('gateway')}
-                  className={`py-2 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition ${
-                    proPayMode === 'gateway'
-                      ? 'bg-white text-zinc-900 shadow-sm'
-                      : 'text-zinc-600 hover:text-zinc-900'
-                  }`}
-                >
-                  <Wallet className="w-3.5 h-3.5 text-emerald-600" />
-                  Pagar {formatUSD(selectedProPlan.priceUSD)}
-                </button>
+              <div className="p-3 rounded-2xl bg-amber-50/90 border border-amber-200/80 text-[11px] text-amber-950 font-semibold leading-snug">
+                Pago verificado obligatorio: tu Membresía PRO se activa únicamente al confirmarse el pago en pasarela (NowPayments) o tras aprobación de tu comprobante en Tesorería.
               </div>
 
-              {proPayMode === 'diamonds' ? (
-                <div className="rounded-[24px] p-4 bg-white border border-rose-200/80 shadow-sm space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-black text-zinc-900">
-                        {selectedProPlan.title}
-                      </p>
-                      <p className="text-[11px] text-zinc-500">
-                        Tu saldo: <strong className="text-sky-700">{spendableDiamonds} 💎</strong>
-                      </p>
-                    </div>
-                    <span className="font-display text-lg font-black text-sky-700 tabular-nums">
-                      {selectedProPlan.priceDiamonds} 💎
-                    </span>
-                  </div>
-
-                  <button
-                    type="button"
-                    disabled={activatingProDiamonds}
-                    onClick={handleActivateProWithDiamonds}
-                    className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#FF2E54] via-rose-500 to-amber-500 text-white font-black text-xs sm:text-sm shadow-lg shadow-rose-500/20 hover:brightness-105 active:scale-[0.99] disabled:opacity-50 transition flex items-center justify-center gap-2"
-                  >
-                    <Crown className="w-4 h-4" />
-                    {activatingProDiamonds
-                      ? 'Activando Conoscamosnos PRO...'
-                      : spendableDiamonds >= Number(selectedProPlan.priceDiamonds || 250)
-                      ? `Activar ${selectedProPlan.shortLabel} ahora (${selectedProPlan.priceDiamonds} 💎)`
-                      : `Necesitas ${selectedProPlan.priceDiamonds} 💎 · Toca para pagar en USD`}
-                  </button>
-                </div>
-              ) : (
-                renderGatewayPaymentBlock()
-              )}
+              {renderGatewayPaymentBlock()}
             </div>
           ) : (
             /* SECCIÓN 3: HISTORIAL DE MOVIMIENTOS DE DIAMANTES */

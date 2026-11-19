@@ -381,11 +381,11 @@ export default function AdminSettingsTab({
                 Membresía Conoscamosnos PRO y Tabla de Aproximación (💎 / USD)
               </h2>
               <p className="text-xs text-[#5C4E41] mt-1 leading-relaxed max-w-3xl">
-                Configura los precios de <strong className="text-[#FF2E54]">Conoscamosnos PRO</strong> (en USD directo o en Diamantes <strong className="text-sky-700">💎</strong>). Quien activa PRO obtiene chats directos ilimitados sin Match, ve todos sus Likes y qué foto le gustó, Modo Pasaporte por país, filtros Check Azul/Online y Cero Anuncios.
+                Configura los precios oficiales de <strong className="text-[#FF2E54]">Conoscamosnos PRO</strong> (solo pago real en USD vía pasarela o transferencia verificada). Quien activa PRO obtiene chats directos ilimitados sin Match, ve todos sus Likes y qué foto le gustó, Modo Pasaporte por país, filtros Check Azul/Online y Cero Anuncios.
               </p>
             </div>
             <span className="px-3 py-1 rounded-full bg-rose-100 border border-rose-200 text-rose-800 text-[11px] font-black shrink-0">
-              Sistema Único: 💎 Diamantes
+              Solo Pago Real (USD)
             </span>
           </div>
 
@@ -411,7 +411,7 @@ export default function AdminSettingsTab({
                   )}
                 </div>
 
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="text-[10px] font-bold text-[#5C4E41] block mb-0.5">
                       Duración (días)
@@ -427,23 +427,6 @@ export default function AdminSettingsTab({
                         onProPlansDraftChange?.(next);
                       }}
                       className="w-full px-2.5 py-1.5 rounded-xl bg-[#FFFDF9] border border-rose-200 text-xs font-black text-[#2C241E]"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-[#5C4E41] block mb-0.5">
-                      Costo en 💎
-                    </label>
-                    <input
-                      type="number"
-                      min="10"
-                      max="50000"
-                      value={plan.priceDiamonds}
-                      onChange={(e) => {
-                        const next = [...safeProPlans];
-                        next[idx] = { ...next[idx], priceDiamonds: Number(e.target.value) };
-                        onProPlansDraftChange?.(next);
-                      }}
-                      className="w-full px-2.5 py-1.5 rounded-xl bg-[#FFFDF9] border border-sky-200 text-xs font-black text-sky-700"
                     />
                   </div>
                   <div>

@@ -1,5 +1,4 @@
 import {
-  Timestamp,
   addDoc,
   collection,
   doc,
@@ -22,10 +21,10 @@ import { toMillis } from '../utils/formatters';
 export async function createNowPaymentsCheckout({ pkg, creditTarget = 'diamonds' }) {
   const currentUser = auth?.currentUser;
   if (!currentUser) {
-    throw new Error('Debes iniciar sesión para realizar una recarga.');
+    throw new Error('Debes iniciar sesión para realizar un pago.');
   }
   const safeTarget = creditTarget === 'pro' ? 'pro' : 'diamonds';
-  const idToken = await currentUser.getIdToken();
+  const idToken = await currentUser.getIdToken(true);
   const res = await fetch('/api/payments/create-invoice', {
     method: 'POST',
     headers: {
@@ -40,7 +39,10 @@ export async function createNowPaymentsCheckout({ pkg, creditTarget = 'diamonds'
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data?.invoiceUrl) {
     throw new Error(
-      data?.error || 'No se pudo conectar con NowPayments. Verifica las variables de entorno en Vercel.'
+      data?.error ||
+        (res.status === 404
+          ? 'El servidor de pagos (/api/payments/create-invoice) no respondió.'
+          : 'No se pudo conectar con la pasarela NowPayments.')
     );
   }
   return data;
@@ -53,17 +55,18 @@ export async function simulateAutoPaymentConfirmation({
   provider = 'nowpayments',
   creditTarget = 'diamonds',
 }) {
+  if (creditTarget === 'pro') {
+    throw new Error(
+      'La Membresía PRO solo se puede activar con pago real verificado; no admite simulación.'
+    );
+  }
   const userRef = doc(db, 'users', userId);
   const txRef = doc(collection(db, 'paymentTransactions'));
-  const isProOrder = creditTarget === 'pro';
-  const durationDays = Math.max(1, Math.floor(Number(pkg.durationDays || 7)));
   const units = Math.max(
     10,
     Math.floor(Number(pkg.diamonds ?? pkg.priceDiamonds ?? pkg.coins ?? 100))
   );
-  const field = isProOrder ? 'pro' : 'diamonds';
-
-  let newProExpiryMs = 0;
+  const field = 'diamonds';
 
   await runTransaction(db, async (transaction) => {
     const userSnap = await transaction.get(userRef);
@@ -72,25 +75,11 @@ export async function simulateAutoPaymentConfirmation({
     }
 
     const userData = userSnap.data();
-
-    if (isProOrder) {
-      const existingExpiryMs = toMillis(userData.proExpiresAt);
-      const baseTimeMs = existingExpiryMs > Date.now() ? existingExpiryMs : Date.now();
-      newProExpiryMs = baseTimeMs + durationDays * 24 * 60 * 60 * 1000;
-
-      transaction.update(userRef, {
-        isPro: true,
-        proPlanId: pkg.id,
-        proExpiresAt: Timestamp.fromMillis(newProExpiryMs),
-        updatedAt: serverTimestamp(),
-      });
-    } else {
-      const currentBalance = Number(userData.diamonds || 0);
-      transaction.update(userRef, {
-        diamonds: currentBalance + units,
-        updatedAt: serverTimestamp(),
-      });
-    }
+    const currentBalance = Number(userData.diamonds || 0);
+    transaction.update(userRef, {
+      diamonds: currentBalance + units,
+      updatedAt: serverTimestamp(),
+    });
 
     transaction.set(txRef, {
       userId,
@@ -99,9 +88,9 @@ export async function simulateAutoPaymentConfirmation({
       packageId: pkg.id,
       amountUSD: Number(pkg.priceUSD || 0),
       creditField: field,
-      proDurationDays: isProOrder ? durationDays : 0,
-      diamondsCredited: isProOrder ? 0 : units,
-      customData: { userId, packageId: pkg.id, creditTarget: field, durationDays },
+      proDurationDays: 0,
+      diamondsCredited: units,
+      customData: { userId, packageId: pkg.id, creditTarget: field, durationDays: 0 },
       source: 'simulator',
       status: 'completed',
       createdAt: serverTimestamp(),
@@ -110,9 +99,9 @@ export async function simulateAutoPaymentConfirmation({
 
   return {
     txId: txRef.id,
-    diamondsAdded: isProOrder ? 0 : units,
-    proDaysAdded: isProOrder ? durationDays : 0,
-    newProExpiryMs,
+    diamondsAdded: units,
+    proDaysAdded: 0,
+    newProExpiryMs: 0,
     creditField: field,
   };
 }
@@ -155,7 +144,8 @@ export async function submitManualPaymentRequest({
     amountUSD: Number(pkg.priceUSD || 0),
     creditTarget: target,
     proDurationDays: durationDays,
-    diamondsToCredit: units,
+    diamondsToCredit: isProOrder ? 0 : units,
+    coinsToCredit: isProOrder ? 0 : units,
     referenceNumber: referenceNumber.trim(),
     proofUrl,
     status: 'pending',
@@ -259,58 +249,38 @@ export function subscribeAllStoreActivations(callback) {
 }
 
 /**
- * Super Admin: aprueba una solicitud de recarga y acredita Diamantes (💎) o membresía Conoscamosnos PRO atómicamente.
+ * Super Admin: aprueba una solicitud de recarga y acredita Diamantes (💎) o membresía Conoscamosnos PRO
+ * de forma autoritativa desde el servidor (/api/admin/approve-payment).
  */
-export async function approvePaymentRequest({ requestId, adminId }) {
-  const reqRef = doc(db, 'paymentRequests', requestId);
+export async function approvePaymentRequest({ requestId }) {
+  const currentUser = auth?.currentUser;
+  if (!currentUser) {
+    throw new Error('Debes iniciar sesión como Super Admin.');
+  }
+  if (!requestId) {
+    throw new Error('Identificador de solicitud inválido.');
+  }
 
-  await runTransaction(db, async (transaction) => {
-    const reqSnap = await transaction.get(reqRef);
-    if (!reqSnap.exists()) {
-      throw new Error('La solicitud de pago no existe.');
-    }
-
-    const reqData = reqSnap.data();
-    if (reqData.status !== 'pending') {
-      throw new Error('Esta solicitud ya fue procesada anteriormente.');
-    }
-
-    const userRef = doc(db, 'users', reqData.userId);
-    const userSnap = await transaction.get(userRef);
-    if (!userSnap.exists()) {
-      throw new Error('El usuario destinatario no existe.');
-    }
-
-    const userData = userSnap.data();
-
-    if (reqData.creditTarget === 'pro') {
-      const durationDays = Math.max(1, Math.floor(Number(reqData.proDurationDays || 7)));
-      const existingExpiryMs = toMillis(userData.proExpiresAt);
-      const baseTimeMs = existingExpiryMs > Date.now() ? existingExpiryMs : Date.now();
-      const newExpiryMs = baseTimeMs + durationDays * 24 * 60 * 60 * 1000;
-
-      transaction.update(userRef, {
-        isPro: true,
-        proPlanId: reqData.packageId || 'pro_weekly',
-        proExpiresAt: Timestamp.fromMillis(newExpiryMs),
-        updatedAt: serverTimestamp(),
-      });
-    } else {
-      const currentBalance = Number(userData.diamonds || 0);
-      const unitsToCredit = Number(reqData.diamondsToCredit || reqData.coinsToCredit || 0);
-
-      transaction.update(userRef, {
-        diamonds: currentBalance + unitsToCredit,
-        updatedAt: serverTimestamp(),
-      });
-    }
-
-    transaction.update(reqRef, {
-      status: 'approved',
-      reviewedBy: adminId,
-      reviewedAt: serverTimestamp(),
-    });
+  const idToken = await currentUser.getIdToken(true);
+  const res = await fetch('/api/admin/approve-payment', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({ requestId }),
   });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data?.ok) {
+    throw new Error(
+      data?.error ||
+        (res.status === 404
+          ? 'El endpoint de aprobación (/api/admin/approve-payment) no respondió.'
+          : 'No se pudo aprobar la solicitud en el servidor.')
+    );
+  }
+  return data;
 }
 
 export async function rejectPaymentRequest({ requestId, adminId, reason = 'Comprobante inválido o no localizado' }) {
@@ -412,11 +382,11 @@ export async function activateCountryBoost({ plan }) {
 }
 
 /**
- * Activa o extiende la membresía Conoscamosnos PRO al instante usando Diamantes (💎) desde el servidor (/api/store/activate).
+ * La Membresía Conoscamosnos PRO ya no puede activarse con Diamantes ni saldo interno:
+ * solo se obtiene pagando directamente en pasarela o transferencia verificada.
  */
-export async function activateProWithDiamonds({ plan }) {
-  if (!plan?.id) {
-    throw new Error('Plan Conoscamosnos PRO inválido.');
-  }
-  return callServerStoreActivate({ kind: 'pro', planId: plan.id });
+export async function activateProWithDiamonds() {
+  throw new Error(
+    'La Membresía PRO solo se puede obtener mediante pago real verificado en pasarela o transferencia aprobada.'
+  );
 }

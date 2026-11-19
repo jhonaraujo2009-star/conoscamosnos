@@ -142,6 +142,7 @@ export async function sendLike({
   targetUser,
   likedPhotoUrl = '',
   likedPhotoIndex = 0,
+  isSuperLike = false,
 }) {
   const fromUid = currentUser.uid;
   const toUid = targetUser.uid || targetUser.id;
@@ -155,6 +156,7 @@ export async function sendLike({
   const matchId = buildMatchId(fromUid, toUid);
   const matchRef = doc(db, 'matches', matchId);
   const cleanPhotoIdx = Math.max(0, Math.floor(Number(likedPhotoIndex || 0)));
+  const superLikeFlag = Boolean(isSuperLike);
 
   const result = await runTransaction(db, async (transaction) => {
     const [likeSnap, reverseSnap, targetSnap, matchSnap] = await Promise.all([
@@ -177,7 +179,12 @@ export async function sendLike({
     }
 
     if (likeSnap.exists()) {
-      return { alreadyLiked: true, matched: matchSnap.exists(), matchId };
+      return {
+        alreadyLiked: true,
+        matched: matchSnap.exists(),
+        matchId,
+        isSuperLike: Boolean(likeSnap.data()?.isSuperLike || superLikeFlag),
+      };
     }
 
     const currentLikes = Number(targetSnap.data().likesCount || 0);
@@ -188,6 +195,7 @@ export async function sendLike({
       toUserId: toUid,
       likedPhotoUrl: typeof likedPhotoUrl === 'string' ? likedPhotoUrl : '',
       likedPhotoIndex: cleanPhotoIdx,
+      isSuperLike: superLikeFlag,
       createdAt: serverTimestamp(),
     });
 
@@ -206,7 +214,9 @@ export async function sendLike({
         },
         isVipDirect: false,
         giftUnlockedBy: {},
-        lastMessage: '🎉 ¡Hicieron Match! Envía el primer mensaje.',
+        lastMessage: superLikeFlag
+          ? '⭐🎉 ¡Hicieron Super Match! Envía el primer mensaje.'
+          : '🎉 ¡Hicieron Match! Envía el primer mensaje.',
         lastSenderId: fromUid,
         lastMessageAt: serverTimestamp(),
         lastMessageClientMs: matchNowMs,
@@ -220,6 +230,7 @@ export async function sendLike({
       alreadyLiked: false,
       matched: isMutual || matchSnap.exists(),
       matchId,
+      isSuperLike: superLikeFlag,
     };
   });
 
@@ -227,8 +238,18 @@ export async function sendLike({
     sendPushNotificationToUser({
       recipientUid: toUid,
       type: 'match',
-      title: `💘 ¡Nuevo Match con ${currentUser.name || 'alguien'}!`,
+      title: superLikeFlag
+        ? `⭐💘 ¡Super Match con ${currentUser.name || 'alguien'}!`
+        : `💘 ¡Nuevo Match con ${currentUser.name || 'alguien'}!`,
       body: 'Se gustaron mutuamente. Entra a Conoscamosnos para enviar el primer mensaje.',
+      link: '/app',
+    });
+  } else if (!result.alreadyLiked && superLikeFlag) {
+    sendPushNotificationToUser({
+      recipientUid: toUid,
+      type: 'super_like',
+      title: `⭐ ¡${currentUser.name || 'Alguien'} te envió un Super Like!`,
+      body: 'Le encantó tu perfil. Entra a Conoscamosnos para descubrir quién es.',
       link: '/app',
     });
   }

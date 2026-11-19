@@ -106,7 +106,7 @@ export default function AccountSettingsModal({
   const [payoutAccountValue, setPayoutAccountValue] = useState('');
   const [payoutHolderName, setPayoutHolderName] = useState('');
   const [savingPayout, setSavingPayout] = useState(false);
-  const { isInstalled, canInstallNative, isIOS, promptInstall } = usePwaInstall();
+  const { isInstalled, isIOS, downloadOrInstallApp } = usePwaInstall();
 
   useEffect(() => {
     if (!isOpen || !userProfile?.uid || currentAuthUid !== userProfile.uid) {
@@ -245,15 +245,19 @@ export default function AccountSettingsModal({
     }
   };
 
-  const handleAndroidInstall = async () => {
-    if (canInstallNative) {
-      const res = await promptInstall();
-      if (res.status === 'accepted') {
-        onSuccess?.('¡Conoscamosnos se instaló en tu dispositivo!');
-        return;
-      }
-      if (res.status === 'dismissed') return;
+  const handleDownloadApp = async () => {
+    const res = await downloadOrInstallApp({ customApkUrl: economyConfig?.androidApkUrl });
+    if (res.status === 'downloading_apk') {
+      setShowInstallGuide(false);
+      onSuccess?.('⬇️ Descargando Conoscamosnos...');
+      return;
     }
+    if (res.status === 'accepted') {
+      setShowInstallGuide(false);
+      onSuccess?.('✅ ¡Conoscamosnos se está instalando en tu dispositivo!');
+      return;
+    }
+    if (res.status === 'dismissed') return;
     setShowInstallGuide((v) => !v);
   };
 
@@ -649,7 +653,7 @@ export default function AccountSettingsModal({
             </div>
           </section>
 
-          {/* 5. Descargar / Instalar App para Android */}
+          {/* 5. Descargar Aplicación */}
           <section className="bg-white rounded-3xl p-4 shadow-card space-y-2.5">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
@@ -657,11 +661,11 @@ export default function AccountSettingsModal({
                   <Smartphone className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-extrabold text-zinc-900">App para Android</p>
+                  <p className="text-xs font-extrabold text-zinc-900">Descargar Aplicación</p>
                   <p className="text-[11px] text-zinc-500 truncate">
                     {isInstalled
                       ? 'Instalada en este dispositivo'
-                      : 'Instálala directo en tu teléfono sin Play Store'}
+                      : 'Descarga directa de Conoscamosnos en tu teléfono'}
                   </p>
                 </div>
               </div>
@@ -673,26 +677,24 @@ export default function AccountSettingsModal({
               ) : (
                 <button
                   type="button"
-                  onClick={handleAndroidInstall}
-                  className="px-3.5 py-2 rounded-full bg-zinc-900 text-white text-[11px] font-extrabold flex items-center gap-1.5 hover:bg-zinc-800 shrink-0 active:scale-95 transition"
+                  onClick={handleDownloadApp}
+                  className="px-3.5 py-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-[11px] font-black flex items-center gap-1.5 shadow-sm hover:brightness-105 shrink-0 active:scale-95 transition"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  {canInstallNative ? 'Instalar' : 'Cómo instalar'}
+                  Descargar App
                 </button>
               )}
             </div>
 
             {showInstallGuide && !isInstalled && (
-              <div className="p-3 rounded-2xl bg-zinc-50 border border-zinc-200/80 text-[11px] text-zinc-700 leading-relaxed space-y-1">
+              <div className="p-3 rounded-2xl bg-zinc-50 border border-zinc-200/80 text-[11px] text-zinc-700 leading-relaxed">
                 {isIOS ? (
                   <p>
-                    En Safari (iPhone/iPad): toca el botón <strong>Compartir</strong> y elige{' '}
-                    <strong>“Agregar a pantalla de inicio”</strong>.
+                    Toca Compartir (↑) y luego <strong>“Agregar a pantalla de inicio”</strong>.
                   </p>
                 ) : (
                   <p>
-                    En <strong>Google Chrome Android</strong>: abre el menú superior <strong>⋮</strong> y selecciona{' '}
-                    <strong>“Instalar aplicación”</strong> o <strong>“Agregar a pantalla principal”</strong> (funciona vía HTTPS en tu dominio desplegado).
+                    En Chrome toca el menú <strong>⋮</strong> → <strong>“Instalar aplicación”</strong>.
                   </p>
                 )}
               </div>

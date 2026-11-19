@@ -85,23 +85,41 @@ export async function processEconomySpend({
   }
 
   let db;
-  let uid = '';
-  let economyCfg = {};
-
+  let adminAuth;
   try {
     db = getAdminFirestore();
-    const decoded = await getAdminAuth().verifyIdToken(bearerMatch[1]);
-    uid = decoded.uid;
+    adminAuth = getAdminAuth();
+  } catch (err) {
+    console.error('[EconomySpend] Error inicializando Firebase Admin:', err);
+    return {
+      statusCode: 500,
+      body: { ok: false, error: 'Error de configuración del servidor (Firebase Admin SDK).' },
+    };
+  }
 
+  let uid = '';
+  try {
+    const decoded = await adminAuth.verifyIdToken(bearerMatch[1]);
+    uid = decoded.uid;
+  } catch (err) {
+    console.error('[EconomySpend] Error verificando token:', err);
+    return {
+      statusCode: 401,
+      body: { ok: false, error: 'Tu sesión expiró o es inválida.' },
+    };
+  }
+
+  let economyCfg = {};
+  try {
     const cfgSnap = await db.collection('appConfig').doc('economy').get();
     if (cfgSnap.exists) {
       economyCfg = cfgSnap.data() || {};
     }
   } catch (err) {
-    console.error('[EconomySpend] Error verificando Firebase Admin/Token:', err);
+    console.error('[EconomySpend] Error leyendo appConfig/economy:', err);
     return {
-      statusCode: 401,
-      body: { ok: false, error: 'No se pudo validar tu sesión en el servidor.' },
+      statusCode: 500,
+      body: { ok: false, error: 'No se pudo consultar la configuración económica en el servidor.' },
     };
   }
 

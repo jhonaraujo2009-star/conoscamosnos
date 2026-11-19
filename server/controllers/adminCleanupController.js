@@ -63,10 +63,21 @@ export async function handleAdminCleanup({
   }
 
   let db;
-  let decoded;
+  let adminAuth;
   try {
     db = getAdminFirestore();
-    decoded = await getAdminAuth().verifyIdToken(bearerMatch[1]);
+    adminAuth = getAdminAuth();
+  } catch (err) {
+    console.error('[Admin Cleanup] Error inicializando Firebase Admin:', err);
+    return {
+      statusCode: 500,
+      body: { ok: false, error: 'Error de configuración del servidor (Firebase Admin SDK).' },
+    };
+  }
+
+  let decoded;
+  try {
+    decoded = await adminAuth.verifyIdToken(bearerMatch[1]);
   } catch (err) {
     console.error('[Admin Cleanup] Error verificando token:', err);
     return {
