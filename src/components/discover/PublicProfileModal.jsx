@@ -39,7 +39,6 @@ import {
 } from '../../services/userService';
 import {
   formatInterestWithIcon,
-  formatRelativeLastSeen,
   formatUserDistanceLabel,
   getDisplayAge,
   getOrderedPhotos,
@@ -52,7 +51,6 @@ import {
   isGiftChatUnlocked,
   isProActive,
   isProfileVerified,
-  isUserActuallyOnline,
   optimizeCloudinaryUrl,
 } from '../../utils/formatters';
 import GiftAnimationOverlay from '../chat/GiftAnimationOverlay';
@@ -146,7 +144,6 @@ export default function PublicProfileModal({
     isFreeMode: policy.isFreeMode,
   });
 
-  const online = isUserActuallyOnline(liveTarget);
   const boosted = isBoostActive(liveTarget);
   const verified = isProfileVerified(liveTarget);
   const visibleAge = getDisplayAge(liveTarget);
@@ -459,21 +456,6 @@ export default function PublicProfileModal({
                 <span>{distanceInfo.text}</span>
               </p>
             </div>
-
-            <span
-              className={`px-2.5 py-1 rounded-full text-[11px] font-extrabold flex items-center gap-1.5 shadow-sm ${
-                online ? 'bg-emerald-500 text-white' : 'bg-white/95 text-zinc-700'
-              }`}
-            >
-              <span
-                className={`w-2 h-2 rounded-full ${online ? 'bg-white animate-pulse' : 'bg-zinc-400'}`}
-              />
-              {online
-                ? 'En línea'
-                : formatRelativeLastSeen(liveTarget.lastSeen, false, {
-                    hideOnlineStatus: liveTarget.hideOnlineStatus,
-                  })}
-            </span>
           </div>
         </div>
 
@@ -576,7 +558,7 @@ export default function PublicProfileModal({
           {liveTarget.bio && (
             <div className="p-4 rounded-2xl bg-white shadow-card">
               <p className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-400 mb-1">
-                Sobre {liveTarget.name}
+                Biografía
               </p>
               <p className="text-sm text-zinc-800 leading-relaxed font-medium">{liveTarget.bio}</p>
             </div>

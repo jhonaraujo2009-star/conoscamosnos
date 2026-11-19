@@ -31,7 +31,6 @@ import {
   isBoostActive,
   isProActive,
   isProfileVerified,
-  isUserActuallyOnline,
 } from '../../utils/formatters';
 import RewardedAdModal from '../monetization/RewardedAdModal';
 import UnlockChoiceModal from '../monetization/UnlockChoiceModal';
@@ -610,7 +609,6 @@ export default function LikesScreen({
           ) : (
             <div className="grid grid-cols-2 gap-3">
               {topPicks.map((user) => {
-                const online = isUserActuallyOnline(user);
                 const boosted = isBoostActive(user);
                 const verified = isProfileVerified(user);
                 const visibleAge = getDisplayAge(user);
@@ -633,9 +631,6 @@ export default function LikesScreen({
                         <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-full bg-amber-400 text-black text-[10px] font-black flex items-center gap-0.5">
                           <Zap className="w-2.5 h-2.5 fill-black" /> TOP
                         </span>
-                      )}
-                      {online && (
-                        <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
                       )}
                       <div className="absolute bottom-2.5 inset-x-3 text-white">
                         <p className="text-sm font-extrabold truncate flex items-center gap-1">

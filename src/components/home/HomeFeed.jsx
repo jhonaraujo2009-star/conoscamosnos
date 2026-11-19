@@ -7,7 +7,6 @@ import {
   getDisplayAge,
   getPrimaryPhoto,
   isProfileVerified,
-  isUserActuallyOnline,
 } from '../../utils/formatters';
 
 /* Ilustraciones 3D brillantes en SVG de alta precisión */
@@ -285,7 +284,6 @@ export default function HomeFeed({
           <div className="grid grid-cols-2 gap-3">
             {categoryUsers.map((u) => {
               const uid = u.uid || u.id;
-              const online = isUserActuallyOnline(u);
               const verified = isProfileVerified(u);
               const liked = Boolean(likedIds[uid]);
               const visibleAge = getDisplayAge(u);
@@ -304,11 +302,6 @@ export default function HomeFeed({
                       className="w-full h-full object-cover"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent" />
-                    {online && (
-                      <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[9px] font-extrabold shadow">
-                        Online
-                      </span>
-                    )}
                     <div className="absolute bottom-2.5 inset-x-3 text-white">
                       <p className="text-sm font-extrabold truncate flex items-center gap-1">
                         <span className="truncate">
