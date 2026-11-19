@@ -45,10 +45,28 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
+        globPatterns: ['**/*.{js,css,ico,png,svg,woff2}'],
         globIgnores: ['sw.js', 'firebase-messaging-sw.js', 'ad-viewer.html'],
-        navigateFallbackDenylist: [/^\/ad-viewer\.html/, /^\/firebase-messaging-sw\.js/, /^\/api\//],
+        navigateFallback: null,
         runtimeCaching: [
+          {
+            urlPattern: ({ request, url }) =>
+              request.mode === 'navigate' &&
+              !url.pathname.startsWith('/api/') &&
+              url.pathname !== '/ad-viewer.html',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'conoscamosnos-pages',
+              networkTimeoutSeconds: 4,
+              expiration: {
+                maxEntries: 12,
+                maxAgeSeconds: 60 * 60 * 24,
+              },
+            },
+          },
           {
             urlPattern: /^https:\/\/res\.cloudinary\.com\/.*/i,
             handler: 'CacheFirst',
