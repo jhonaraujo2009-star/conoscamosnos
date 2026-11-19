@@ -31,6 +31,7 @@ import {
   isMatchUnread,
   isProActive,
   toMillis,
+  triggerHaptic,
 } from './utils/formatters';
 import AuthScreen from './components/auth/AuthScreen';
 import MobileShell from './components/layout/MobileShell';
@@ -146,6 +147,10 @@ function UserAppView({ onSuccess, onError }) {
 
   const seenGiftIdsRef = useRef(new Set());
   const giftsLoadedRef = useRef(false);
+  const seenLikeIdsRef = useRef(new Set());
+  const likesLoadedRef = useRef(false);
+  const blockedUsersRef = useRef([]);
+  blockedUsersRef.current = userProfile?.blockedUsers || [];
 
   const handleSuccess = onSuccess;
   const handleError = onError;
@@ -203,6 +208,8 @@ function UserAppView({ onSuccess, onError }) {
     });
     seenGiftIdsRef.current = new Set();
     giftsLoadedRef.current = false;
+    seenLikeIdsRef.current = new Set();
+    likesLoadedRef.current = false;
     try {
       const savedGiftsSeen = firebaseUser?.uid
         ? Number(localStorage.getItem(`conoscamosnos_gifts_seen_${firebaseUser.uid}`) || 0)
@@ -233,14 +240,59 @@ function UserAppView({ onSuccess, onError }) {
       setUserUnlocks({ revealedLikeIds: [], chatUnlockedUserIds: [], totalAdsWatched: 0 });
       seenGiftIdsRef.current = new Set();
       giftsLoadedRef.current = false;
+      seenLikeIdsRef.current = new Set();
+      likesLoadedRef.current = false;
       return;
     }
+    const currentUid = userProfile.uid;
     const unsubMatches = subscribeUserMatches(
-      userProfile.uid,
+      currentUid,
       setMatches,
       (err) => console.error('Error suscribiendo matches:', err)
     );
-    const unsubLikes = subscribeReceivedLikes(userProfile.uid, setReceivedLikes);
+    const unsubLikes = subscribeReceivedLikes(currentUid, (list) => {
+      const blockedSet = new Set(blockedUsersRef.current || []);
+      const strictList = (Array.isArray(list) ? list : []).filter(
+        (like) =>
+          like?.toUserId === currentUid &&
+          typeof like.fromUserId === 'string' &&
+          like.fromUserId.length > 0 &&
+          like.fromUserId !== currentUid
+      );
+
+      if (!likesLoadedRef.current) {
+        seenLikeIdsRef.current = new Set(strictList.map((l) => `${l.id}_${l.isSuperLike ? '1' : '0'}`));
+        likesLoadedRef.current = true;
+      } else {
+        const freshSuper = strictList.find(
+          (l) =>
+            l.toUserId === currentUid &&
+            l.isSuperLike === true &&
+            !blockedSet.has(l.fromUserId) &&
+            !seenLikeIdsRef.current.has(`${l.id}_1`)
+        );
+        strictList.forEach((l) =>
+          seenLikeIdsRef.current.add(`${l.id}_${l.isSuperLike ? '1' : '0'}`)
+        );
+        if (freshSuper) {
+          getUserById(freshSuper.fromUserId)
+            .catch(() => null)
+            .then((sender) => {
+              const senderName = sender?.name || 'Alguien';
+              const superTitle = `⭐ ¡${senderName} te envió un Super Like!`;
+              triggerHaptic([16, 40, 22]);
+              handleSuccess(`${superTitle} Míralo gratis en Likes.`);
+              showLocalServiceWorkerNotification({
+                title: superTitle,
+                body: 'Entra gratis en Likes para descubrir quién te envió este Super Like.',
+                tag: `superlike_${freshSuper.id}`,
+              });
+            });
+        }
+      }
+
+      setReceivedLikes(strictList);
+    });
     const unsubUnlocks = subscribeUserUnlocks(userProfile.uid, setUserUnlocks);
     const unsubGifts = subscribeReceivedGiftTransactions(
       userProfile.uid,
@@ -323,8 +375,28 @@ function UserAppView({ onSuccess, onError }) {
     if (!userProfile?.uid || activeTab === 'likes') return 0;
     const blockedSet = new Set(userProfile.blockedUsers || []);
     return receivedLikes.filter((like) => {
-      if (!like?.fromUserId || blockedSet.has(like.fromUserId)) return false;
-      const ms = toMillis(like.createdAt);
+      if (like?.toUserId !== userProfile.uid || !like?.fromUserId || blockedSet.has(like.fromUserId)) {
+        return false;
+      }
+      const ms = Math.max(toMillis(like.superLikedAt), toMillis(like.createdAt));
+      if (!likesSeenAt) return true;
+      return ms === 0 || ms > likesSeenAt;
+    }).length;
+  }, [receivedLikes, userProfile?.uid, userProfile?.blockedUsers, likesSeenAt, activeTab]);
+
+  const unreadSuperLikesCount = useMemo(() => {
+    if (!userProfile?.uid || activeTab === 'likes') return 0;
+    const blockedSet = new Set(userProfile.blockedUsers || []);
+    return receivedLikes.filter((like) => {
+      if (
+        like?.toUserId !== userProfile.uid ||
+        like?.isSuperLike !== true ||
+        !like?.fromUserId ||
+        blockedSet.has(like.fromUserId)
+      ) {
+        return false;
+      }
+      const ms = Math.max(toMillis(like.superLikedAt), toMillis(like.createdAt));
       if (!likesSeenAt) return true;
       return ms === 0 || ms > likesSeenAt;
     }).length;
@@ -600,6 +672,7 @@ function UserAppView({ onSuccess, onError }) {
         onChangeTab={handleChangeTab}
         unreadBadgeCount={unreadChatsCount}
         likesBadgeCount={unreadLikesCount}
+        superLikesBadgeCount={unreadSuperLikesCount}
         themeMood={activeMood}
       >
         <div className={activeTab === 'swipe' ? 'flex-1 h-full min-h-0 flex flex-col' : 'hidden'}>
@@ -655,6 +728,10 @@ function UserAppView({ onSuccess, onError }) {
             userUnlocks={userUnlocks}
             onSelectProfile={setSelectedProfile}
             onStartChat={handleStartDirectChat}
+            onOpenChat={(chatSession) => {
+              handleOpenChatSession(chatSession);
+              setActiveTab('chat');
+            }}
             onOpenDiamondStore={() => openDiamondStore('buy')}
             onOpenPro={() => openDiamondStore('pro')}
             onGoToSwipe={() => handleChangeTab('swipe')}

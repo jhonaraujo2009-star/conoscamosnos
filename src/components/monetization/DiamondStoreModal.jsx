@@ -19,6 +19,7 @@ import {
   MessageCircle,
   QrCode,
   Sparkles,
+  Star,
   Tv,
   Wallet,
   Zap,
@@ -63,6 +64,11 @@ const PRO_BENEFITS = [
     icon: Heart,
     title: 'Mira quién dio Like a tu foto y Álbumes VIP gratis',
     desc: 'Toda tu pestaña Likes y Fotos Exclusivas VIP desbloqueadas al instante.',
+  },
+  {
+    icon: Star,
+    title: '20 Super Likes semanales (vs 2 gratis)',
+    desc: 'Destácate primero en la pestaña Likes de quienes te encantan (visibles gratis para ellos).',
   },
   {
     icon: Globe,

@@ -81,6 +81,8 @@ export const MAX_PHOTOS = 6;
 export const MAX_EXCLUSIVE_PHOTOS = 2;
 export const EXCLUSIVE_PHOTO_DEFAULT_COST = 15;
 export const MIN_AGE = 18;
+export const SUPER_LIKE_WEEKLY_LIMIT_FREE = 2;
+export const SUPER_LIKE_WEEKLY_LIMIT_PRO = 20;
 
 export const VIRTUAL_GIFTS = [
   {

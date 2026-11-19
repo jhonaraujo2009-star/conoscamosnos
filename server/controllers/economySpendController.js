@@ -1,6 +1,9 @@
 import { FieldValue, getAdminAuth, getAdminFirestore } from '../config/firebaseAdmin.js';
 import { dispatchPushNotificationInternal } from './pushNotificationController.js';
 
+export const SUPER_LIKE_WEEKLY_LIMIT_FREE = 2;
+export const SUPER_LIKE_WEEKLY_LIMIT_PRO = 20;
+
 const DEFAULT_VIRTUAL_GIFTS = [
   { id: 'rose', name: 'Rosa', icon: '🌹', price: 10 },
   { id: 'coffee', name: 'Café', icon: '☕', price: 25 },
@@ -10,10 +13,62 @@ const DEFAULT_VIRTUAL_GIFTS = [
 ];
 
 class HttpError extends Error {
-  constructor(statusCode, message) {
+  constructor(statusCode, message, extra = {}) {
     super(message);
     this.statusCode = statusCode;
+    this.extra = extra;
   }
+}
+
+function toMillis(ts) {
+  if (!ts) return 0;
+  if (typeof ts === 'number') return ts;
+  if (typeof ts.toMillis === 'function') return ts.toMillis();
+  if (ts.seconds) return ts.seconds * 1000;
+  const parsed = Date.parse(ts);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function isServerProActive(userData, nowMs = Date.now()) {
+  if (!userData || userData.isPro !== true || !userData.proExpiresAt) return false;
+  return toMillis(userData.proExpiresAt) > nowMs;
+}
+
+export function getIsoWeekKey(date = new Date()) {
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+}
+
+export function resolveWeeklySuperLikeQuota(userData, date = new Date()) {
+  const nowMs = date instanceof Date ? date.getTime() : Date.now();
+  const pro = isServerProActive(userData, nowMs);
+  const limit = pro ? SUPER_LIKE_WEEKLY_LIMIT_PRO : SUPER_LIKE_WEEKLY_LIMIT_FREE;
+  const weekKey = getIsoWeekKey(date instanceof Date ? date : new Date(nowMs));
+  const used =
+    userData?.superLikesWeekKey === weekKey
+      ? Math.max(0, Math.floor(Number(userData?.superLikesUsedThisWeek || 0)))
+      : 0;
+  const remaining = Math.max(0, limit - used);
+  return {
+    used,
+    limit,
+    remaining,
+    isPro: pro,
+    weekKey,
+  };
+}
+
+function buildParticipantSnapshot(userData, uid) {
+  return {
+    uid,
+    name: userData?.name || 'Usuario',
+    photo: userData?.photos?.[0] || userData?.photo || '',
+    country: userData?.country || null,
+  };
 }
 
 function resolveServerGifts(economyCfg = {}) {
@@ -713,12 +768,184 @@ export async function processEconomySpend({
       };
     }
 
+    if (cleanAction === 'send_super_like') {
+      const targetUid = String(payload?.targetUid || '').trim();
+      if (!targetUid || targetUid === uid) {
+        throw new HttpError(400, 'Perfil destinatario inválido para Super Like.');
+      }
+
+      const likedPhotoUrl =
+        typeof payload?.likedPhotoUrl === 'string' ? payload.likedPhotoUrl.slice(0, 1200) : '';
+      const likedPhotoIndex = Math.max(
+        0,
+        Math.min(20, Math.floor(Number(payload?.likedPhotoIndex || 0)))
+      );
+
+      const targetRef = db.collection('users').doc(targetUid);
+      const likeRef = db.collection('likes').doc(`${uid}_${targetUid}`);
+      const reverseLikeRef = db.collection('likes').doc(`${targetUid}_${uid}`);
+      const matchId = buildMatchId(uid, targetUid);
+      const matchRef = db.collection('matches').doc(matchId);
+      const nowMs = Date.now();
+
+      const outcome = await db.runTransaction(async (transaction) => {
+        const [senderSnap, targetSnap, likeSnap, reverseSnap, matchSnap] = await Promise.all([
+          transaction.get(userRef),
+          transaction.get(targetRef),
+          transaction.get(likeRef),
+          transaction.get(reverseLikeRef),
+          transaction.get(matchRef),
+        ]);
+
+        if (!senderSnap.exists || !targetSnap.exists) {
+          throw new HttpError(404, 'El perfil ya no está disponible.');
+        }
+
+        const senderData = senderSnap.data() || {};
+        const targetData = targetSnap.data() || {};
+        if (isUserBanned(senderData)) {
+          throw new HttpError(403, 'Tu cuenta está suspendida.');
+        }
+        if (isUserBanned(targetData)) {
+          throw new HttpError(403, 'Este perfil no está disponible.');
+        }
+        if (areBlocked(senderData, uid, targetData, targetUid)) {
+          throw new HttpError(
+            403,
+            'No puedes interactuar con este perfil porque existe un bloqueo activo.'
+          );
+        }
+
+        const quota = resolveWeeklySuperLikeQuota(senderData, new Date(nowMs));
+
+        if (likeSnap.exists && likeSnap.data()?.isSuperLike === true) {
+          return {
+            alreadyLiked: true,
+            matched: matchSnap.exists,
+            matchId,
+            isSuperLike: true,
+            senderName: senderData.name || 'Alguien',
+            quota,
+          };
+        }
+
+        if (quota.used >= quota.limit) {
+          throw new HttpError(
+            429,
+            quota.isPro
+              ? 'Ya usaste tus 20 Super Likes semanales PRO. Se renuevan el próximo lunes.'
+              : 'Ya usaste tus 2 Super Likes semanales. Hazte Conoscamosnos PRO para disfrutar 20 cada semana.',
+            {
+              code: 'SUPER_LIKE_LIMIT_REACHED',
+              quota: { ...quota, remaining: 0 },
+            }
+          );
+        }
+
+        const nextUsed = quota.used + 1;
+        const nextQuota = {
+          used: nextUsed,
+          limit: quota.limit,
+          remaining: Math.max(0, quota.limit - nextUsed),
+          isPro: quota.isPro,
+          weekKey: quota.weekKey,
+        };
+
+        transaction.update(userRef, {
+          superLikesWeekKey: quota.weekKey,
+          superLikesUsedThisWeek: nextUsed,
+          lastSuperLikeAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+
+        const isNewLikeDoc = !likeSnap.exists;
+        transaction.set(
+          likeRef,
+          {
+            fromUserId: uid,
+            toUserId: targetUid,
+            likedPhotoUrl,
+            likedPhotoIndex,
+            isSuperLike: true,
+            superLikedAt: FieldValue.serverTimestamp(),
+            createdAt: isNewLikeDoc
+              ? FieldValue.serverTimestamp()
+              : likeSnap.data()?.createdAt || FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+        if (isNewLikeDoc) {
+          transaction.update(targetRef, {
+            likesCount: FieldValue.increment(1),
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
+
+        const isMutual = reverseSnap.exists;
+        if (isMutual && !matchSnap.exists) {
+          transaction.set(matchRef, {
+            participants: [uid, targetUid].sort(),
+            participantProfiles: {
+              [uid]: buildParticipantSnapshot(senderData, uid),
+              [targetUid]: buildParticipantSnapshot(targetData, targetUid),
+            },
+            isVipDirect: false,
+            giftUnlockedBy: {},
+            lastMessage: '⭐🎉 ¡Hicieron Super Match! Envía el primer mensaje.',
+            lastSenderId: uid,
+            lastMessageAt: FieldValue.serverTimestamp(),
+            lastMessageClientMs: nowMs,
+            lastReadBy: { [uid]: FieldValue.serverTimestamp() },
+            lastReadByClientMs: { [uid]: nowMs },
+            createdAt: FieldValue.serverTimestamp(),
+          });
+        }
+
+        return {
+          alreadyLiked: false,
+          matched: isMutual || matchSnap.exists,
+          matchId,
+          isSuperLike: true,
+          senderName: senderData.name || 'Alguien',
+          quota: nextQuota,
+        };
+      });
+
+      if (!outcome.alreadyLiked) {
+        dispatchPushNotificationInternal({
+          senderUid: uid,
+          recipientUid: targetUid,
+          type: outcome.matched ? 'match' : 'super_like',
+          title: outcome.matched
+            ? `⭐💘 ¡Super Match con ${outcome.senderName}!`
+            : `⭐ ¡${outcome.senderName} te envió un Super Like!`,
+          body: outcome.matched
+            ? 'Se gustaron mutuamente. Entra a Conoscamosnos para enviar el primer mensaje.'
+            : 'Le encantó tu perfil. Entra gratis a Likes para ver quién te lo envió.',
+          link: '/app',
+        }).catch(() => {});
+      }
+
+      return {
+        statusCode: 200,
+        body: {
+          ok: true,
+          alreadyLiked: outcome.alreadyLiked,
+          matched: outcome.matched,
+          matchId: outcome.matchId,
+          isSuperLike: true,
+          quota: outcome.quota,
+        },
+      };
+    }
+
     throw new HttpError(400, 'Acción económica no reconocida.');
   } catch (err) {
     if (err instanceof HttpError) {
       return {
         statusCode: err.statusCode,
-        body: { ok: false, error: err.message },
+        body: { ok: false, error: err.message, ...(err.extra || {}) },
       };
     }
     console.error('[EconomySpend] Error interno:', err);

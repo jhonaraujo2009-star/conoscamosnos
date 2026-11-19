@@ -9,7 +9,7 @@ import {
   serverTimestamp,
   where,
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { auth, db } from '../config/firebase';
 import { buildMatchId } from '../utils/formatters';
 import { sendPushNotificationToUser } from './pushNotificationService';
 
@@ -22,7 +22,16 @@ export function subscribeReceivedLikes(currentUid, callback) {
   return onSnapshot(
     q,
     (snap) => {
-      callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      const clean = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter(
+          (item) =>
+            item.toUserId === currentUid &&
+            typeof item.fromUserId === 'string' &&
+            item.fromUserId.length > 0 &&
+            item.fromUserId !== currentUid
+        );
+      callback(clean);
     },
     () => callback([])
   );
@@ -150,13 +159,52 @@ export async function sendLike({
     throw new Error('No puedes darte like a ti mismo.');
   }
 
+  const cleanPhotoUrl = typeof likedPhotoUrl === 'string' ? likedPhotoUrl : '';
+  const cleanPhotoIdx = Math.max(0, Math.floor(Number(likedPhotoIndex || 0)));
+  const superLikeFlag = Boolean(isSuperLike);
+
+  // Los Super Likes pasan obligatoriamente por el servidor para validar cuota semanal (2 normal / 20 PRO)
+  if (superLikeFlag === true) {
+    const firebaseUser = auth?.currentUser;
+    if (!firebaseUser) {
+      throw new Error('Debes iniciar sesión para enviar un Super Like.');
+    }
+    const idToken = await firebaseUser.getIdToken();
+    const res = await fetch('/api/economy/spend', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify({
+        action: 'send_super_like',
+        targetUid: toUid,
+        likedPhotoUrl: cleanPhotoUrl,
+        likedPhotoIndex: cleanPhotoIdx,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.ok) {
+      const err = new Error(data?.error || 'No se pudo enviar el Super Like.');
+      err.code = data?.code || null;
+      err.quota = data?.quota || null;
+      err.status = res.status;
+      throw err;
+    }
+    return {
+      alreadyLiked: Boolean(data.alreadyLiked),
+      matched: Boolean(data.matched),
+      matchId: data.matchId || buildMatchId(fromUid, toUid),
+      isSuperLike: true,
+      quota: data.quota || null,
+    };
+  }
+
   const likeRef = doc(db, 'likes', `${fromUid}_${toUid}`);
   const reverseLikeRef = doc(db, 'likes', `${toUid}_${fromUid}`);
   const targetUserRef = doc(db, 'users', toUid);
   const matchId = buildMatchId(fromUid, toUid);
   const matchRef = doc(db, 'matches', matchId);
-  const cleanPhotoIdx = Math.max(0, Math.floor(Number(likedPhotoIndex || 0)));
-  const superLikeFlag = Boolean(isSuperLike);
 
   const result = await runTransaction(db, async (transaction) => {
     const [likeSnap, reverseSnap, targetSnap, matchSnap] = await Promise.all([
@@ -183,7 +231,7 @@ export async function sendLike({
         alreadyLiked: true,
         matched: matchSnap.exists(),
         matchId,
-        isSuperLike: Boolean(likeSnap.data()?.isSuperLike || superLikeFlag),
+        isSuperLike: Boolean(likeSnap.data()?.isSuperLike),
       };
     }
 
@@ -193,9 +241,9 @@ export async function sendLike({
     transaction.set(likeRef, {
       fromUserId: fromUid,
       toUserId: toUid,
-      likedPhotoUrl: typeof likedPhotoUrl === 'string' ? likedPhotoUrl : '',
+      likedPhotoUrl: cleanPhotoUrl,
       likedPhotoIndex: cleanPhotoIdx,
-      isSuperLike: superLikeFlag,
+      isSuperLike: false,
       createdAt: serverTimestamp(),
     });
 
@@ -214,9 +262,7 @@ export async function sendLike({
         },
         isVipDirect: false,
         giftUnlockedBy: {},
-        lastMessage: superLikeFlag
-          ? '⭐🎉 ¡Hicieron Super Match! Envía el primer mensaje.'
-          : '🎉 ¡Hicieron Match! Envía el primer mensaje.',
+        lastMessage: '🎉 ¡Hicieron Match! Envía el primer mensaje.',
         lastSenderId: fromUid,
         lastMessageAt: serverTimestamp(),
         lastMessageClientMs: matchNowMs,
@@ -230,7 +276,7 @@ export async function sendLike({
       alreadyLiked: false,
       matched: isMutual || matchSnap.exists(),
       matchId,
-      isSuperLike: superLikeFlag,
+      isSuperLike: false,
     };
   });
 
@@ -238,18 +284,8 @@ export async function sendLike({
     sendPushNotificationToUser({
       recipientUid: toUid,
       type: 'match',
-      title: superLikeFlag
-        ? `⭐💘 ¡Super Match con ${currentUser.name || 'alguien'}!`
-        : `💘 ¡Nuevo Match con ${currentUser.name || 'alguien'}!`,
+      title: `💘 ¡Nuevo Match con ${currentUser.name || 'alguien'}!`,
       body: 'Se gustaron mutuamente. Entra a Conoscamosnos para enviar el primer mensaje.',
-      link: '/app',
-    });
-  } else if (!result.alreadyLiked && superLikeFlag) {
-    sendPushNotificationToUser({
-      recipientUid: toUid,
-      type: 'super_like',
-      title: `⭐ ¡${currentUser.name || 'Alguien'} te envió un Super Like!`,
-      body: 'Le encantó tu perfil. Entra a Conoscamosnos para descubrir quién es.',
       link: '/app',
     });
   }

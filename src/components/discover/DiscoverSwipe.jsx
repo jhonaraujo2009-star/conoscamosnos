@@ -50,6 +50,7 @@ import {
   getPrimaryPhoto,
   getSharedInterests,
   getSpendableDiamonds,
+  getSuperLikeQuota,
   isBoostActive,
   isExclusivePhoto,
   isExclusivePhotoUnlocked,
@@ -228,6 +229,7 @@ export default function DiscoverSwipe({
   });
 
   const blockedKey = (currentUser?.blockedUsers || []).join(',');
+  const superLikeQuota = useMemo(() => getSuperLikeQuota(currentUser), [currentUser]);
 
   const resetCardDomStyle = useCallback((withTransition = false) => {
     const el = activeCardRef.current;
@@ -519,6 +521,21 @@ export default function DiscoverSwipe({
 
   const triggerSuperLike = useCallback(() => {
     if (!topCard || busyRef.current) return;
+
+    if (superLikeQuota.remaining <= 0) {
+      resetCardDomStyle(true);
+      triggerHaptic([20, 40, 20]);
+      onError?.(
+        superLikeQuota.isPro
+          ? '⭐ Ya usaste tus 20 Super Likes semanales PRO. Se renuevan el próximo lunes.'
+          : '⭐ Ya usaste tus 2 Super Likes semanales. Hazte Conoscamosnos PRO para tener 20 cada semana.'
+      );
+      if (!superLikeQuota.isPro) {
+        (onOpenPro || onOpenDiamondStore)?.();
+      }
+      return;
+    }
+
     busyRef.current = true;
     const target = topCard;
     const likedPhotoUrl = topCardPhotos[photoIdx] || topCardPhotos[0] || '';
@@ -538,13 +555,36 @@ export default function DiscoverSwipe({
           triggerHaptic([18, 40, 24]);
           setMatchPopup({ targetUser: target, matchId: res.matchId, isSuperLike: true });
         } else if (!res.alreadyLiked) {
-          onSuccess?.(`⭐ ¡Enviaste un Super Like a ${target.name}!`);
+          const rem = res.quota?.remaining ?? Math.max(0, superLikeQuota.remaining - 1);
+          const lim = res.quota?.limit ?? superLikeQuota.limit;
+          onSuccess?.(
+            `⭐ ¡Super Like enviado a ${target.name}! Te quedan ${rem}/${lim} esta semana.`
+          );
         }
       } catch (err) {
+        const targetId = target.uid || target.id;
+        setCards((prev) =>
+          prev.some((c) => (c.uid || c.id) === targetId) ? prev : [target, ...prev]
+        );
+        setHistory((prev) => prev.filter((c) => (c.uid || c.id) !== targetId));
         onError?.(err.message || 'No se pudo enviar el Super Like.');
+        if (!superLikeQuota.isPro && err.code === 'SUPER_LIKE_LIMIT_REACHED') {
+          (onOpenPro || onOpenDiamondStore)?.();
+        }
       }
     });
-  }, [topCard, topCardPhotos, photoIdx, flyOutAndAdvance, onSuccess, onError]);
+  }, [
+    topCard,
+    topCardPhotos,
+    photoIdx,
+    superLikeQuota,
+    resetCardDomStyle,
+    flyOutAndAdvance,
+    onOpenPro,
+    onOpenDiamondStore,
+    onSuccess,
+    onError,
+  ]);
 
   const handleRewind = useCallback(() => {
     if (history.length === 0 || busyRef.current) return;
@@ -773,8 +813,6 @@ export default function DiscoverSwipe({
 
   const sharedInterests = topCard ? getSharedInterests(currentUser, topCard) : [];
   const sharedSet = new Set(sharedInterests);
-  const cardInterests =
-    topCard && Array.isArray(topCard.interests) ? topCard.interests.slice(0, 3) : [];
   const allInterests = topCard && Array.isArray(topCard.interests) ? topCard.interests : [];
   const verified = topCard ? isProfileVerified(topCard) : false;
   const boosted = topCard ? isBoostActive(topCard) : false;
@@ -1345,7 +1383,7 @@ export default function DiscoverSwipe({
 
               {/* Viñetas sedosas superior e inferior sobre las fotos */}
               <div className="absolute inset-x-0 top-0 h-28 z-[2] bg-gradient-to-b from-black/65 via-black/20 to-transparent pointer-events-none" />
-              <div className="absolute inset-x-0 bottom-0 h-[58%] z-[2] bg-gradient-to-t from-[#080407] via-[#080407]/70 to-transparent pointer-events-none" />
+              <div className="absolute inset-x-0 bottom-0 h-[46%] z-[2] bg-gradient-to-t from-[#080407] via-[#080407]/70 to-transparent pointer-events-none" />
 
               {/* Overlay para Foto Exclusiva VIP */}
               {currentSwipePhotoIsExclusive && !currentSwipePhotoUnlocked && (
@@ -1469,8 +1507,8 @@ export default function DiscoverSwipe({
                 </div>
               </div>
 
-              {/* CONTENIDO INFERIOR DE LA TARJETA (Limpio: sin Sobre mí ni última conexión) */}
-              <div className="absolute bottom-[86px] inset-x-4 z-20 space-y-2.5 pointer-events-auto">
+              {/* CONTENIDO INFERIOR DE LA TARJETA (Ultra limpio: sin chips, sin Sobre mí ni última conexión) */}
+              <div className="absolute bottom-[92px] inset-x-4 z-20 pointer-events-auto">
                 {/* Identidad grande + utilidades discretas a la derecha (Regalo + Biografía) */}
                 <div className="flex items-end justify-between gap-3">
                   <div className="min-w-0">
@@ -1537,32 +1575,6 @@ export default function DiscoverSwipe({
                     </button>
                   </div>
                 </div>
-
-                {/* Chips ligeros de intereses */}
-                {cardInterests.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {cardInterests.map((tag) => {
-                      const isCommon = sharedSet.has(tag);
-                      return (
-                        <span
-                          key={tag}
-                          className={`rounded-full px-3 py-1 text-xs font-semibold border shadow-[0_4px_14px_rgba(0,0,0,0.25)] ${
-                            isCommon
-                              ? 'bg-emerald-950/60 border-emerald-400/50 text-white'
-                              : 'bg-black/50 border-white/25 text-white/95'
-                          }`}
-                        >
-                          {formatInterestWithIcon(tag)}
-                        </span>
-                      );
-                    })}
-                    {sharedInterests.length > 0 && (
-                      <span className="px-2.5 py-1 rounded-full bg-emerald-950/65 border border-emerald-400/45 text-emerald-200 text-[10.5px] font-extrabold">
-                        ✨ {sharedInterests.length} en común
-                      </span>
-                    )}
-                  </div>
-                )}
               </div>
 
               {/* DOCK ESCULTURAL DE 5 ACCIONES ARMONIOSAS SOBRE LA FOTO */}
@@ -1590,15 +1602,26 @@ export default function DiscoverSwipe({
                   <X className="w-7 h-7 stroke-[2.8]" />
                 </button>
 
-                {/* 3. Super Like / Estrella (48px) */}
+                {/* 3. Super Like / Estrella (48px + contador semanal visible) */}
                 <button
                   type="button"
                   onClick={triggerSuperLike}
-                  className="w-12 h-12 rounded-full bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-500 border border-sky-200/50 text-white flex items-center justify-center shadow-[0_10px_24px_rgba(56,189,248,0.45)] hover:scale-105 hover:brightness-110 active:scale-90 transition-all duration-150"
-                  title="Enviar Super Like"
+                  className={`relative w-12 h-12 rounded-full bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-500 border border-sky-200/50 text-white flex items-center justify-center shadow-[0_10px_24px_rgba(56,189,248,0.45)] hover:scale-105 hover:brightness-110 active:scale-90 transition-all duration-150 ${
+                    superLikeQuota.remaining <= 0 ? 'opacity-80' : ''
+                  }`}
+                  title={`Enviar Super Like (${superLikeQuota.remaining}/${superLikeQuota.limit} esta semana)`}
                   aria-label="Super Like"
                 >
                   <Star className="w-5 h-5 fill-white text-white" />
+                  <span
+                    className={`absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full text-[10px] font-black flex items-center justify-center border shadow ${
+                      superLikeQuota.remaining > 0
+                        ? 'bg-gradient-to-r from-amber-300 to-yellow-400 text-zinc-950 border-white/80'
+                        : 'bg-zinc-900 text-amber-300 border-amber-400/50'
+                    }`}
+                  >
+                    {superLikeQuota.remaining}
+                  </span>
                 </button>
 
                 {/* 4. Me Gusta / Corazón (58px) */}

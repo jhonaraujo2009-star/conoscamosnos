@@ -64,6 +64,12 @@ service cloud.firestore {
         && request.resource.data.get('proLastPaymentId', null) == resource.data.get('proLastPaymentId', null);
     }
 
+    function superLikeFieldsUnchanged() {
+      return request.resource.data.get('superLikesWeekKey', null) == resource.data.get('superLikesWeekKey', null)
+        && request.resource.data.get('superLikesUsedThisWeek', 0) == resource.data.get('superLikesUsedThisWeek', 0)
+        && request.resource.data.get('lastSuperLikeAt', null) == resource.data.get('lastSuperLikeAt', null);
+    }
+
     // ==================== USERS (BLINDAJE ANTI-ALTERACIÓN DE DIAMANTES, PRO Y BOOST) ====================
     match /users/{userId} {
       allow read: if isSignedIn();
@@ -86,6 +92,9 @@ service cloud.firestore {
         && request.resource.data.get('proPlanId', null) == null
         && request.resource.data.get('proPaymentSource', null) == null
         && request.resource.data.get('proLastPaymentId', null) == null
+        && request.resource.data.get('superLikesWeekKey', null) == null
+        && request.resource.data.get('superLikesUsedThisWeek', 0) == 0
+        && request.resource.data.get('lastSuperLikeAt', null) == null
         && request.resource.data.get('isBanned', false) == false
         && request.resource.data.get('verifiedBadge', false) == false
         && request.resource.data.get('accountStatus', 'active') == 'active';
@@ -110,6 +119,7 @@ service cloud.firestore {
           && request.resource.data.get('giftCounts', {}) == resource.data.get('giftCounts', {})
           && boostFieldsUnchanged()
           && proFieldsUnchanged()
+          && superLikeFieldsUnchanged()
           && (
             (
               // 1A. Edición de perfil o solicitud de retiro (diamonds, coins, PRO y Boost son 100% servidor-only)
@@ -172,6 +182,7 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.fromUserId == request.auth.uid
         && request.resource.data.toUserId != request.auth.uid
+        && request.resource.data.get('isSuperLike', false) == false
         && likeId == request.auth.uid + '_' + request.resource.data.toUserId;
       allow delete: if isSignedIn() && resource.data.fromUserId == request.auth.uid;
     }

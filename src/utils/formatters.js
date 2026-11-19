@@ -1,4 +1,9 @@
-import { ECONOMY_CONFIG, VIRTUAL_GIFTS } from '../config/constants';
+import {
+  ECONOMY_CONFIG,
+  SUPER_LIKE_WEEKLY_LIMIT_FREE,
+  SUPER_LIKE_WEEKLY_LIMIT_PRO,
+  VIRTUAL_GIFTS,
+} from '../config/constants';
 
 export function toMillis(ts) {
   if (!ts) return 0;
@@ -17,6 +22,48 @@ export function isBoostActive(user) {
 export function isProActive(user) {
   if (!user || !user.isPro || !user.proExpiresAt) return false;
   return toMillis(user.proExpiresAt) > Date.now();
+}
+
+export function getIsoWeekKey(date = new Date()) {
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+}
+
+export function getNextIsoWeekResetMs(date = new Date()) {
+  const day = date.getUTCDay() || 7;
+  const daysUntilNextMonday = 8 - day;
+  return Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate() + daysUntilNextMonday,
+    0,
+    0,
+    0,
+    0
+  );
+}
+
+export function getSuperLikeQuota(userProfile) {
+  const pro = isProActive(userProfile);
+  const limit = pro ? SUPER_LIKE_WEEKLY_LIMIT_PRO : SUPER_LIKE_WEEKLY_LIMIT_FREE;
+  const weekKey = getIsoWeekKey();
+  const used =
+    userProfile?.superLikesWeekKey === weekKey
+      ? Math.max(0, Math.floor(Number(userProfile?.superLikesUsedThisWeek || 0)))
+      : 0;
+  const remaining = Math.max(0, limit - used);
+  return {
+    used,
+    limit,
+    remaining,
+    isPro: pro,
+    weekKey,
+    nextResetMs: getNextIsoWeekResetMs(),
+  };
 }
 
 export function buildExclusivePhotoKey(targetUid, photoUrl) {

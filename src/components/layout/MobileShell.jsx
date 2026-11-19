@@ -1,10 +1,11 @@
-import { Compass, Flame, Heart, MessageCircle, User } from 'lucide-react';
+import { Compass, Flame, Heart, MessageCircle, Star, User } from 'lucide-react';
 
 export default function MobileShell({
   activeTab,
   onChangeTab,
   unreadBadgeCount = 0,
   likesBadgeCount = 0,
+  superLikesBadgeCount = 0,
   themeMood = null,
   children,
 }) {
@@ -97,15 +98,36 @@ export default function MobileShell({
                           : ''
                       }`}
                     />
-                    {item.badge > 0 && (
-                      <span
-                        className={`absolute -top-1.5 -right-2.5 min-w-[18px] h-[18px] px-1 rounded-full bg-gradient-to-r from-[#FF2E54] to-rose-500 text-[9.5px] font-black text-white flex items-center justify-center shadow-[0_2px_8px_rgba(255,46,84,0.55)] ring-2 ${
-                          isSwipeDark ? 'ring-[#12050B]' : 'ring-white'
-                        }`}
-                      >
-                        {item.badge > 99 ? '99+' : item.badge}
-                      </span>
-                    )}
+                    {(() => {
+                      const isSuperPriority = item.id === 'likes' && superLikesBadgeCount > 0;
+                      const displayCount = isSuperPriority
+                        ? Math.max(item.badge || 0, superLikesBadgeCount)
+                        : item.badge || 0;
+                      if (displayCount <= 0) return null;
+
+                      if (isSuperPriority) {
+                        return (
+                          <span
+                            className={`absolute -top-2 -right-3.5 min-w-[24px] h-[19px] px-1.5 rounded-full bg-gradient-to-r from-sky-500 via-blue-500 to-amber-400 text-[9.5px] font-black text-white inline-flex items-center justify-center gap-0.5 shadow-[0_3px_12px_rgba(56,189,248,0.65)] ring-2 animate-pulse ${
+                              isSwipeDark ? 'ring-[#12050B]' : 'ring-white'
+                            }`}
+                          >
+                            <Star className="w-2.5 h-2.5 fill-amber-200 text-amber-200 shrink-0" />
+                            <span>{displayCount > 99 ? '99+' : displayCount}</span>
+                          </span>
+                        );
+                      }
+
+                      return (
+                        <span
+                          className={`absolute -top-1.5 -right-2.5 min-w-[18px] h-[18px] px-1 rounded-full bg-gradient-to-r from-[#FF2E54] to-rose-500 text-[9.5px] font-black text-white flex items-center justify-center shadow-[0_2px_8px_rgba(255,46,84,0.55)] ring-2 ${
+                            isSwipeDark ? 'ring-[#12050B]' : 'ring-white'
+                          }`}
+                        >
+                          {displayCount > 99 ? '99+' : displayCount}
+                        </span>
+                      );
+                    })()}
                   </div>
                   <span
                     className={`text-[10px] mt-1 tracking-tight ${
