@@ -146,7 +146,7 @@ export default function AuthScreen() {
       <img
         src="/images/landing-hero.jpg"
         alt="Todo empezó en un Conoscamosnos"
-        className="absolute inset-0 w-full h-full object-cover object-[50%_22%] sm:object-[50%_26%]"
+        className="absolute inset-0 w-full h-full object-cover object-[50%_17%] sm:object-[50%_22%]"
       />
 
       {/* Bruma solar suave arriba para legibilidad de marca */}
@@ -157,7 +157,7 @@ export default function AuthScreen() {
 
       {/* Velo pastel rosa-crema inferior sedoso */}
       <div
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-[56%] sm:h-[52%]"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-[64%] sm:h-[58%]"
         style={{
           background:
             'linear-gradient(to top, #FFF6F1 0%, rgba(255,246,241,0.97) 34%, rgba(255,241,239,0.82) 56%, rgba(255,241,239,0.22) 78%, rgba(255,241,239,0) 100%)',
@@ -188,7 +188,7 @@ export default function AuthScreen() {
       </header>
 
       {/* Escenario Principal Inferior Ultra-Limpio */}
-      <main className="relative z-10 h-full flex flex-col justify-end pb-7 sm:pb-10 px-5 sm:px-8">
+      <main className="relative z-10 h-full flex flex-col justify-end pb-24 sm:pb-20 px-5 sm:px-8">
         <div className="w-full max-w-md sm:max-w-[500px] mx-auto text-center space-y-5">
           {!isFirebaseConfigured && (
             <div className="p-3 rounded-2xl bg-amber-50/95 border border-amber-200 text-amber-900 text-xs font-semibold flex items-center justify-center gap-2 shadow-sm">
