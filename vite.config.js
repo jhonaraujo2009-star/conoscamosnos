@@ -2,7 +2,41 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
+const APP_BUILD_ID = `${(process.env.VERCEL_GIT_COMMIT_SHA || 'local').slice(0, 8)}-${Date.now().toString(36)}`;
+
+function appVersionManifestPlugin(buildId) {
+  const payload = JSON.stringify({
+    buildId,
+    builtAt: new Date().toISOString(),
+  });
+  return {
+    name: 'app-version-manifest',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const pathname = (req.url || '').split('?')[0];
+        if (pathname === '/version.json') {
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.setHeader('Cache-Control', 'no-cache, no-store, max-age=0, must-revalidate');
+          res.end(payload);
+          return;
+        }
+        next();
+      });
+    },
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: payload,
+      });
+    },
+  };
+}
+
 export default defineConfig({
+  define: {
+    'import.meta.env.VITE_APP_BUILD_ID': JSON.stringify(APP_BUILD_ID),
+  },
   server: {
     proxy: {
       '/api': {
@@ -13,6 +47,7 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    appVersionManifestPlugin(APP_BUILD_ID),
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: false,
@@ -68,7 +103,7 @@ export default defineConfig({
         clientsClaim: true,
         skipWaiting: true,
         globPatterns: ['**/*.{js,css,ico,png,svg,woff2}'],
-        globIgnores: ['sw.js', 'firebase-messaging-sw.js', 'ad-viewer.html', 'downloads/**'],
+        globIgnores: ['sw.js', 'firebase-messaging-sw.js', 'ad-viewer.html', 'downloads/**', 'version.json'],
         navigateFallback: null,
         runtimeCaching: [
           {
@@ -78,15 +113,11 @@ export default defineConfig({
               !url.pathname.startsWith('/downloads/') &&
               !url.pathname.startsWith('/.well-known/') &&
               url.pathname !== '/ad-viewer.html',
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'conoscamosnos-pages',
-              networkTimeoutSeconds: 4,
-              expiration: {
-                maxEntries: 12,
-                maxAgeSeconds: 60 * 60 * 24,
-              },
-            },
+            handler: 'NetworkOnly',
+          },
+          {
+            urlPattern: ({ url }) => url.pathname === '/version.json',
+            handler: 'NetworkOnly',
           },
           {
             urlPattern: /^https:\/\/res\.cloudinary\.com\/.*/i,

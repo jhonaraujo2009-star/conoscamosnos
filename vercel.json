@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/((?!api/|ad-viewer\\.html|firebase-messaging-sw\\.js|downloads/|\\.well-known/).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|ad-viewer\\.html|firebase-messaging-sw\\.js|downloads/|\\.well-known/|version\\.json).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
@@ -8,7 +8,7 @@
       "headers": [
         { "key": "Content-Type", "value": "application/vnd.android.package-archive" },
         { "key": "Content-Disposition", "value": "attachment; filename=\"Conoscamosnos.apk\"" },
-        { "key": "Cache-Control", "value": "public, max-age=3600" }
+        { "key": "Cache-Control", "value": "public, max-age=300, must-revalidate" }
       ]
     },
     {
@@ -19,9 +19,46 @@
       ]
     },
     {
+      "source": "/",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, max-age=0, must-revalidate" },
+        { "key": "Pragma", "value": "no-cache" }
+      ]
+    },
+    {
+      "source": "/login",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, max-age=0, must-revalidate" },
+        { "key": "Pragma", "value": "no-cache" }
+      ]
+    },
+    {
+      "source": "/app",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, max-age=0, must-revalidate" },
+        { "key": "Pragma", "value": "no-cache" }
+      ]
+    },
+    {
+      "source": "/admin-dashboard",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, max-age=0, must-revalidate" },
+        { "key": "Pragma", "value": "no-cache" }
+      ]
+    },
+    {
       "source": "/index.html",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+        { "key": "Cache-Control", "value": "no-cache, no-store, max-age=0, must-revalidate" },
+        { "key": "Pragma", "value": "no-cache" }
+      ]
+    },
+    {
+      "source": "/version.json",
+      "headers": [
+        { "key": "Content-Type", "value": "application/json; charset=utf-8" },
+        { "key": "Cache-Control", "value": "no-cache, no-store, max-age=0, must-revalidate" },
+        { "key": "Pragma", "value": "no-cache" }
       ]
     },
     {
@@ -45,20 +82,23 @@
     {
       "source": "/pwa-sw.js",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+        { "key": "Cache-Control", "value": "no-cache, no-store, max-age=0, must-revalidate" },
+        { "key": "Pragma", "value": "no-cache" }
       ]
     },
     {
       "source": "/registerSW.js",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+        { "key": "Cache-Control", "value": "no-cache, no-store, max-age=0, must-revalidate" },
+        { "key": "Pragma", "value": "no-cache" }
       ]
     },
     {
       "source": "/manifest.webmanifest",
       "headers": [
         { "key": "Content-Type", "value": "application/manifest+json" },
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+        { "key": "Cache-Control", "value": "no-cache, no-store, max-age=0, must-revalidate" },
+        { "key": "Pragma", "value": "no-cache" }
       ]
     }
   ]
