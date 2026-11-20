@@ -450,6 +450,16 @@ function UserAppView({ onSuccess, onError }) {
     }).length;
   }, [matches, userProfile?.uid, userProfile?.blockedUsers, optimisticReadMap]);
 
+  const selectedProfileIncomingLike = useMemo(() => {
+    const targetUid = selectedProfile?.uid || selectedProfile?.id;
+    if (!targetUid || !userProfile?.uid || targetUid === userProfile.uid) return null;
+    return (
+      receivedLikes.find(
+        (like) => like?.fromUserId === targetUid && like?.toUserId === userProfile.uid
+      ) || null
+    );
+  }, [selectedProfile, receivedLikes, userProfile?.uid]);
+
   const openDiamondStore = useCallback((section = 'buy') => {
     setDiamondStoreSection(
       section === 'pro' ? 'pro' : section === 'history' ? 'history' : 'buy'
@@ -786,6 +796,7 @@ function UserAppView({ onSuccess, onError }) {
         targetUser={selectedProfile}
         currentUser={userProfile}
         userUnlocks={userUnlocks}
+        incomingLike={selectedProfileIncomingLike}
         onClose={() => setSelectedProfile(null)}
         onStartChat={handleStartDirectChat}
         onOpenDiamondStore={(sec) => openDiamondStore(sec)}
