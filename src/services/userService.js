@@ -104,6 +104,15 @@ export async function updateUserProfile(uid, updates) {
   if (typeof updates.requireGiftToChat === 'boolean') {
     sanitized.requireGiftToChat = updates.requireGiftToChat;
   }
+  if (typeof updates.allowPaidMessages === 'boolean') {
+    sanitized.allowPaidMessages = updates.allowPaidMessages;
+  }
+  if (updates.messagePriceDiamonds !== undefined) {
+    const parsedPrice = Math.floor(Number(updates.messagePriceDiamonds));
+    if (Number.isFinite(parsedPrice) && parsedPrice >= 1) {
+      sanitized.messagePriceDiamonds = Math.min(5000, parsedPrice);
+    }
+  }
   if (updates.approxGeo !== undefined) sanitized.approxGeo = updates.approxGeo;
 
   await updateDoc(doc(db, 'users', uid), sanitized);

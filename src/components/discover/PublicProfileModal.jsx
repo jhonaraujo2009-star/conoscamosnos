@@ -42,6 +42,10 @@ import {
   unblockUser,
 } from '../../services/userService';
 import {
+  PAID_MESSAGE_DEFAULT_PRICE,
+  clampPaidMessagePrice,
+} from '../../utils/chatHelpers';
+import {
   calculateAffinityScore,
   formatInterestWithIcon,
   formatSwipeActivity,
@@ -173,18 +177,22 @@ export default function PublicProfileModal({
   const viewerIsPro = isProActive(currentUser);
   const targetIsPro = isProActive(liveTarget);
   const isBlocked = (currentUser?.blockedUsers || []).includes(targetId);
+  const allowsPaidDirect = Boolean(!isSelf && !status.isMatched && liveTarget.allowPaidMessages);
+  const paidDirectPrice = clampPaidMessagePrice(
+    liveTarget.messagePriceDiamonds,
+    PAID_MESSAGE_DEFAULT_PRICE
+  );
   const needsGiftForChat = Boolean(
     !isSelf &&
       !viewerIsPro &&
+      !allowsPaidDirect &&
       liveTarget.requireGiftToChat &&
       !isGiftChatUnlocked(status.matchData, currentUser?.uid, liveTarget)
   );
   const isChatFreeOrUnlocked = Boolean(
-    !needsGiftForChat &&
-      (viewerIsPro ||
-        policy.isFreeMode ||
-        status.isMatched ||
-        (userUnlocks?.chatUnlockedUserIds || []).includes(targetId))
+    !allowsPaidDirect &&
+      !needsGiftForChat &&
+      status.isMatched
   );
 
   const photos = orderedPhotos;
@@ -1052,12 +1060,14 @@ export default function PublicProfileModal({
                 disabled={busyAction === 'chat'}
                 onClick={handleOpenPrivateChat}
                 className={`flex-1 min-w-0 h-[52px] px-4 rounded-full text-xs sm:text-sm font-extrabold inline-flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-60 transition ${
-                  needsGiftForChat
+                  allowsPaidDirect || needsGiftForChat
                     ? 'bg-gradient-to-r from-[#1A0A14] via-[#2F1022] to-[#1A0A14] border border-amber-300/45 text-amber-100 shadow-[0_14px_30px_-10px_rgba(26,10,20,0.6)] hover:brightness-110'
                     : 'bg-[#160F13] hover:bg-[#24181F] text-white shadow-[0_14px_30px_-10px_rgba(22,15,19,0.55)]'
                 }`}
               >
-                {needsGiftForChat ? (
+                {allowsPaidDirect ? (
+                  <Gem className="w-4 h-4 text-sky-300 shrink-0" />
+                ) : needsGiftForChat ? (
                   <Gift className="w-4 h-4 text-amber-300 shrink-0" />
                 ) : (
                   <MessageCircle className="w-4 h-4 shrink-0" />
@@ -1065,13 +1075,15 @@ export default function PublicProfileModal({
                 <span className="truncate">
                   {busyAction === 'chat'
                     ? 'Abriendo...'
+                    : allowsPaidDirect
+                    ? `Mensaje VIP · ${paidDirectPrice} 💎`
                     : needsGiftForChat
                     ? 'Regalo y chat'
                     : isChatFreeOrUnlocked
                     ? 'Enviar mensaje'
-                    : 'Mensaje privado'}
+                    : 'Requiere Match'}
                 </span>
-                {!isChatFreeOrUnlocked && (
+                {!isChatFreeOrUnlocked && !allowsPaidDirect && (
                   <Lock className="w-3.5 h-3.5 opacity-75 shrink-0" />
                 )}
               </button>

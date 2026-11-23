@@ -67,6 +67,8 @@ export async function ensureUserDocument(firebaseUser, extra = {}) {
       hideOnlineStatus: false,
       discoverable: true,
       requireGiftToChat: false,
+      allowPaidMessages: false,
+      messagePriceDiamonds: 25,
       approxGeo: null,
       onboardingCompleted: false,
       createdAt: serverTimestamp(),

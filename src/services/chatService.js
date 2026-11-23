@@ -2,6 +2,7 @@ import {
   addDoc,
   collection,
   doc,
+  increment,
   limit,
   onSnapshot,
   orderBy,
@@ -82,6 +83,7 @@ export async function markChatAsRead(matchId, userId) {
     await updateDoc(doc(db, 'matches', matchId), {
       [`lastReadBy.${userId}`]: serverTimestamp(),
       [`lastReadByClientMs.${userId}`]: Date.now(),
+      [`unreadCount.${userId}`]: 0,
     });
   } catch {
     // Ignorar si aún no se ha sincronizado el documento
@@ -108,14 +110,19 @@ export async function sendTextMessage({ matchId, senderId, senderName = '', reci
     createdAt: serverTimestamp(),
   });
 
-  await updateDoc(doc(db, 'matches', matchId), {
+  const matchUpdate = {
     lastMessage: cleanText.slice(0, 90),
     lastSenderId: senderId,
     lastMessageAt: serverTimestamp(),
     lastMessageClientMs: nowMs,
     [`lastReadBy.${senderId}`]: serverTimestamp(),
     [`lastReadByClientMs.${senderId}`]: nowMs,
-  });
+    [`unreadCount.${senderId}`]: 0,
+  };
+  if (resolvedRecipientId) {
+    matchUpdate[`unreadCount.${resolvedRecipientId}`] = increment(1);
+  }
+  await updateDoc(doc(db, 'matches', matchId), matchUpdate);
 
   if (resolvedRecipientId) {
     sendPushNotificationToUser({
@@ -148,14 +155,19 @@ export async function sendImageMessage({ matchId, senderId, senderName = '', rec
     createdAt: serverTimestamp(),
   });
 
-  await updateDoc(doc(db, 'matches', matchId), {
+  const matchUpdate = {
     lastMessage: '📷 Foto enviada',
     lastSenderId: senderId,
     lastMessageAt: serverTimestamp(),
     lastMessageClientMs: nowMs,
     [`lastReadBy.${senderId}`]: serverTimestamp(),
     [`lastReadByClientMs.${senderId}`]: nowMs,
-  });
+    [`unreadCount.${senderId}`]: 0,
+  };
+  if (resolvedRecipientId) {
+    matchUpdate[`unreadCount.${resolvedRecipientId}`] = increment(1);
+  }
+  await updateDoc(doc(db, 'matches', matchId), matchUpdate);
 
   if (resolvedRecipientId) {
     sendPushNotificationToUser({
@@ -166,6 +178,94 @@ export async function sendImageMessage({ matchId, senderId, senderName = '', rec
       link: '/app',
     });
   }
+}
+
+/**
+ * Envía un mensaje prioritario pagado con Diamantes (sin match previo) a través de `/api/economy/spend`:
+ * - Verifica tarifa vigente `messagePriceDiamonds` y `allowPaidMessages` en el servidor
+ * - Descuenta diamantes al remitente y acredita `earningsDiamonds` retirables a la destinataria en transacción atómica
+ * - Coloca el hilo en la bandeja superior de Solicitudes VIP de la destinataria
+ */
+export async function sendPaidDirectMessage({ receiverId, text }) {
+  const cleanReceiverId = String(receiverId || '').trim();
+  const cleanText = String(text || '').trim();
+  if (!cleanReceiverId) throw new Error('Destinatario inválido.');
+  if (!cleanText) throw new Error('Escribe un mensaje antes de enviarlo.');
+
+  const currentUser = auth?.currentUser;
+  if (!currentUser) {
+    throw new Error('Debes iniciar sesión para enviar un mensaje prioritario.');
+  }
+  const idToken = await currentUser.getIdToken();
+  const res = await fetch('/api/economy/spend', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({
+      action: 'send_paid_message',
+      receiverId: cleanReceiverId,
+      text: cleanText.slice(0, 300),
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.error || 'No se pudo enviar el mensaje prioritario.');
+  }
+  return {
+    giftTxId: data.giftTxId,
+    diamondsCredited: data.diamondsCredited,
+    matchId: data.matchId,
+    remainingDiamonds: data.remainingDiamonds,
+    price: data.price,
+  };
+}
+
+/**
+ * Acepta una Solicitud VIP pagada con diamantes y la mueve a la lista principal de conversaciones activas.
+ */
+export async function acceptPaidMessageRequest(matchId, currentUid) {
+  if (!matchId || !currentUid) return;
+  const nowMs = Date.now();
+  await updateDoc(doc(db, 'matches', matchId), {
+    isPaidRequest: false,
+    paidRequestStatus: 'accepted',
+    isVipDirect: true,
+    paidRequestAcceptedAt: serverTimestamp(),
+    [`lastReadBy.${currentUid}`]: serverTimestamp(),
+    [`lastReadByClientMs.${currentUid}`]: nowMs,
+    [`unreadCount.${currentUid}`]: 0,
+  });
+}
+
+/**
+ * Rechaza y elimina una Solicitud VIP de la bandeja de la destinataria.
+ */
+export async function rejectPaidMessageRequest(matchId, currentUid) {
+  if (!matchId || !currentUid) return;
+  const nowMs = Date.now();
+  await updateDoc(doc(db, 'matches', matchId), {
+    paidRequestStatus: 'rejected',
+    [`deletedAtBy.${currentUid}`]: nowMs,
+    [`lastReadBy.${currentUid}`]: serverTimestamp(),
+    [`lastReadByClientMs.${currentUid}`]: nowMs,
+    [`unreadCount.${currentUid}`]: 0,
+  });
+}
+
+/**
+ * Elimina/archiva una conversación de forma limpia para el usuario actual (sin afectar al otro participante).
+ */
+export async function deleteConversationForUser(matchId, currentUid) {
+  if (!matchId || !currentUid) return;
+  const nowMs = Date.now();
+  await updateDoc(doc(db, 'matches', matchId), {
+    [`deletedAtBy.${currentUid}`]: nowMs,
+    [`lastReadBy.${currentUid}`]: serverTimestamp(),
+    [`lastReadByClientMs.${currentUid}`]: nowMs,
+    [`unreadCount.${currentUid}`]: 0,
+  });
 }
 
 /**

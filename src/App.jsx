@@ -10,6 +10,10 @@ import {
 } from './services/adRewardService';
 import { logoutUser } from './services/authService';
 import {
+  acceptPaidMessageRequest,
+  deleteConversationForUser,
+  rejectPaidMessageRequest,
+  sendPaidDirectMessage,
   sendVirtualGift,
   subscribeReceivedGiftTransactions,
   subscribeUserMatches,
@@ -24,6 +28,11 @@ import {
   subscribeReceivedLikes,
 } from './services/discoveryService';
 import { getUserById } from './services/userService';
+import {
+  isConversationHiddenForUser,
+  isIncomingPendingPaidRequest,
+  isRejectedPaidRequest,
+} from './utils/chatHelpers';
 import {
   buildMatchId,
   getSpendableDiamonds,
@@ -44,6 +53,7 @@ import ChatList from './components/chat/ChatList';
 import ChatRoom from './components/chat/ChatRoom';
 import GiftAnimationOverlay from './components/chat/GiftAnimationOverlay';
 import GiftGateChatModal from './components/chat/GiftGateChatModal';
+import PaidMessageModal from './components/chat/PaidMessageModal';
 import ProfileScreen from './components/profile/ProfileScreen';
 import GiftNotificationsModal from './components/monetization/GiftNotificationsModal';
 import RewardedAdModal from './components/monetization/RewardedAdModal';
@@ -132,6 +142,8 @@ function UserAppView({ onSuccess, onError }) {
   const [giftGateTarget, setGiftGateTarget] = useState(null);
   const [sendingGateGiftId, setSendingGateGiftId] = useState(null);
   const [gateGiftAnim, setGateGiftAnim] = useState(null);
+  const [paidMessageTarget, setPaidMessageTarget] = useState(null);
+  const [sendingPaidMessage, setSendingPaidMessage] = useState(false);
   const [likeChatGateTarget, setLikeChatGateTarget] = useState(null);
   const [likeChatAdTarget, setLikeChatAdTarget] = useState(null);
   const [likeChatAdSession, setLikeChatAdSession] = useState(null);
@@ -194,6 +206,8 @@ function UserAppView({ onSuccess, onError }) {
     setGiftGateTarget(null);
     setSendingGateGiftId(null);
     setGateGiftAnim(null);
+    setPaidMessageTarget(null);
+    setSendingPaidMessage(false);
     setLikeChatGateTarget(null);
     setLikeChatAdTarget(null);
     setLikeChatAdSession(null);
@@ -446,6 +460,9 @@ function UserAppView({ onSuccess, onError }) {
     return matches.filter((m) => {
       const peerId = (m.participants || []).find((p) => p !== userProfile.uid);
       if (!peerId || blockedSet.has(peerId)) return false;
+      if (isRejectedPaidRequest(m)) return false;
+      if (isConversationHiddenForUser(m, userProfile.uid)) return false;
+      if (isIncomingPendingPaidRequest(m, userProfile.uid)) return true;
       return isMatchUnread(m, userProfile.uid, optimisticReadMap[m.id]);
     }).length;
   }, [matches, userProfile?.uid, userProfile?.blockedUsers, optimisticReadMap]);
@@ -491,6 +508,40 @@ function UserAppView({ onSuccess, onError }) {
           existingMatch = conn?.matchData || null;
         }
 
+        // Si existe una Solicitud VIP entrante de esta persona, aceptarla y abrir el chat
+        if (existingMatch && isIncomingPendingPaidRequest(existingMatch, userProfile.uid)) {
+          await acceptPaidMessageRequest(existingMatch.id, userProfile.uid);
+          setSelectedProfile(null);
+          handleOpenChatSession({
+            match: { ...existingMatch, isPaidRequest: false, paidRequestStatus: 'accepted' },
+            peerUser: freshTarget,
+          });
+          setActiveTab('chat');
+          return;
+        }
+
+        const hasActiveMatch = Boolean(
+          existingMatch && !isRejectedPaidRequest(existingMatch)
+        );
+
+        // Si NO hay match todavía, aplicar la regla de Monetización de Mensajes Directos
+        if (!hasActiveMatch && !options.skipLikeChatGate) {
+          if (freshTarget.allowPaidMessages === true) {
+            setSelectedProfile(null);
+            setPaidMessageTarget(freshTarget);
+            return;
+          }
+          if (!userIsPro && freshTarget.requireGiftToChat) {
+            setSelectedProfile(null);
+            setGiftGateTarget(freshTarget);
+            return;
+          }
+          handleError(
+            `Debes hacer Match con ${freshTarget.name || 'esta persona'} primero para poder enviarle un mensaje.`
+          );
+          return;
+        }
+
         // Si el perfil exige regalo para iniciar chats nuevos y el usuario no es miembro PRO
         if (!userIsPro && !isGiftChatUnlocked(existingMatch, userProfile.uid, freshTarget)) {
           setSelectedProfile(null);
@@ -503,7 +554,7 @@ function UserAppView({ onSuccess, onError }) {
           userIsPro ||
           accessPolicy.isFreeMode ||
           Boolean(options.skipLikeChatGate) ||
-          Boolean(existingMatch) ||
+          hasActiveMatch ||
           (userUnlocks?.chatUnlockedUserIds || []).includes(targetUid);
 
         if (!isChatUnlocked) {
@@ -527,6 +578,80 @@ function UserAppView({ onSuccess, onError }) {
       }
     },
     [userProfile, matches, userUnlocks, accessPolicy.isFreeMode, handleOpenChatSession, handleError]
+  );
+
+  const handleSendPaidDirectMessage = useCallback(
+    async (text) => {
+      if (!userProfile?.uid || !paidMessageTarget || sendingPaidMessage) return;
+      const target = paidMessageTarget;
+      const targetUid = target.uid || target.id;
+      setSendingPaidMessage(true);
+      try {
+        const res = await sendPaidDirectMessage({ receiverId: targetUid, text });
+        setPaidMessageTarget(null);
+        setGateGiftAnim({
+          giftIcon: '💎',
+          giftName: 'Mensaje Prioritario VIP',
+          giftValue: res.price,
+          diamondsCredited: res.diamondsCredited ?? res.price,
+          isReceiver: false,
+        });
+        handleSuccess(
+          `💎 ¡Mensaje prioritario enviado a ${target.name} por ${res.price} 💎! Llegó a su bandeja VIP.`
+        );
+      } catch (err) {
+        handleError(err.message || 'No se pudo enviar el mensaje prioritario.');
+      } finally {
+        setSendingPaidMessage(false);
+      }
+    },
+    [userProfile?.uid, paidMessageTarget, sendingPaidMessage, handleSuccess, handleError]
+  );
+
+  const handleAcceptPaidRequest = useCallback(
+    async (match, peerUser) => {
+      if (!userProfile?.uid || !match?.id) return;
+      try {
+        await acceptPaidMessageRequest(match.id, userProfile.uid);
+        handleSuccess(`💬 Solicitud VIP de ${peerUser?.name || 'usuario'} aceptada.`);
+        handleOpenChatSession({
+          match: { ...match, isPaidRequest: false, paidRequestStatus: 'accepted' },
+          peerUser,
+        });
+      } catch (err) {
+        handleError(err.message || 'No se pudo aceptar la solicitud.');
+      }
+    },
+    [userProfile?.uid, handleSuccess, handleError, handleOpenChatSession]
+  );
+
+  const handleRejectPaidRequest = useCallback(
+    async (match, peerUser) => {
+      if (!userProfile?.uid || !match?.id) return;
+      try {
+        await rejectPaidMessageRequest(match.id, userProfile.uid);
+        handleSuccess(`Solicitud de ${peerUser?.name || 'usuario'} eliminada.`);
+      } catch (err) {
+        handleError(err.message || 'No se pudo rechazar la solicitud.');
+      }
+    },
+    [userProfile?.uid, handleSuccess, handleError]
+  );
+
+  const handleDeleteConversation = useCallback(
+    async (match, peerUser) => {
+      if (!userProfile?.uid || !match?.id) return;
+      try {
+        await deleteConversationForUser(match.id, userProfile.uid);
+        if (activeChat?.match?.id === match.id) {
+          setActiveChat(null);
+        }
+        handleSuccess(`Conversación con ${peerUser?.name || 'usuario'} eliminada.`);
+      } catch (err) {
+        handleError(err.message || 'No se pudo eliminar la conversación.');
+      }
+    },
+    [userProfile?.uid, activeChat?.match?.id, handleSuccess, handleError]
   );
 
   const handleUnlockLikeChatWithDiamonds = useCallback(
@@ -758,13 +883,15 @@ function UserAppView({ onSuccess, onError }) {
             currentUser={userProfile}
             optimisticReadMap={optimisticReadMap}
             onSelectMatch={handleOpenChatSession}
-            onStartChat={handleStartDirectChat}
             onSelectProfile={setSelectedProfile}
             onOpenSafetyCenter={(tab = 'blocked') => {
               setSafetyInitialTab(tab);
               setSafetyCenterOpen(true);
             }}
             onGoToSwipe={() => handleChangeTab('swipe')}
+            onAcceptPaidRequest={handleAcceptPaidRequest}
+            onRejectPaidRequest={handleRejectPaidRequest}
+            onDeleteConversation={handleDeleteConversation}
           />
         )}
 
@@ -826,6 +953,16 @@ function UserAppView({ onSuccess, onError }) {
         sendingGiftId={sendingGateGiftId}
         onClose={() => setGiftGateTarget(null)}
         onSelectGift={handleSendGiftToUnlockChat}
+        onOpenDiamondStore={() => openDiamondStore('buy')}
+      />
+
+      <PaidMessageModal
+        isOpen={Boolean(paidMessageTarget)}
+        targetUser={paidMessageTarget}
+        userDiamonds={getSpendableDiamonds(userProfile)}
+        sending={sendingPaidMessage}
+        onClose={() => setPaidMessageTarget(null)}
+        onSend={handleSendPaidDirectMessage}
         onOpenDiamondStore={() => openDiamondStore('buy')}
       />
 

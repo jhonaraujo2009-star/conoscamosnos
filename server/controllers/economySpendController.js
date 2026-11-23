@@ -768,6 +768,196 @@ export async function processEconomySpend({
       };
     }
 
+    if (cleanAction === 'send_paid_message') {
+      const receiverId = String(payload?.receiverId || '').trim();
+      const rawText = String(payload?.text || '').trim();
+      if (!receiverId || receiverId === uid) {
+        throw new HttpError(400, 'Destinatario inválido.');
+      }
+      if (!rawText) {
+        throw new HttpError(400, 'Escribe un mensaje antes de enviarlo.');
+      }
+      const cleanText = rawText.slice(0, 300);
+      const resolvedMatchId = buildMatchId(uid, receiverId);
+      const receiverRef = db.collection('users').doc(receiverId);
+      const matchRef = db.collection('matches').doc(resolvedMatchId);
+      const giftTxRef = db.collection('giftTransactions').doc();
+      const messageRef = matchRef.collection('messages').doc();
+      const nowMs = Date.now();
+
+      const outcome = await db.runTransaction(async (transaction) => {
+        const [senderSnap, receiverSnap, matchSnap] = await Promise.all([
+          transaction.get(userRef),
+          transaction.get(receiverRef),
+          transaction.get(matchRef),
+        ]);
+
+        if (!senderSnap.exists || !receiverSnap.exists) {
+          throw new HttpError(404, 'Uno de los perfiles ya no está disponible.');
+        }
+
+        const senderData = senderSnap.data() || {};
+        const receiverData = receiverSnap.data() || {};
+        if (isUserBanned(senderData)) throw new HttpError(403, 'Tu cuenta está suspendida.');
+        if (isUserBanned(receiverData)) throw new HttpError(403, 'Este perfil no está disponible.');
+        if (areBlocked(senderData, uid, receiverData, receiverId)) {
+          throw new HttpError(
+            403,
+            'No puedes enviar mensajes a este perfil porque existe un bloqueo activo.'
+          );
+        }
+
+        if (receiverData.allowPaidMessages !== true) {
+          throw new HttpError(
+            403,
+            `${receiverData.name || 'Este perfil'} solo acepta mensajes tras hacer Match.`
+          );
+        }
+
+        const rawPrice = Math.floor(Number(receiverData.messagePriceDiamonds));
+        const price =
+          Number.isFinite(rawPrice) && rawPrice >= 1
+            ? Math.min(5000, rawPrice)
+            : 25;
+
+        const deduction = computeRemainingUpdate(senderData, price);
+        if (!deduction) {
+          throw new HttpError(
+            400,
+            `No tienes suficientes diamantes. Necesitas ${price} 💎 para enviar este mensaje prioritario.`
+          );
+        }
+
+        const receiverGiftsCount = Number(receiverData.giftsReceivedCount || 0);
+        const receiverEarnings = Number(receiverData.earningsDiamonds || 0);
+        const prevGiftCounts =
+          receiverData.giftCounts && typeof receiverData.giftCounts === 'object'
+            ? { ...receiverData.giftCounts }
+            : {};
+        prevGiftCounts.paid_message = Number(prevGiftCounts.paid_message || 0) + 1;
+
+        transaction.update(userRef, deduction.update);
+        transaction.update(receiverRef, {
+          giftsReceivedCount: receiverGiftsCount + 1,
+          earningsDiamonds: receiverEarnings + price,
+          giftCounts: prevGiftCounts,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+
+        transaction.set(giftTxRef, {
+          senderId: uid,
+          senderName: senderData.name || 'Usuario',
+          receiverId,
+          receiverName: receiverData.name || 'Usuario',
+          giftId: 'paid_message',
+          giftName: 'Mensaje Prioritario VIP',
+          giftIcon: '💎',
+          diamondsCost: price,
+          diamondsCredited: price,
+          matchId: resolvedMatchId,
+          createdAt: FieldValue.serverTimestamp(),
+        });
+
+        const participantProfiles = {
+          [uid]: buildParticipantSnapshot(senderData, uid),
+          [receiverId]: buildParticipantSnapshot(receiverData, receiverId),
+        };
+
+        const existingMatch = matchSnap.exists ? matchSnap.data() || {} : null;
+        const alreadyActiveMatch = Boolean(
+          existingMatch &&
+            existingMatch.isPaidRequest !== true &&
+            existingMatch.paidRequestStatus !== 'rejected'
+        );
+
+        if (matchSnap.exists) {
+          const updateData = {
+            participantProfiles,
+            isVipDirect: true,
+            lastMessage: cleanText.slice(0, 90),
+            lastSenderId: uid,
+            lastMessageAt: FieldValue.serverTimestamp(),
+            lastMessageClientMs: nowMs,
+            [`lastReadBy.${uid}`]: FieldValue.serverTimestamp(),
+            [`lastReadByClientMs.${uid}`]: nowMs,
+            [`unreadCount.${uid}`]: 0,
+            [`unreadCount.${receiverId}`]: FieldValue.increment(1),
+          };
+          if (!alreadyActiveMatch) {
+            updateData.isPaidRequest = true;
+            updateData.paidRequestStatus = 'pending';
+            updateData.paidRequestBy = uid;
+            updateData.paidRequestDiamonds = price;
+            updateData.paidRequestMessage = cleanText;
+            updateData.paidRequestCreatedAt = FieldValue.serverTimestamp();
+          }
+          transaction.update(matchRef, updateData);
+        } else {
+          transaction.set(matchRef, {
+            participants: [uid, receiverId].sort(),
+            participantProfiles,
+            isVipDirect: true,
+            isPaidRequest: true,
+            paidRequestStatus: 'pending',
+            paidRequestBy: uid,
+            paidRequestDiamonds: price,
+            paidRequestMessage: cleanText,
+            paidRequestCreatedAt: FieldValue.serverTimestamp(),
+            giftUnlockedBy: { [uid]: true },
+            lastMessage: cleanText.slice(0, 90),
+            lastSenderId: uid,
+            lastMessageAt: FieldValue.serverTimestamp(),
+            lastMessageClientMs: nowMs,
+            lastReadBy: { [uid]: FieldValue.serverTimestamp() },
+            lastReadByClientMs: { [uid]: nowMs },
+            unreadCount: { [uid]: 0, [receiverId]: 1 },
+            createdAt: FieldValue.serverTimestamp(),
+          });
+        }
+
+        transaction.set(messageRef, {
+          senderId: uid,
+          senderName: senderData.name || 'Usuario',
+          receiverId,
+          type: 'paid_message',
+          text: cleanText,
+          diamondsPaid: price,
+          clientCreatedAt: nowMs,
+          createdAt: FieldValue.serverTimestamp(),
+        });
+
+        return {
+          giftTxId: giftTxRef.id,
+          diamondsCredited: price,
+          matchId: resolvedMatchId,
+          remainingDiamonds: deduction.remainingDiamonds,
+          senderName: senderData.name || 'Alguien',
+          price,
+        };
+      });
+
+      dispatchPushNotificationInternal({
+        senderUid: uid,
+        recipientUid: receiverId,
+        type: 'gift',
+        title: `💎 ¡Mensaje Prioritario (+${outcome.price} 💎)!`,
+        body: `${outcome.senderName}: "${cleanText.slice(0, 90)}"`,
+        link: '/app',
+      }).catch(() => {});
+
+      return {
+        statusCode: 200,
+        body: {
+          ok: true,
+          giftTxId: outcome.giftTxId,
+          diamondsCredited: outcome.diamondsCredited,
+          matchId: outcome.matchId,
+          remainingDiamonds: outcome.remainingDiamonds,
+          price: outcome.price,
+        },
+      };
+    }
+
     if (cleanAction === 'send_super_like') {
       const targetUid = String(payload?.targetUid || '').trim();
       if (!targetUid || targetUid === uid) {

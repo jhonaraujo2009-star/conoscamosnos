@@ -65,6 +65,7 @@ import {
 import GiftShowcaseCard from '../monetization/GiftShowcaseCard';
 import ProCrownBadge from '../monetization/ProCrownBadge';
 import AccountSettingsModal from './AccountSettingsModal';
+import PaidMessagesSettingsCard from './PaidMessagesSettingsCard';
 import PhotoUploader from './PhotoUploader';
 
 const PROMPT_SUGGESTIONS = [
@@ -1098,6 +1099,15 @@ export default function ProfileScreen({
             </button>
           }
         />
+
+        {/* 6.4 MONETIZACIÓN DE MENSAJES DIRECTOS (SOLICITUDES VIP SIN MATCH) */}
+        {isOwnerSession && (
+          <PaidMessagesSettingsCard
+            userProfile={userProfile}
+            onSuccess={onSuccess}
+            onError={onError}
+          />
+        )}
 
         {/* 6.5 OPCIÓN DE MONETIZACIÓN OPCIONAL (COLORES ARMONIZADOS CHAMPAGNE & ROSE-GOLD) */}
         {isOwnerSession && (

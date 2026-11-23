@@ -8,6 +8,7 @@ import {
   CheckCheck,
   Crown,
   Flag,
+  Gem,
   Gift,
   ImagePlus,
   Loader2,
@@ -16,12 +17,14 @@ import {
   Send,
   ShieldAlert,
   Sparkles,
+  Trash2,
   X,
 } from 'lucide-react';
 import { REPORT_REASONS } from '../../config/constants';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../config/firebase';
 import {
+  deleteConversationForUser,
   markChatAsRead,
   sendImageMessage,
   sendTextMessage,
@@ -30,6 +33,11 @@ import {
 } from '../../services/chatService';
 import { getUserCloudinaryFolder, uploadImageToCloudinary } from '../../services/cloudinaryService';
 import { blockUser, reportUser, subscribeUserById } from '../../services/userService';
+import {
+  getClearedAtMs,
+  getPaidRequest,
+  isOutgoingPendingPaidRequest,
+} from '../../utils/chatHelpers';
 import {
   formatMessageTime,
   formatRelativeLastSeen,
@@ -70,6 +78,8 @@ export default function ChatRoom({
   const [activeGiftAnim, setActiveGiftAnim] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
   const [showSafetyBar, setShowSafetyBar] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deletingConversation, setDeletingConversation] = useState(false);
   const [reportReason, setReportReason] = useState(REPORT_REASONS[2]);
 
   const bottomRef = useRef(null);
@@ -305,6 +315,28 @@ export default function ChatRoom({
     }
   };
 
+  const handleDeleteConversation = async () => {
+    if (!match?.id || deletingConversation) return;
+    setDeletingConversation(true);
+    try {
+      await deleteConversationForUser(match.id, currentUser.uid);
+      setConfirmDeleteOpen(false);
+      onSuccess?.('Conversación eliminada de tu bandeja.');
+      onBack();
+    } catch (err) {
+      onError?.(err.message || 'No se pudo eliminar la conversación.');
+    } finally {
+      setDeletingConversation(false);
+    }
+  };
+
+  const clearedAtMs = getClearedAtMs(liveMatch, currentUser.uid);
+  const visibleMessages = clearedAtMs
+    ? messages.filter((m) => (toMillis(m.createdAt) || Number(m.clientCreatedAt || 0)) > clearedAtMs)
+    : messages;
+  const outgoingPaidPending = isOutgoingPendingPaidRequest(liveMatch, currentUser.uid);
+  const paidReqInfo = getPaidRequest(liveMatch);
+
   const online = isUserActuallyOnline(livePeer);
   const verified = isProfileVerified(livePeer);
   const viewerIsPro = isProActive(currentUser);
@@ -439,7 +471,17 @@ export default function ChatRoom({
                 onClick={handleReportAndClose}
                 className="flex-1 py-2 rounded-full bg-rose-50 text-[#FF2E54] text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-rose-100"
               >
-                <Flag className="w-3.5 h-3.5" /> Reportar y bloquear
+                <Flag className="w-3.5 h-3.5" /> Reportar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSafetyBar(false);
+                  setConfirmDeleteOpen(true);
+                }}
+                className="flex-1 py-2 rounded-full bg-zinc-900 text-white text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-zinc-800"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Eliminar
               </button>
             </div>
           </div>
@@ -458,8 +500,21 @@ export default function ChatRoom({
             </div>
           </div>
 
+          {/* Aviso de Solicitud VIP pendiente (para el remitente) */}
+          {outgoingPaidPending && (
+            <div className="flex justify-center mb-2">
+              <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-amber-50 border border-amber-200/90 text-[11px] font-bold text-amber-900 shadow-sm">
+                <Gem className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+                <span>
+                  Mensaje prioritario ({paidReqInfo?.diamonds || 0} 💎) en la bandeja VIP de{' '}
+                  {livePeer?.name?.split(' ')[0]}
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Empty state / Icebreakers */}
-          {messages.length === 0 && !isBlockedEitherWay && !isGiftRequiredLock && (
+          {visibleMessages.length === 0 && !isBlockedEitherWay && !isGiftRequiredLock && (
             <div className="my-5 p-5 rounded-3xl bg-white border border-zinc-200/80 shadow-card text-center space-y-3">
               <img
                 src={getPrimaryPhoto(livePeer, 200)}
@@ -490,7 +545,7 @@ export default function ChatRoom({
             </div>
           )}
 
-          {messages.map((msg) => {
+          {visibleMessages.map((msg) => {
             const isMine = msg.senderId === currentUser.uid;
             const timeLabel = formatMessageTime(msg.createdAt, msg.clientCreatedAt);
             const msgMs = toMillis(msg.createdAt) || Number(msg.clientCreatedAt || 0);
@@ -508,6 +563,55 @@ export default function ChatRoom({
 
             if (msg.type === 'gift') {
               return <GiftMessageCard key={msg.id} message={msg} isMine={isMine} />;
+            }
+
+            if (msg.type === 'paid_message') {
+              return (
+                <div
+                  key={msg.id}
+                  className={`flex items-end gap-2 ${isMine ? 'justify-end' : 'justify-start'}`}
+                >
+                  {!isMine && (
+                    <img
+                      src={getPrimaryPhoto(livePeer, 80)}
+                      alt=""
+                      className="w-7 h-7 rounded-full object-cover shrink-0 mb-1 border border-amber-300"
+                    />
+                  )}
+                  <div
+                    className={`max-w-[80%] px-4 py-3 rounded-3xl text-sm leading-relaxed break-words shadow-md border ${
+                      isMine
+                        ? 'bg-gradient-to-br from-[#1B0B15] via-[#2D0E21] to-[#1A0914] border-amber-300/45 text-white rounded-br-md'
+                        : 'bg-gradient-to-br from-[#FFF9EE] to-white border-amber-300/75 text-zinc-900 rounded-bl-md'
+                    }`}
+                  >
+                    <div
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black mb-1.5 ${
+                        isMine
+                          ? 'bg-amber-400/20 text-amber-200'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}
+                    >
+                      <Gem className="w-3 h-3 text-sky-400" />
+                      Mensaje Prioritario · {msg.diamondsPaid || 0} 💎
+                    </div>
+                    <p className="font-medium">{msg.text}</p>
+                    <div
+                      className={`flex items-center justify-end gap-1 mt-1 text-[10px] ${
+                        isMine ? 'text-amber-100/75' : 'text-zinc-400'
+                      }`}
+                    >
+                      <span>{timeLabel}</span>
+                      {isMine &&
+                        (isReadByPeer ? (
+                          <CheckCheck className="w-3.5 h-3.5 text-sky-300" title="Visto" />
+                        ) : (
+                          <Check className="w-3 h-3 opacity-75" title="Enviado" />
+                        ))}
+                    </div>
+                  </div>
+                </div>
+              );
             }
 
             if (msg.type === 'image') {
@@ -714,6 +818,59 @@ export default function ChatRoom({
         giftEvent={activeGiftAnim}
         onComplete={() => setActiveGiftAnim(null)}
       />
+
+      {/* Modal de confirmación para eliminar conversación desde la sala */}
+      {confirmDeleteOpen && (
+        <div
+          onClick={() => !deletingConversation && setConfirmDeleteOpen(false)}
+          className="fixed inset-0 z-[75] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm bg-white rounded-t-[30px] sm:rounded-[30px] p-6 pb-safe shadow-2xl animate-sheet-up space-y-4"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-rose-50 border border-rose-200 text-[#FF2E54] flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-display text-base font-black text-zinc-900">
+                  ¿Eliminar conversación?
+                </h3>
+                <p className="text-xs text-zinc-500 mt-0.5 truncate">
+                  Con <strong className="text-zinc-800">{livePeer?.name}</strong>
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-zinc-600 leading-relaxed">
+              Esta conversación desaparecerá de tu lista de mensajes de forma limpia.
+            </p>
+            <div className="grid grid-cols-2 gap-2.5 pt-1">
+              <button
+                type="button"
+                disabled={deletingConversation}
+                onClick={() => setConfirmDeleteOpen(false)}
+                className="py-3 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-extrabold transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={deletingConversation}
+                onClick={handleDeleteConversation}
+                className="py-3 rounded-full bg-[#FF2E54] hover:brightness-105 text-white text-xs font-black shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50 transition"
+              >
+                {deletingConversation ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

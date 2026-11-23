@@ -45,6 +45,7 @@ import {
   isProActive,
 } from '../../utils/formatters';
 import LuxuryModalHeader from '../layout/LuxuryModalHeader';
+import PaidMessagesSettingsCard from './PaidMessagesSettingsCard';
 
 function SettingsSwitchRow({ icon: Icon, title, description, checked, busy, onToggle, accent }) {
   return (
@@ -652,6 +653,19 @@ export default function AccountSettingsModal({
                 <ChevronRight className="w-4 h-4 text-zinc-400 shrink-0" />
               </button>
             </div>
+          </section>
+
+          {/* 3.5 Monetización de Mensajes Directos (Solicitudes VIP sin match) */}
+          <section className="space-y-2">
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 px-1">
+              Monetización de Mensajes Directos
+            </p>
+            <PaidMessagesSettingsCard
+              userProfile={userProfile}
+              onSuccess={onSuccess}
+              onError={onError}
+              compact
+            />
           </section>
 
           {/* 4. Smart Photos y Control de Visibilidad */}
