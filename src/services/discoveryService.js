@@ -10,7 +10,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
-import { buildMatchId } from '../utils/formatters';
+import { buildMatchId, getDailyLikeQuota } from '../utils/formatters';
 import { sendPushNotificationToUser } from './pushNotificationService';
 
 export function subscribeReceivedLikes(currentUid, callback) {
@@ -202,14 +202,16 @@ export async function sendLike({
 
   const likeRef = doc(db, 'likes', `${fromUid}_${toUid}`);
   const reverseLikeRef = doc(db, 'likes', `${toUid}_${fromUid}`);
+  const senderUserRef = doc(db, 'users', fromUid);
   const targetUserRef = doc(db, 'users', toUid);
   const matchId = buildMatchId(fromUid, toUid);
   const matchRef = doc(db, 'matches', matchId);
 
   const result = await runTransaction(db, async (transaction) => {
-    const [likeSnap, reverseSnap, targetSnap, matchSnap] = await Promise.all([
+    const [likeSnap, reverseSnap, senderSnap, targetSnap, matchSnap] = await Promise.all([
       transaction.get(likeRef),
       transaction.get(reverseLikeRef),
+      transaction.get(senderUserRef),
       transaction.get(targetUserRef),
       transaction.get(matchRef),
     ]);
@@ -218,13 +220,16 @@ export async function sendLike({
       throw new Error('El perfil ya no está disponible.');
     }
 
+    const senderData = senderSnap.exists() ? senderSnap.data() : currentUser || {};
     const targetData = targetSnap.data();
     if (
-      (Array.isArray(currentUser?.blockedUsers) && currentUser.blockedUsers.includes(toUid)) ||
+      (Array.isArray(senderData?.blockedUsers) && senderData.blockedUsers.includes(toUid)) ||
       (Array.isArray(targetData.blockedUsers) && targetData.blockedUsers.includes(fromUid))
     ) {
       throw new Error('No puedes interactuar con este perfil porque existe un bloqueo activo.');
     }
+
+    const likeQuota = getDailyLikeQuota(senderData);
 
     if (likeSnap.exists()) {
       return {
@@ -232,7 +237,35 @@ export async function sendLike({
         matched: matchSnap.exists(),
         matchId,
         isSuperLike: Boolean(likeSnap.data()?.isSuperLike),
+        likeQuota,
       };
+    }
+
+    if (likeQuota.remaining <= 0) {
+      const limitErr = new Error(
+        likeQuota.isPro
+          ? '❤️ Alcanzaste tus 100 corazones diarios PRO. Se renuevan mañana.'
+          : '❤️ Alcanzaste tu límite de 25 corazones al día. Hazte Conoscamosnos PRO para tener 100 corazones diarios.'
+      );
+      limitErr.code = 'DAILY_LIKE_LIMIT_REACHED';
+      limitErr.quota = { ...likeQuota, remaining: 0 };
+      throw limitErr;
+    }
+
+    const nextUsed = likeQuota.used + 1;
+    const nextLikeQuota = {
+      ...likeQuota,
+      used: nextUsed,
+      remaining: Math.max(0, likeQuota.limit - nextUsed),
+    };
+
+    if (senderSnap.exists()) {
+      transaction.update(senderUserRef, {
+        dailyLikesDayKey: likeQuota.dayKey,
+        dailyLikesUsedToday: nextUsed,
+        lastDailyLikeAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
     }
 
     const currentLikes = Number(targetSnap.data().likesCount || 0);
@@ -277,6 +310,7 @@ export async function sendLike({
       matched: isMutual || matchSnap.exists(),
       matchId,
       isSuperLike: false,
+      likeQuota: nextLikeQuota,
     };
   });
 

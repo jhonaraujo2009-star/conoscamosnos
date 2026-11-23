@@ -25,9 +25,15 @@ import {
   unlockLikeWithDiamonds,
 } from '../../services/adRewardService';
 import { sendLike } from '../../services/discoveryService';
-import { getUserById, subscribePopularUsers } from '../../services/userService';
+import { getUserById } from '../../services/userService';
+import {
+  isIncomingPendingPaidRequest,
+  isOutgoingPendingPaidRequest,
+  isRejectedPaidRequest,
+} from '../../utils/chatHelpers';
 import {
   formatUserDistanceLabel,
+  getDailyLikeQuota,
   getDisplayAge,
   getPrimaryPhoto,
   getSpendableDiamonds,
@@ -35,12 +41,14 @@ import {
   isBoostActive,
   isProActive,
   isProfileVerified,
+  isUserActuallyOnline,
   toMillis,
   triggerHaptic,
 } from '../../utils/formatters';
 import RewardedAdModal from '../monetization/RewardedAdModal';
 import UnlockChoiceModal from '../monetization/UnlockChoiceModal';
 import ProCrownBadge from '../monetization/ProCrownBadge';
+import { TinderMatchOverlay, TinderMatchRibbon } from './TinderMatchBanner';
 
 function HeartArrow3D() {
   return (
@@ -133,13 +141,15 @@ export default function LikesScreen({
   const policy = useMemo(() => resolveAccessPolicy(economyConfig), [economyConfig]);
   const proActive = isProActive(currentUser);
   const superLikeQuota = useMemo(() => getSuperLikeQuota(currentUser), [currentUser]);
+  const dailyLikeQuota = useMemo(() => getDailyLikeQuota(currentUser), [currentUser]);
   const myUid = currentUser?.uid || '';
 
-  const [subTab, setSubTab] = useState('likes'); // 'likes' | 'top_picks'
-  const [topPicks, setTopPicks] = useState([]);
+  const [subTab, setSubTab] = useState('likes'); // 'likes' | 'matches'
   const [likerProfiles, setLikerProfiles] = useState([]);
+  const [matchPeerProfiles, setMatchPeerProfiles] = useState({});
   const [loadingLikers, setLoadingLikers] = useState(false);
   const [matchingUid, setMatchingUid] = useState(null);
+  const [matchBannerEvent, setMatchBannerEvent] = useState(null);
 
   // Sheet de decisión: Ver Anuncio Gratis vs Diamantes vs PRO (exclusivo para Likes normales)
   const [choiceModal, setChoiceModal] = useState(null); // { mode: 'reveal_like' | 'unlock_chat', user }
@@ -151,6 +161,7 @@ export default function LikesScreen({
   useEffect(() => {
     profileCacheRef.current = new Map();
     setLikerProfiles([]);
+    setMatchPeerProfiles({});
   }, [myUid]);
 
   const blockedKey = (currentUser?.blockedUsers || []).join(',');
@@ -177,31 +188,82 @@ export default function LikesScreen({
     return map;
   }, [scopedLikes]);
 
-  // Usuarios con quienes ya existe chat o match activo (nunca cobrar doble)
+  // Emparejamientos activos (excluyendo solicitudes pagadas pendientes o rechazadas sin match)
+  const activeMatchesList = useMemo(() => {
+    if (!myUid) return [];
+    const blockedSet = new Set(currentUser?.blockedUsers || []);
+    return matches.filter((m) => {
+      if (!Array.isArray(m.participants) || m.participants.length !== 2) return false;
+      if (!m.participants.includes(myUid)) return false;
+      if (isRejectedPaidRequest(m)) return false;
+      if (isIncomingPendingPaidRequest(m, myUid) || isOutgoingPendingPaidRequest(m, myUid)) {
+        return false;
+      }
+      const peerId = m.participants.find((p) => p !== myUid);
+      return Boolean(peerId && !blockedSet.has(peerId));
+    });
+  }, [matches, myUid, blockedKey]);
+
+  // Usuarios con quienes ya existe emparejamiento activo
   const matchedPeerSet = useMemo(() => {
     const set = new Set();
-    if (!myUid) return set;
-    matches.forEach((m) => {
+    activeMatchesList.forEach((m) => {
       const peerId = (m.participants || []).find((p) => p !== myUid);
       if (peerId) set.add(peerId);
     });
     return set;
-  }, [matches, myUid]);
+  }, [activeMatchesList, myUid]);
+
+  const matchPeerIdsKey = useMemo(() => {
+    const ids = activeMatchesList
+      .map((m) => (m.participants || []).find((p) => p !== myUid))
+      .filter(Boolean);
+    return Array.from(new Set(ids)).sort().join(',');
+  }, [activeMatchesList, myUid]);
 
   useEffect(() => {
-    if (!myUid) return undefined;
-    const unsub = subscribePopularUsers(
-      {
-        scope: 'global',
-        countryCode: currentUser?.country?.code,
-        currentUserId: myUid,
-        blockedUsers: currentUser?.blockedUsers || [],
-      },
-      (list) => setTopPicks(list.slice(0, 16)),
-      () => {}
-    );
-    return () => unsub();
-  }, [myUid, currentUser?.country?.code, blockedKey]);
+    let cancelled = false;
+    const peerIds = matchPeerIdsKey ? matchPeerIdsKey.split(',').filter(Boolean) : [];
+    if (peerIds.length === 0 || !myUid) {
+      setMatchPeerProfiles({});
+      return undefined;
+    }
+    const cache = profileCacheRef.current;
+    const missing = peerIds.filter((uid) => !cache.has(uid));
+
+    const buildResolvedMap = () => {
+      const next = {};
+      peerIds.forEach((uid) => {
+        const cached = cache.get(uid);
+        if (cached && !(Array.isArray(cached.blockedUsers) && cached.blockedUsers.includes(myUid))) {
+          next[uid] = cached;
+        }
+      });
+      setMatchPeerProfiles(next);
+    };
+
+    buildResolvedMap();
+
+    if (missing.length > 0) {
+      Promise.all(
+        missing.map((uid) =>
+          getUserById(uid)
+            .then((profile) => ({ uid, profile }))
+            .catch(() => ({ uid, profile: null }))
+        )
+      ).then((entries) => {
+        if (cancelled) return;
+        entries.forEach(({ uid, profile }) => {
+          if (profile) cache.set(uid, profile);
+        });
+        buildResolvedMap();
+      });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [matchPeerIdsKey, myUid]);
 
   const likerIdsKey = useMemo(() => {
     return Array.from(new Set(scopedLikes.map((l) => l.fromUserId)))
@@ -293,6 +355,30 @@ export default function LikesScreen({
     return { superLikeItems: superItems, normalLikeItems: normalItems };
   }, [likerProfiles, likeBySender, myUid]);
 
+  // Lista enriquecida de "Mis Matches / Emparejamientos"
+  const matchedItems = useMemo(() => {
+    return activeMatchesList.map((match) => {
+      const peerId = (match.participants || []).find((p) => p !== myUid);
+      const cachedSnap = match.participantProfiles?.[peerId];
+      const livePeer =
+        matchPeerProfiles[peerId] ||
+        profileCacheRef.current.get(peerId) || {
+          uid: peerId,
+          id: peerId,
+          name: cachedSnap?.name || 'Usuario',
+          photos: cachedSnap?.photo ? [cachedSnap.photo] : [],
+          country: cachedSnap?.country || null,
+        };
+      const incomingLikeDoc = likeBySender[peerId] || null;
+      return {
+        match,
+        peerId,
+        user: livePeer,
+        isSuperMatch: Boolean(incomingLikeDoc?.isSuperLike),
+      };
+    });
+  }, [activeMatchesList, myUid, matchPeerProfiles, likeBySender]);
+
   // Likes normales desbloqueados (PRO, Modo Libre, Match existente o desbloqueo individual)
   const revealedNormalSet = useMemo(() => {
     const set = new Set(userUnlocks?.revealedLikeIds || []);
@@ -330,7 +416,6 @@ export default function LikesScreen({
   );
 
   const handleOpenSuperLikerProfile = (user) => {
-    // Super Likes son SIEMPRE visibles sin requerir Conoscamosnos PRO
     onSelectProfile?.(user);
   };
 
@@ -349,7 +434,20 @@ export default function LikesScreen({
     if (!uid || !myUid || matchingUid) return;
 
     if (matchedPeerSet.has(uid)) {
-      onStartChat?.(user);
+      onStartChat?.(user, { skipLikeChatGate: true });
+      return;
+    }
+
+    if (dailyLikeQuota.remaining <= 0) {
+      triggerHaptic([20, 40, 20]);
+      onError?.(
+        dailyLikeQuota.isPro
+          ? '❤️ Alcanzaste tus 100 corazones diarios PRO. Se renuevan mañana.'
+          : '❤️ Alcanzaste tu límite de 25 corazones al día. Activa Conoscamosnos PRO para disfrutar 100 corazones diarios.'
+      );
+      if (!dailyLikeQuota.isPro) {
+        onOpenPro?.();
+      }
       return;
     }
 
@@ -363,27 +461,20 @@ export default function LikesScreen({
       });
 
       if (res.matched) {
-        onSuccess?.(
-          isSuper
-            ? `⭐💘 ¡Es un Super Match con ${user.name}! Ya pueden chatear.`
-            : `💘 ¡Es un Match con ${user.name}! Ya pueden chatear.`
-        );
-        if (onOpenChat && res.matchId) {
-          onOpenChat({
-            match: {
-              id: res.matchId,
-              participants: [myUid, uid].sort(),
-            },
-            peerUser: user,
-          });
-        } else {
-          onStartChat?.(user, { skipLikeChatGate: true });
-        }
+        triggerHaptic([18, 40, 24]);
+        setMatchBannerEvent({
+          targetUser: user,
+          matchId: res.matchId,
+          isSuperLike: isSuper,
+        });
       } else {
-        onSuccess?.(`❤️ ¡Match procesado con ${user.name}!`);
+        onSuccess?.(`❤️ ¡Corazón enviado a ${user.name}!`);
       }
     } catch (err) {
       onError?.(err.message || 'No se pudo completar el Match.');
+      if (err.code === 'DAILY_LIKE_LIMIT_REACHED' && !dailyLikeQuota.isPro) {
+        onOpenPro?.();
+      }
     } finally {
       setMatchingUid(null);
     }
@@ -392,7 +483,13 @@ export default function LikesScreen({
   const handleChatFromLike = (e, user) => {
     e.stopPropagation();
     const uid = user.uid || user.id;
-    if (policy.isFreeMode || proActive || chatUnlockedSet.has(uid) || user.requireGiftToChat) {
+    if (
+      policy.isFreeMode ||
+      proActive ||
+      chatUnlockedSet.has(uid) ||
+      user.requireGiftToChat ||
+      user.allowPaidMessages
+    ) {
       onStartChat?.(user);
       return;
     }
@@ -488,8 +585,8 @@ export default function LikesScreen({
 
   return (
     <div className="min-h-full bg-gradient-to-b from-[#FAF6F8] via-[#FAF7F9] to-[#F2EEF4] text-zinc-900 flex flex-col justify-between">
-      {/* Cabecera Moderna + Cuota Semanal de Super Likes + Switcher */}
-      <div className="bg-white/75 backdrop-blur-md border-b border-zinc-200/70 pt-safe sticky top-0 z-20">
+      {/* Cabecera Moderna + Cuota Diaria de Corazones + Super Likes + Switcher */}
+      <div className="bg-white/80 backdrop-blur-md border-b border-zinc-200/70 pt-safe sticky top-0 z-20">
         <div className="px-4 pt-3.5 pb-2.5 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <h1 className="font-display text-3xl font-black tracking-tight text-zinc-900">
@@ -499,6 +596,31 @@ export default function LikesScreen({
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
+            {/* Cuota diaria de corazones (25 gratis / 100 PRO) */}
+            <button
+              type="button"
+              onClick={() => {
+                if (!proActive && onOpenPro) {
+                  onOpenPro();
+                } else {
+                  onSuccess?.(
+                    `❤️ Tienes ${dailyLikeQuota.remaining}/${dailyLikeQuota.limit} corazones disponibles hoy.`
+                  );
+                }
+              }}
+              className={`px-2.5 py-1.5 rounded-full border text-[11px] font-extrabold inline-flex items-center gap-1 shadow-sm transition active:scale-95 tabular-nums ${
+                dailyLikeQuota.remaining > 0
+                  ? 'bg-gradient-to-r from-rose-50 to-amber-50 border-rose-200/90 text-[#E62E5C]'
+                  : 'bg-zinc-100 border-zinc-200 text-zinc-600'
+              }`}
+              title={`Corazones diarios: ${dailyLikeQuota.remaining}/${dailyLikeQuota.limit}`}
+            >
+              <Heart className="w-3.5 h-3.5 fill-[#FF2E54] text-[#FF2E54] shrink-0" />
+              <span>
+                {dailyLikeQuota.remaining}/{dailyLikeQuota.limit}
+              </span>
+            </button>
+
             <button
               type="button"
               onClick={() => {
@@ -510,7 +632,7 @@ export default function LikesScreen({
                   );
                 }
               }}
-              className={`px-2.5 py-1.5 rounded-full border text-[11px] font-extrabold inline-flex items-center gap-1 shadow-xs transition active:scale-95 tabular-nums ${
+              className={`px-2.5 py-1.5 rounded-full border text-[11px] font-extrabold inline-flex items-center gap-1 shadow-sm transition active:scale-95 tabular-nums ${
                 superLikeQuota.remaining > 0
                   ? 'bg-gradient-to-r from-sky-50 to-amber-50 border-sky-200/90 text-sky-900'
                   : 'bg-zinc-100 border-zinc-200 text-zinc-600'
@@ -519,14 +641,14 @@ export default function LikesScreen({
             >
               <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500 shrink-0" />
               <span>
-                {superLikeQuota.remaining}/{superLikeQuota.limit} sem.
+                {superLikeQuota.remaining}/{superLikeQuota.limit}
               </span>
             </button>
 
             <button
               type="button"
               onClick={onOpenDiamondStore}
-              className="px-2.5 py-1.5 rounded-full bg-white border border-sky-200/80 shadow-xs text-[11px] font-extrabold text-sky-800 inline-flex items-center gap-1 hover:bg-sky-50 transition tabular-nums"
+              className="px-2.5 py-1.5 rounded-full bg-white border border-sky-200/80 shadow-sm text-[11px] font-extrabold text-sky-800 inline-flex items-center gap-1 hover:bg-sky-50 transition tabular-nums"
             >
               <Gem className="w-3.5 h-3.5 text-sky-500" />
               <span>{userDiamonds} 💎</span>
@@ -534,7 +656,7 @@ export default function LikesScreen({
           </div>
         </div>
 
-        {/* Selector segmentado estilo moderno */}
+        {/* Selector segmentado: Te dieron Like vs Mis Matches (Emparejamientos) */}
         <div className="px-4 pb-3">
           <div className="p-1 rounded-2xl bg-zinc-200/75 grid grid-cols-2 gap-1">
             <button
@@ -548,7 +670,7 @@ export default function LikesScreen({
             >
               <span>Te dieron Like</span>
               {superLikeItems.length > 0 ? (
-                <span className="px-1.5 py-0.5 rounded-full bg-gradient-to-r from-sky-500 via-blue-500 to-amber-400 text-white text-[10px] font-black inline-flex items-center gap-0.5 shadow-xs">
+                <span className="px-1.5 py-0.5 rounded-full bg-gradient-to-r from-sky-500 via-blue-500 to-amber-400 text-white text-[10px] font-black inline-flex items-center gap-0.5 shadow-sm">
                   <Star className="w-2.5 h-2.5 fill-amber-200 text-amber-200" />
                   {totalLikesCount}
                 </span>
@@ -561,15 +683,30 @@ export default function LikesScreen({
 
             <button
               type="button"
-              onClick={() => setSubTab('top_picks')}
+              onClick={() => setSubTab('matches')}
               className={`py-2 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all ${
-                subTab === 'top_picks'
-                  ? 'bg-white text-zinc-900 shadow-sm'
+                subTab === 'matches'
+                  ? 'bg-gradient-to-r from-[#1D0A14] via-[#2F0D20] to-[#1D0A14] text-white shadow-sm'
                   : 'text-zinc-500 hover:text-zinc-800'
               }`}
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              <span>Top Picks</span>
+              <Flame
+                className={`w-3.5 h-3.5 ${
+                  subTab === 'matches' ? 'text-amber-300 fill-amber-300' : 'text-[#FF2E54]'
+                }`}
+              />
+              <span>Mis Matches</span>
+              {matchedItems.length > 0 && (
+                <span
+                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-black tabular-nums ${
+                    subTab === 'matches'
+                      ? 'bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white'
+                      : 'bg-rose-100 text-[#FF2E54]'
+                  }`}
+                >
+                  {matchedItems.length}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -616,13 +753,15 @@ export default function LikesScreen({
                       <div
                         key={`super-${uid}`}
                         onClick={() => handleOpenSuperLikerProfile(user)}
-                        className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#0A1428] via-[#131F3F] to-[#1D122C] border border-sky-400/45 p-3 text-white shadow-[0_14px_32px_-8px_rgba(14,165,233,0.3)] cursor-pointer active:scale-[0.99] transition-transform"
+                        className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#0A1428] via-[#131F3F] to-[#1D122C] border border-sky-400/45 p-3 text-white shadow-[0_14px_32px_-8px_rgba(14,165,233,0.3)] cursor-pointer active:scale-[0.99] transition-transform space-y-2.5"
                       >
-                        {/* Halo sutil superior */}
                         <div className="pointer-events-none absolute -top-12 -right-12 w-36 h-36 rounded-full bg-sky-400/15 blur-2xl" />
 
+                        {alreadyMatched && (
+                          <TinderMatchRibbon isSuperMatch variant="wide" />
+                        )}
+
                         <div className="relative flex items-stretch gap-3">
-                          {/* Retrato nítido 100% visible */}
                           <div className="relative w-[92px] h-[118px] rounded-2xl overflow-hidden bg-zinc-800 shrink-0 ring-2 ring-amber-300/65 shadow-lg">
                             <img
                               src={getPrimaryPhoto(user, 360, { seed: myUid })}
@@ -642,7 +781,6 @@ export default function LikesScreen({
                             )}
                           </div>
 
-                          {/* Información + Acciones */}
                           <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
                             <div className="space-y-1">
                               <div className="flex items-center justify-between gap-1.5">
@@ -670,7 +808,6 @@ export default function LikesScreen({
                               </p>
                             </div>
 
-                            {/* Botones de acción instantánea */}
                             <div className="grid grid-cols-2 gap-2 pt-2">
                               <button
                                 type="button"
@@ -678,7 +815,7 @@ export default function LikesScreen({
                                 onClick={(e) => handleMatchBack(e, user, { isSuper: true })}
                                 className={`py-2 px-2.5 rounded-full text-[11px] font-black flex items-center justify-center gap-1 shadow-md active:scale-95 transition disabled:opacity-60 ${
                                   alreadyMatched
-                                    ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+                                    ? 'bg-gradient-to-r from-[#FF1744] via-[#FF2E63] to-amber-500 text-white'
                                     : 'bg-gradient-to-r from-[#FF2E54] via-rose-500 to-amber-400 text-white hover:brightness-110'
                                 }`}
                               >
@@ -701,7 +838,7 @@ export default function LikesScreen({
                                   e.stopPropagation();
                                   handleOpenSuperLikerProfile(user);
                                 }}
-                                className="py-2 px-2.5 rounded-full bg-white/12 hover:bg-white/20 border border-white/20 text-white text-[11px] font-extrabold flex items-center justify-center gap-1 active:scale-95 transition"
+                                className="py-2 px-2.5 rounded-full bg-white/15 hover:bg-white/25 border border-white/20 text-white text-[11px] font-extrabold flex items-center justify-center gap-1 active:scale-95 transition"
                               >
                                 <User className="w-3.5 h-3.5" />
                                 Ver perfil
@@ -716,7 +853,7 @@ export default function LikesScreen({
               </section>
             )}
 
-            {/* ==================== SECCIÓN #2: LIKES NORMALES (REQUIERE PRO / ANUNCIO / 💎 PARA VER) ==================== */}
+            {/* ==================== SECCIÓN #2: LIKES NORMALES ==================== */}
             {normalLikeItems.length > 0 && (
               <section className="space-y-3">
                 <div className="flex items-center justify-between gap-2 px-0.5">
@@ -740,7 +877,6 @@ export default function LikesScreen({
                   ) : null}
                 </div>
 
-                {/* Banner PRO compacto si aún hay Likes normales ocultos */}
                 {!proActive && !policy.isFreeMode && lockedNormalItems.length > 0 && (
                   <div className="rounded-3xl p-4 bg-gradient-to-br from-[#190913] via-[#270B1C] to-[#120A14] border border-amber-300/25 text-white shadow-md space-y-2.5">
                     <div className="flex items-center justify-between gap-2">
@@ -754,8 +890,9 @@ export default function LikesScreen({
                       )}
                     </div>
                     <p className="text-xs text-rose-100/85 leading-relaxed">
-                      Mira quién te dio ❤️ normal sin censura y obtén{' '}
-                      <strong className="text-amber-200">20 Super Likes semanales</strong> (2 en cuentas gratis).
+                      Mira quién te dio ❤️ sin censura y disfruta{' '}
+                      <strong className="text-amber-200">100 corazones al día</strong> (25 en cuentas gratis) +{' '}
+                      <strong className="text-amber-200">20 Super Likes semanales</strong>.
                     </p>
                     {onOpenPro && (
                       <button
@@ -764,7 +901,7 @@ export default function LikesScreen({
                         className="w-full py-2.5 px-3 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white text-[11px] font-black flex items-center justify-center gap-1.5 shadow hover:brightness-105 transition"
                       >
                         <Crown className="w-3.5 h-3.5" />
-                        Activar PRO · Ver todos y 20 Super Likes/sem.
+                        Activar PRO · 100 ❤️/día + Ver todos tus Likes
                       </button>
                     )}
                   </div>
@@ -786,7 +923,11 @@ export default function LikesScreen({
                       <div
                         key={`like-${uid}`}
                         onClick={() => handleNormalCardTap(user)}
-                        className="bg-white rounded-3xl overflow-hidden shadow-card cursor-pointer relative group border border-zinc-200/70"
+                        className={`bg-white rounded-3xl overflow-hidden cursor-pointer relative group border transition-all ${
+                          alreadyMatched
+                            ? 'border-rose-300 shadow-[0_12px_28px_-10px_rgba(255,46,84,0.3)] ring-1 ring-rose-300/60'
+                            : 'border-zinc-200/70 shadow-card'
+                        }`}
                       >
                         <div className="aspect-[3/4] relative bg-zinc-200 overflow-hidden">
                           <img
@@ -796,7 +937,7 @@ export default function LikesScreen({
                               isRevealed ? 'group-hover:scale-105' : 'blur-xl scale-110 brightness-90'
                             }`}
                           />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/88 via-black/15 to-transparent" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/15 to-transparent" />
 
                           {!isRevealed ? (
                             <div className="absolute inset-0 flex flex-col items-center justify-between p-3 text-center text-white">
@@ -845,6 +986,13 @@ export default function LikesScreen({
                                 ) : null}
                               </div>
 
+                              {/* Franja estilo Tinder PRO cuando han hecho Match */}
+                              {alreadyMatched && (
+                                <div className="absolute inset-x-0 top-11 z-10">
+                                  <TinderMatchRibbon variant="card" />
+                                </div>
+                              )}
+
                               <div className="absolute bottom-2.5 inset-x-2.5 text-white">
                                 <p className="text-sm font-extrabold truncate flex items-center gap-1">
                                   <span className="truncate">
@@ -868,7 +1016,9 @@ export default function LikesScreen({
                                         : handleMatchBack(e, user, { isSuper: false })
                                     }
                                     className={`flex-1 py-1.5 px-2 rounded-full text-[11px] font-extrabold flex items-center justify-center gap-1 shadow transition ${
-                                      alreadyMatched || isChatReady
+                                      alreadyMatched
+                                        ? 'bg-gradient-to-r from-[#FF1744] via-[#FF2E63] to-amber-500 text-white hover:brightness-110'
+                                        : isChatReady
                                         ? 'bg-emerald-500 text-white hover:bg-emerald-600'
                                         : 'bg-gradient-to-r from-[#FF2E54] to-rose-500 text-white hover:brightness-105'
                                     }`}
@@ -910,47 +1060,111 @@ export default function LikesScreen({
           </div>
         )
       ) : (
-        <div className="flex-1 p-4">
-          {topPicks.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center py-16 text-center">
-              <Heart className="w-12 h-12 text-zinc-300 mb-2" />
-              <p className="text-sm font-bold text-zinc-700">Hasta acá por los momentos</p>
-              <p className="text-xs text-zinc-500 mt-1">Pronto aparecerán más Top Picks aquí.</p>
+        /* ==================== PESTAÑA #2: MIS MATCHES / EMPAREJAMIENTOS ==================== */
+        <div className="flex-1 p-4 space-y-4">
+          {/* Banner superior luxury de Emparejamientos */}
+          <div className="relative overflow-hidden rounded-[28px] p-4 bg-gradient-to-br from-[#1B0711] via-[#2F0B1E] to-[#13060E] border border-rose-400/35 text-white shadow-[0_14px_34px_-12px_rgba(255,46,84,0.35)]">
+            <div className="pointer-events-none absolute -top-10 -right-10 w-36 h-36 rounded-full bg-rose-500/20 blur-2xl" />
+            <div className="relative flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#FF1744] via-[#FF2E63] to-amber-500 text-white flex items-center justify-center shadow-lg shrink-0">
+                  <Flame className="w-5 h-5 fill-white" />
+                </div>
+                <div className="min-w-0">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.14em] text-amber-300">
+                    <Sparkles className="w-3 h-3" /> Emparejamientos Mutuos
+                  </span>
+                  <h2 className="font-display text-base sm:text-lg font-black text-white truncate">
+                    Mis Matches ({matchedItems.length})
+                  </h2>
+                  <p className="text-[11px] text-rose-100/80 truncate">
+                    Se dieron corazón mutuamente · Chatea gratis
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {matchedItems.length === 0 ? (
+            <div className="bg-white rounded-[30px] border border-[#EFE4E0] p-8 flex flex-col items-center justify-center py-12 text-center shadow-card space-y-3">
+              <div className="w-16 h-16 rounded-[24px] bg-gradient-to-br from-rose-50 via-amber-50 to-pink-50 border border-rose-200/80 text-[#FF2E54] flex items-center justify-center shadow-inner">
+                <Heart className="w-8 h-8 fill-[#FF2E54]/20" />
+              </div>
+              <div className="space-y-1 max-w-[260px]">
+                <p className="font-display text-base font-black text-zinc-900">
+                  Aún no tienes emparejamientos
+                </p>
+                <p className="text-xs text-zinc-500 leading-relaxed">
+                  Cuando tú y otra persona se den corazón mutuamente, aparecerán aquí con su insignia oficial de Match.
+                </p>
+              </div>
+              {totalLikesCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setSubTab('likes')}
+                  className="px-5 py-2.5 rounded-full bg-gradient-to-r from-[#FF2E54] to-amber-500 text-white text-xs font-black shadow-md active:scale-95 transition"
+                >
+                  Ver quién te dio Like ({totalLikesCount})
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onGoToSwipe?.()}
+                  className="px-5 py-2.5 rounded-full bg-zinc-900 text-white text-xs font-black shadow-md active:scale-95 transition"
+                >
+                  Ir a Descubrir
+                </button>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
-              {topPicks.map((user) => {
+              {matchedItems.map(({ match, peerId, user, isSuperMatch }) => {
                 const boosted = isBoostActive(user);
                 const verified = isProfileVerified(user);
                 const visibleAge = getDisplayAge(user);
                 const distInfo = formatUserDistanceLabel(user, currentUser);
                 const userIsPro = isProActive(user);
+                const online = isUserActuallyOnline(user);
+
                 return (
                   <div
-                    key={user.uid || user.id}
-                    onClick={() => onSelectProfile(user)}
-                    className="bg-white rounded-3xl overflow-hidden shadow-card cursor-pointer border border-zinc-200/70"
+                    key={match.id || peerId}
+                    onClick={() => onSelectProfile?.(user)}
+                    className="bg-white rounded-[26px] overflow-hidden cursor-pointer border border-rose-300/80 shadow-[0_12px_28px_-12px_rgba(255,46,84,0.28)] ring-1 ring-rose-200/60 group active:scale-[0.99] transition-all"
                   >
-                    <div className="aspect-[3/4] relative bg-zinc-200">
+                    <div className="aspect-[3/4] relative bg-zinc-200 overflow-hidden">
                       <img
                         src={getPrimaryPhoto(user, 450, { seed: myUid })}
                         alt={user.name}
                         loading="lazy"
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent" />
-                      {boosted && (
-                        <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-full bg-amber-400 text-black text-[10px] font-black flex items-center gap-0.5 shadow">
-                          <Zap className="w-2.5 h-2.5 fill-black" /> TOP
-                        </span>
-                      )}
-                      {userIsPro && (
-                        <span className="absolute top-2.5 right-2.5">
-                          <ProCrownBadge variant="compact" />
-                        </span>
-                      )}
-                      <div className="absolute bottom-2.5 inset-x-3 text-white">
-                        <p className="text-sm font-extrabold truncate flex items-center gap-1">
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+
+                      {/* Badges superiores */}
+                      <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between gap-1">
+                        {boosted ? (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-400 text-black text-[9.5px] font-black flex items-center gap-0.5 shadow">
+                            <Zap className="w-2.5 h-2.5 fill-black" /> VIP
+                          </span>
+                        ) : online ? (
+                          <span className="px-2 py-0.5 rounded-full bg-black/55 backdrop-blur-sm border border-white/15 text-white text-[9.5px] font-bold inline-flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            En línea
+                          </span>
+                        ) : (
+                          <span />
+                        )}
+                        {userIsPro && <ProCrownBadge variant="compact" />}
+                      </div>
+
+                      {/* FRANJA ESTILO TINDER PRO */}
+                      <div className="absolute inset-x-0 top-10 z-10">
+                        <TinderMatchRibbon isSuperMatch={isSuperMatch} variant="card" />
+                      </div>
+
+                      <div className="absolute bottom-2.5 inset-x-2.5 text-white">
+                        <p className="text-sm font-black truncate flex items-center gap-1">
                           <span className="truncate">
                             {user.name}
                             {visibleAge !== null ? `, ${visibleAge}` : ''}
@@ -961,17 +1175,21 @@ export default function LikesScreen({
                         </p>
                         <p className="text-[11px] text-white/80 truncate">
                           {!distInfo.isHidden ? `${user.country?.flag || '🌎'} ` : '🔒 '}
-                          {distInfo.text}
+                          {distInfo.shortText || distInfo.text}
                         </p>
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            onStartChat?.(user);
+                            if (onOpenChat && match?.id) {
+                              onOpenChat({ match, peerUser: user });
+                            } else {
+                              onStartChat?.(user, { skipLikeChatGate: true });
+                            }
                           }}
-                          className="mt-1.5 w-full py-1.5 rounded-full bg-white/95 text-zinc-900 text-[11px] font-extrabold flex items-center justify-center gap-1 shadow hover:bg-white transition"
+                          className="mt-2 w-full py-2 rounded-full bg-gradient-to-r from-[#FF1744] via-[#FF2E63] to-amber-500 text-white text-[11px] font-black flex items-center justify-center gap-1.5 shadow-md hover:brightness-110 active:scale-95 transition"
                         >
-                          <MessageCircle className="w-3 h-3" /> Chatear
+                          <MessageCircle className="w-3.5 h-3.5" /> Conversar ahora
                         </button>
                       </div>
                     </div>
@@ -1087,6 +1305,16 @@ export default function LikesScreen({
           if (!activeAd) return;
           handleUnlockSingleWithDiamonds(activeAd.purpose, activeAd.user);
         }}
+      />
+
+      {/* Celebración estilo Tinder PRO al hacer Match mutuo */}
+      <TinderMatchOverlay
+        matchEvent={matchBannerEvent}
+        currentUser={currentUser}
+        onClose={() => setMatchBannerEvent(null)}
+        onOpenChat={onOpenChat}
+        onStartChat={onStartChat}
+        onError={onError}
       />
     </div>
   );

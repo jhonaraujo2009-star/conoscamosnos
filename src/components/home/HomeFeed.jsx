@@ -1,13 +1,37 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, BadgeCheck, Flame, Heart, MessageCircle, Sparkles, User, Users } from 'lucide-react';
+import {
+  ArrowLeft,
+  BadgeCheck,
+  ChevronRight,
+  Crown,
+  Flame,
+  Heart,
+  MessageCircle,
+  Sparkles,
+  User,
+  Users,
+  Zap,
+} from 'lucide-react';
 import { sendLike } from '../../services/discoveryService';
 import { subscribePopularUsers } from '../../services/userService';
 import {
+  isIncomingPendingPaidRequest,
+  isOutgoingPendingPaidRequest,
+  isRejectedPaidRequest,
+} from '../../utils/chatHelpers';
+import {
   formatUserDistanceLabel,
+  getDailyLikeQuota,
   getDisplayAge,
   getPrimaryPhoto,
+  isBoostActive,
+  isProActive,
   isProfileVerified,
+  isUserActuallyOnline,
+  triggerHaptic,
 } from '../../utils/formatters';
+import { TinderMatchOverlay, TinderMatchRibbon } from '../discover/TinderMatchBanner';
+import ProCrownBadge from '../monetization/ProCrownBadge';
 
 /* Ilustraciones 3D brillantes en SVG de alta precisión */
 function LollipopHeart3D() {
@@ -117,6 +141,13 @@ function BlueMoonStar3D() {
   );
 }
 
+const TOP_PICKS_CATEGORY = {
+  id: 'top_picks',
+  title: 'Top Picks',
+  swipeValue: 'Todos',
+  isTopPicks: true,
+};
+
 const EXPLORE_CARDS = [
   {
     id: 'nada_serio',
@@ -160,8 +191,11 @@ const EXTRA_CATEGORIES = [
 
 export default function HomeFeed({
   currentUser,
+  matches = [],
   onSelectProfile,
   onStartChat,
+  onOpenChat,
+  onOpenPro,
   onSwipeCategory,
   onSuccess,
   onError,
@@ -169,25 +203,48 @@ export default function HomeFeed({
   const [users, setUsers] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [likedIds, setLikedIds] = useState({});
+  const [localMatchedIds, setLocalMatchedIds] = useState({});
+  const [busyLikeUid, setBusyLikeUid] = useState(null);
+  const [matchBannerEvent, setMatchBannerEvent] = useState(null);
 
+  const myUid = currentUser?.uid || '';
   const blockedKey = (currentUser?.blockedUsers || []).join(',');
+  const dailyLikeQuota = useMemo(() => getDailyLikeQuota(currentUser), [currentUser]);
 
   useEffect(() => {
-    if (!currentUser?.uid) return;
+    if (!myUid) return undefined;
     const unsub = subscribePopularUsers(
       {
         scope: 'global',
         countryCode: currentUser?.country?.code,
-        currentUserId: currentUser.uid,
+        currentUserId: myUid,
         blockedUsers: currentUser?.blockedUsers || [],
       },
       setUsers,
       () => {}
     );
     return () => unsub();
-  }, [currentUser?.uid, currentUser?.country?.code, blockedKey]);
+  }, [myUid, currentUser?.country?.code, blockedKey]);
+
+  const matchedPeerSet = useMemo(() => {
+    const set = new Set();
+    if (!myUid) return set;
+    matches.forEach((m) => {
+      if (isRejectedPaidRequest(m)) return;
+      if (isIncomingPendingPaidRequest(m, myUid) || isOutgoingPendingPaidRequest(m, myUid)) return;
+      const peerId = (m.participants || []).find((p) => p !== myUid);
+      if (peerId) set.add(peerId);
+    });
+    Object.keys(localMatchedIds).forEach((uid) => {
+      if (localMatchedIds[uid]) set.add(uid);
+    });
+    return set;
+  }, [matches, myUid, localMatchedIds]);
+
+  const topPicks = useMemo(() => users.slice(0, 16), [users]);
 
   const categoryMatchesUser = (category, user) => {
+    if (category?.isTopPicks) return true;
     if (!category?.matchValues) return true;
     const userGoal = (user.lookingFor || '').trim();
     return category.matchValues.includes(userGoal);
@@ -204,24 +261,167 @@ export default function HomeFeed({
 
   const categoryUsers = useMemo(() => {
     if (!selectedCategory) return [];
+    if (selectedCategory.isTopPicks) return topPicks;
     return users.filter((u) => categoryMatchesUser(selectedCategory, u));
-  }, [users, selectedCategory]);
+  }, [users, topPicks, selectedCategory]);
 
   const handleQuickLike = async (e, targetUser) => {
     e.stopPropagation();
-    const uid = targetUser.uid || targetUser.id;
-    if (!uid || likedIds[uid]) return;
+    const uid = targetUser?.uid || targetUser?.id;
+    if (!uid || busyLikeUid) return;
+
+    if (matchedPeerSet.has(uid)) {
+      onStartChat?.(targetUser, { skipLikeChatGate: true });
+      return;
+    }
+    if (likedIds[uid]) return;
+
+    if (dailyLikeQuota.remaining <= 0) {
+      triggerHaptic([20, 40, 20]);
+      onError?.(
+        dailyLikeQuota.isPro
+          ? '❤️ Alcanzaste tus 100 corazones diarios PRO. Se renuevan mañana.'
+          : '❤️ Alcanzaste tu límite de 25 corazones al día. Activa Conoscamosnos PRO para tener 100 corazones diarios.'
+      );
+      if (!dailyLikeQuota.isPro) {
+        onOpenPro?.();
+      }
+      return;
+    }
+
+    setBusyLikeUid(uid);
+    triggerHaptic(14);
     try {
       const res = await sendLike({ currentUser, targetUser });
       setLikedIds((prev) => ({ ...prev, [uid]: true }));
       if (res.matched) {
-        onSuccess?.(`🎉 ¡Es un Match con ${targetUser.name}!`);
+        triggerHaptic([18, 40, 24]);
+        setLocalMatchedIds((prev) => ({ ...prev, [uid]: true }));
+        setMatchBannerEvent({
+          targetUser,
+          matchId: res.matchId,
+          isSuperLike: Boolean(res.isSuperLike),
+        });
       } else {
-        onSuccess?.(`❤️ Like enviado a ${targetUser.name}`);
+        const rem = res.likeQuota?.remaining ?? Math.max(0, dailyLikeQuota.remaining - 1);
+        onSuccess?.(`❤️ Corazón enviado a ${targetUser.name} (${rem}/${dailyLikeQuota.limit} disponibles hoy)`);
       }
     } catch (err) {
-      onError?.(err.message || 'No se pudo enviar Like.');
+      onError?.(err.message || 'No se pudo enviar el corazón.');
+      if (err.code === 'DAILY_LIKE_LIMIT_REACHED' && !dailyLikeQuota.isPro) {
+        onOpenPro?.();
+      }
+    } finally {
+      setBusyLikeUid(null);
     }
+  };
+
+  const renderProfileGridCard = (u) => {
+    const uid = u.uid || u.id;
+    const verified = isProfileVerified(u);
+    const boosted = isBoostActive(u);
+    const userIsPro = isProActive(u);
+    const online = isUserActuallyOnline(u);
+    const isMatched = matchedPeerSet.has(uid);
+    const liked = Boolean(likedIds[uid]) || isMatched;
+    const visibleAge = getDisplayAge(u);
+    const distInfo = formatUserDistanceLabel(u, currentUser);
+
+    return (
+      <div
+        key={uid}
+        onClick={() => onSelectProfile(u)}
+        className={`bg-white rounded-[26px] overflow-hidden flex flex-col cursor-pointer border transition-all active:scale-[0.99] ${
+          isMatched
+            ? 'border-rose-300 shadow-[0_12px_28px_-10px_rgba(255,46,84,0.28)] ring-1 ring-rose-300/60'
+            : 'border-[#EFE4E0] shadow-card hover:shadow-md'
+        }`}
+      >
+        <div className="aspect-[3/4] relative bg-zinc-200 overflow-hidden">
+          <img
+            src={getPrimaryPhoto(u, 500, { seed: myUid })}
+            alt={u.name}
+            loading="lazy"
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+
+          {/* Badges superiores */}
+          <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between gap-1.5">
+            {boosted ? (
+              <span className="px-2 py-0.5 rounded-full bg-amber-400 text-zinc-950 text-[9.5px] font-black inline-flex items-center gap-0.5 shadow">
+                <Zap className="w-2.5 h-2.5 fill-zinc-950" /> TOP
+              </span>
+            ) : online ? (
+              <span className="px-2 py-0.5 rounded-full bg-black/55 backdrop-blur-sm border border-white/15 text-white text-[9.5px] font-bold inline-flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                En línea
+              </span>
+            ) : (
+              <span />
+            )}
+            {userIsPro && <ProCrownBadge variant="compact" />}
+          </div>
+
+          {/* Franja estilo Tinder PRO cuando han hecho Match */}
+          {isMatched && (
+            <div className="absolute inset-x-0 top-10 z-10">
+              <TinderMatchRibbon variant="card" />
+            </div>
+          )}
+
+          <div className="absolute bottom-2.5 inset-x-3 text-white">
+            <p className="text-sm font-black truncate flex items-center gap-1">
+              <span className="truncate">
+                {u.name}
+                {visibleAge !== null ? `, ${visibleAge}` : ''}
+              </span>
+              {verified && (
+                <BadgeCheck className="w-4 h-4 text-sky-400 fill-sky-400 stroke-white shrink-0" />
+              )}
+            </p>
+            <p className="text-[11px] text-white/85 truncate">
+              {!distInfo.isHidden ? `${u.country?.flag || '🌎'} ` : '🔒 '}
+              {distInfo.text}
+            </p>
+          </div>
+        </div>
+
+        <div className="p-2 grid grid-cols-2 gap-1.5 bg-white">
+          <button
+            type="button"
+            disabled={busyLikeUid === uid}
+            onClick={(e) => handleQuickLike(e, u)}
+            className={`py-2 rounded-full text-[11px] font-black flex items-center justify-center gap-1 transition active:scale-95 ${
+              isMatched
+                ? 'bg-gradient-to-r from-[#FF1744] to-amber-500 text-white shadow-sm'
+                : liked
+                ? 'bg-rose-50 border border-rose-200 text-[#FF2E54]'
+                : 'bg-[#FAF2F0] hover:bg-rose-50 text-[#1D1317] hover:text-[#FF2E54]'
+            }`}
+          >
+            <Heart
+              className={`w-3.5 h-3.5 ${
+                isMatched ? 'fill-white text-white' : liked ? 'fill-[#FF2E54] text-[#FF2E54]' : ''
+              }`}
+            />
+            {isMatched ? 'Match' : liked ? 'Enviado' : 'Corazón'}
+          </button>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onStartChat?.(u);
+            }}
+            className="py-2 rounded-full bg-[#160F13] hover:bg-[#271B22] text-white text-[11px] font-black flex items-center justify-center gap-1 transition active:scale-95"
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            Chat
+          </button>
+        </div>
+      </div>
+    );
   };
 
   if (selectedCategory) {
@@ -232,17 +432,26 @@ export default function HomeFeed({
             <button
               type="button"
               onClick={() => setSelectedCategory(null)}
-              className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-zinc-800 shrink-0 active:scale-95 transition-transform"
+              className="w-10 h-10 rounded-full bg-white shadow-sm border border-[#EFE4E0] flex items-center justify-center text-zinc-800 shrink-0 active:scale-95 transition-transform"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div className="min-w-0">
-              <h2 className="text-xl font-extrabold text-zinc-900 truncate">
-                {selectedCategory.title}
-              </h2>
+              <div className="flex items-center gap-1.5">
+                <h2 className="font-display text-xl font-black text-zinc-900 truncate">
+                  {selectedCategory.title}
+                </h2>
+                {selectedCategory.isTopPicks && (
+                  <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
+                )}
+              </div>
               <p className="text-xs font-semibold text-zinc-500">
                 {categoryUsers.length}{' '}
-                {categoryUsers.length === 1 ? 'persona buscando lo mismo' : 'personas buscando lo mismo'}
+                {selectedCategory.isTopPicks
+                  ? 'perfiles destacados para ti hoy'
+                  : categoryUsers.length === 1
+                  ? 'persona buscando lo mismo'
+                  : 'personas buscando lo mismo'}
               </p>
             </div>
           </div>
@@ -260,7 +469,7 @@ export default function HomeFeed({
         </div>
 
         {categoryUsers.length === 0 ? (
-          <div className="bg-white rounded-3xl p-8 text-center shadow-sm space-y-3 mt-4">
+          <div className="bg-white rounded-3xl p-8 text-center shadow-sm space-y-3 mt-4 border border-[#EFE4E0]">
             <div className="w-14 h-14 mx-auto rounded-2xl bg-zinc-100 text-zinc-500 flex items-center justify-center">
               <Users className="w-7 h-7" />
             </div>
@@ -269,7 +478,7 @@ export default function HomeFeed({
                 Hasta acá por los momentos
               </p>
               <p className="text-xs text-zinc-500 mt-1 max-w-xs mx-auto leading-relaxed">
-                Aún no hay otras personas que hayan elegido <strong>“{selectedCategory.title}”</strong> en su perfil. ¡Prueba otra categoría o vuelve más tarde!
+                Aún no hay otras personas disponibles en <strong>“{selectedCategory.title}”</strong>. ¡Prueba otra sección o vuelve más tarde!
               </p>
             </div>
             <button
@@ -277,95 +486,219 @@ export default function HomeFeed({
               onClick={() => setSelectedCategory(null)}
               className="px-5 py-2.5 rounded-full bg-zinc-900 text-white text-xs font-extrabold active:scale-95 transition-transform"
             >
-              Explorar otras categorías
+              Volver a Explorar
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
-            {categoryUsers.map((u) => {
-              const uid = u.uid || u.id;
-              const verified = isProfileVerified(u);
-              const liked = Boolean(likedIds[uid]);
-              const visibleAge = getDisplayAge(u);
-              const distInfo = formatUserDistanceLabel(u, currentUser);
-              return (
-                <div
-                  key={uid}
-                  onClick={() => onSelectProfile(u)}
-                  className="bg-white rounded-2xl overflow-hidden shadow-sm flex flex-col cursor-pointer"
-                >
-                  <div className="aspect-[3/4] relative bg-zinc-200">
-                    <img
-                      src={getPrimaryPhoto(u, 500, { seed: currentUser?.uid })}
-                      alt={u.name}
-                      loading="lazy"
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent" />
-                    <div className="absolute bottom-2.5 inset-x-3 text-white">
-                      <p className="text-sm font-extrabold truncate flex items-center gap-1">
-                        <span className="truncate">
-                          {u.name}
-                          {visibleAge !== null ? `, ${visibleAge}` : ''}
-                        </span>
-                        {verified && (
-                          <BadgeCheck className="w-4 h-4 text-sky-400 fill-sky-400 stroke-white shrink-0" />
-                        )}
-                      </p>
-                      <p className="text-[11px] text-white/85 truncate">
-                        {!distInfo.isHidden ? `${u.country?.flag || '🌎'} ` : '🔒 '}
-                        {distInfo.text}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="p-2 grid grid-cols-2 gap-1.5 bg-white">
-                    <button
-                      type="button"
-                      onClick={(e) => handleQuickLike(e, u)}
-                      className={`py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition ${
-                        liked ? 'bg-rose-50 text-[#FF2E54]' : 'bg-zinc-100 text-zinc-800 hover:bg-zinc-200'
-                      }`}
-                    >
-                      <Heart className={`w-3.5 h-3.5 ${liked ? 'fill-[#FF2E54] text-[#FF2E54]' : ''}`} />
-                      Like
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onStartChat?.(u);
-                      }}
-                      className="py-1.5 rounded-xl bg-zinc-900 text-white text-xs font-bold flex items-center justify-center gap-1 hover:bg-zinc-800 transition"
-                    >
-                      <MessageCircle className="w-3.5 h-3.5" />
-                      Chat
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="grid grid-cols-2 gap-3 pb-4">
+            {categoryUsers.map((u) => renderProfileGridCard(u))}
           </div>
         )}
+
+        <TinderMatchOverlay
+          matchEvent={matchBannerEvent}
+          currentUser={currentUser}
+          onClose={() => setMatchBannerEvent(null)}
+          onOpenChat={onOpenChat}
+          onStartChat={onStartChat}
+          onError={onError}
+        />
       </div>
     );
   }
 
   return (
     <div className="min-h-full bg-gradient-to-b from-[#FBF7F9] via-[#FAF7F9] to-[#F4F1F5] text-zinc-900 flex flex-col">
-      {/* Cabecera limpia editorial */}
-      <header className="px-4 pt-4 pb-1 pt-safe flex items-start justify-between gap-2">
-        <div>
-          <h1 className="font-display text-3xl font-black tracking-tight text-zinc-900">Explorar</h1>
-          <p className="text-sm font-medium text-zinc-500 mt-1 leading-snug">
-            Encuentra personas que buscan lo mismo en una relación
+      {/* Cabecera limpia editorial con cuota diaria de corazones */}
+      <header className="px-4 pt-4 pb-2 pt-safe flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h1 className="font-display text-3xl font-black tracking-tight text-zinc-900">
+            Explorar
+          </h1>
+          <p className="text-xs sm:text-sm font-medium text-zinc-500 mt-0.5 leading-snug">
+            Top Picks del día y personas con tu misma intención
           </p>
         </div>
-        <span className="mt-1 px-2.5 py-1 rounded-full bg-white text-zinc-700 text-[11px] font-extrabold shadow-sm shrink-0">
-          {users.length} activos
-        </span>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (!dailyLikeQuota.isPro && onOpenPro) {
+              onOpenPro();
+            } else {
+              onSuccess?.(
+                `❤️ Tienes ${dailyLikeQuota.remaining}/${dailyLikeQuota.limit} corazones disponibles hoy.`
+              );
+            }
+          }}
+          className="mt-1 px-2.5 py-1.5 rounded-full bg-white border border-rose-200/80 text-[#E62E5C] text-[11px] font-extrabold shadow-sm shrink-0 inline-flex items-center gap-1 tabular-nums active:scale-95 transition"
+          title={`Corazones diarios: ${dailyLikeQuota.remaining}/${dailyLikeQuota.limit}`}
+        >
+          <Heart className="w-3.5 h-3.5 fill-[#FF2E54] text-[#FF2E54]" />
+          <span>
+            {dailyLikeQuota.remaining}/{dailyLikeQuota.limit}
+          </span>
+        </button>
       </header>
 
-      {/* Grid de 2 columnas con tarjetas blancas verticales y contadores 100% reales */}
+      {/* ==================== 1. TOP PICKS DE PRIMERO (SELECCIÓN DESTACADA) ==================== */}
+      <section className="px-4 pt-2 pb-1 space-y-2.5">
+        <div className="rounded-[28px] p-4 bg-gradient-to-br from-[#FFF8F1] via-white to-[#FFF0F5] border border-amber-200/80 shadow-[0_14px_34px_-14px_rgba(255,46,84,0.14)] space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#FF2E54] via-rose-500 to-amber-400 text-white flex items-center justify-center shadow-sm shrink-0">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <h2 className="font-display text-sm sm:text-base font-black text-[#1D1317] truncate">
+                    Top Picks
+                  </h2>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-100/90 border border-amber-300/70 text-amber-900 text-[9.5px] font-black uppercase tracking-wider shrink-0">
+                    Destacados
+                  </span>
+                </div>
+                <p className="text-[11px] font-medium text-[#75646B] truncate">
+                  Los perfiles más populares y activos para ti hoy
+                </p>
+              </div>
+            </div>
+
+            {topPicks.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedCategory(TOP_PICKS_CATEGORY)}
+                className="px-3 py-1.5 rounded-full bg-[#160F13] hover:bg-[#271B22] text-white text-[11px] font-extrabold inline-flex items-center gap-1 shrink-0 shadow-sm active:scale-95 transition"
+              >
+                <span>Ver todos</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {topPicks.length === 0 ? (
+            <div className="py-6 text-center text-xs font-semibold text-zinc-500">
+              Cargando los perfiles Top Picks más destacados...
+            </div>
+          ) : (
+            <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
+              {topPicks.slice(0, 10).map((u) => {
+                const uid = u.uid || u.id;
+                const boosted = isBoostActive(u);
+                const verified = isProfileVerified(u);
+                const userIsPro = isProActive(u);
+                const online = isUserActuallyOnline(u);
+                const visibleAge = getDisplayAge(u);
+                const distInfo = formatUserDistanceLabel(u, currentUser);
+                const isMatched = matchedPeerSet.has(uid);
+                const liked = Boolean(likedIds[uid]) || isMatched;
+
+                return (
+                  <div
+                    key={`top-pick-${uid}`}
+                    onClick={() => onSelectProfile(u)}
+                    className={`w-[162px] sm:w-[174px] shrink-0 rounded-[24px] overflow-hidden bg-white border flex flex-col cursor-pointer transition-all active:scale-[0.98] ${
+                      isMatched
+                        ? 'border-rose-300 shadow-[0_12px_26px_-10px_rgba(255,46,84,0.32)] ring-1 ring-rose-300/60'
+                        : 'border-[#EFE2DE] shadow-sm hover:shadow-md'
+                    }`}
+                  >
+                    <div className="aspect-[3/3.8] relative bg-zinc-200 overflow-hidden">
+                      <img
+                        src={getPrimaryPhoto(u, 450, { seed: myUid })}
+                        alt={u.name}
+                        loading="lazy"
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+
+                      <div className="absolute top-2 inset-x-2 flex items-center justify-between gap-1">
+                        {boosted ? (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-400 text-zinc-950 text-[9px] font-black inline-flex items-center gap-0.5 shadow">
+                            <Zap className="w-2.5 h-2.5 fill-zinc-950" /> TOP
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full bg-black/55 backdrop-blur-sm border border-white/20 text-amber-200 text-[9px] font-black inline-flex items-center gap-1">
+                            <Crown className="w-2.5 h-2.5 text-amber-300" /> PICK
+                          </span>
+                        )}
+
+                        {userIsPro ? (
+                          <ProCrownBadge variant="compact" />
+                        ) : online ? (
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-white shadow" />
+                        ) : null}
+                      </div>
+
+                      {isMatched && (
+                        <div className="absolute inset-x-0 top-9 z-10">
+                          <TinderMatchRibbon variant="card" />
+                        </div>
+                      )}
+
+                      <div className="absolute bottom-2 inset-x-2.5 text-white">
+                        <p className="text-[13px] font-black truncate flex items-center gap-1">
+                          <span className="truncate">
+                            {u.name}
+                            {visibleAge !== null ? `, ${visibleAge}` : ''}
+                          </span>
+                          {verified && (
+                            <BadgeCheck className="w-3.5 h-3.5 text-sky-400 fill-sky-400 stroke-white shrink-0" />
+                          )}
+                        </p>
+                        <p className="text-[10.5px] text-white/80 truncate">
+                          {!distInfo.isHidden ? `${u.country?.flag || '🌎'} ` : '🔒 '}
+                          {distInfo.shortText || distInfo.text}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="p-2 grid grid-cols-2 gap-1.5 bg-white">
+                      <button
+                        type="button"
+                        disabled={busyLikeUid === uid}
+                        onClick={(e) => handleQuickLike(e, u)}
+                        className={`py-1.5 rounded-full text-[10.5px] font-black flex items-center justify-center gap-1 transition active:scale-95 ${
+                          isMatched
+                            ? 'bg-gradient-to-r from-[#FF1744] to-amber-500 text-white shadow-sm'
+                            : liked
+                            ? 'bg-rose-50 border border-rose-200 text-[#FF2E54]'
+                            : 'bg-[#FAF2F0] hover:bg-rose-50 text-[#1D1317] hover:text-[#FF2E54]'
+                        }`}
+                      >
+                        <Heart
+                          className={`w-3 h-3 ${
+                            isMatched
+                              ? 'fill-white text-white'
+                              : liked
+                              ? 'fill-[#FF2E54] text-[#FF2E54]'
+                              : ''
+                          }`}
+                        />
+                        {isMatched ? 'Match' : liked ? 'Listo' : 'Like'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onStartChat?.(u);
+                        }}
+                        className="py-1.5 rounded-full bg-[#160F13] hover:bg-[#271B22] text-white text-[10.5px] font-black flex items-center justify-center gap-1 transition active:scale-95"
+                      >
+                        <MessageCircle className="w-3 h-3" />
+                        Chat
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ==================== 2. INTENCIONES DE RELACIÓN (GRID 2 COLUMNAS) ==================== */}
       <div className="grid grid-cols-2 gap-3 p-4">
         {EXPLORE_CARDS.map((card) => {
           const Illustration = card.Illustration;
@@ -387,12 +720,10 @@ export default function HomeFeed({
                 )}
               </div>
 
-              {/* Ilustración estilo 3D grande y brillante en el centro */}
               <div className="flex items-center justify-center my-auto">
                 <Illustration />
               </div>
 
-              {/* Base: título en negrita a la izquierda y contador real a la derecha */}
               <div className="w-full flex items-end justify-between gap-2 pt-2">
                 <span className="text-sm font-extrabold text-zinc-900 leading-tight">
                   {card.title}
@@ -429,6 +760,15 @@ export default function HomeFeed({
           ))}
         </div>
       </div>
+
+      <TinderMatchOverlay
+        matchEvent={matchBannerEvent}
+        currentUser={currentUser}
+        onClose={() => setMatchBannerEvent(null)}
+        onOpenChat={onOpenChat}
+        onStartChat={onStartChat}
+        onError={onError}
+      />
     </div>
   );
 }

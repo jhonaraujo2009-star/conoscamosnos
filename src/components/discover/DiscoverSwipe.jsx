@@ -36,6 +36,7 @@ import { fetchDiscoverProfiles } from '../../services/userService';
 import {
   calculateAffinityScore,
   formatUserDistanceLabel,
+  getDailyLikeQuota,
   getDisplayAge,
   getOrderedPhotos,
   getPrimaryPhoto,
@@ -208,6 +209,7 @@ export default function DiscoverSwipe({
 
   const blockedKey = (currentUser?.blockedUsers || []).join(',');
   const superLikeQuota = useMemo(() => getSuperLikeQuota(currentUser), [currentUser]);
+  const dailyLikeQuota = useMemo(() => getDailyLikeQuota(currentUser), [currentUser]);
 
   const resetCardDomStyle = useCallback((withTransition = false) => {
     const el = activeCardRef.current;
@@ -469,6 +471,21 @@ export default function DiscoverSwipe({
 
   const triggerLike = useCallback(() => {
     if (!topCard || busyRef.current) return;
+
+    if (dailyLikeQuota.remaining <= 0) {
+      resetCardDomStyle(true);
+      triggerHaptic([20, 40, 20]);
+      onError?.(
+        dailyLikeQuota.isPro
+          ? '❤️ Alcanzaste tus 100 corazones diarios PRO. Se renuevan mañana.'
+          : '❤️ Alcanzaste tu límite de 25 corazones al día. Hazte Conoscamosnos PRO para disfrutar 100 corazones diarios.'
+      );
+      if (!dailyLikeQuota.isPro) {
+        (onOpenPro || onOpenDiamondStore)?.();
+      }
+      return;
+    }
+
     busyRef.current = true;
     const target = topCard;
     const likedPhotoUrl = topCardPhotos[photoIdx] || topCardPhotos[0] || '';
@@ -489,10 +506,27 @@ export default function DiscoverSwipe({
           setMatchPopup({ targetUser: target, matchId: res.matchId, isSuperLike: false });
         }
       } catch (err) {
+        const targetId = target.uid || target.id;
+        setCards((prev) =>
+          prev.some((c) => (c.uid || c.id) === targetId) ? prev : [target, ...prev]
+        );
         onError?.(err.message || 'No se pudo enviar Like.');
+        if (!dailyLikeQuota.isPro && err.code === 'DAILY_LIKE_LIMIT_REACHED') {
+          (onOpenPro || onOpenDiamondStore)?.();
+        }
       }
     });
-  }, [topCard, topCardPhotos, photoIdx, flyOutAndAdvance, onError]);
+  }, [
+    topCard,
+    topCardPhotos,
+    photoIdx,
+    dailyLikeQuota,
+    resetCardDomStyle,
+    flyOutAndAdvance,
+    onOpenPro,
+    onOpenDiamondStore,
+    onError,
+  ]);
 
   const triggerSuperLike = useCallback(() => {
     if (!topCard || busyRef.current) return;
@@ -1732,19 +1766,31 @@ export default function DiscoverSwipe({
                 </div>
               </div>
 
-              <div>
-                <p
-                  className={`text-[11px] font-extrabold uppercase tracking-widest ${
-                    isSuperMatch ? 'text-sky-300' : 'text-rose-300'
-                  }`}
+              <div className="-mx-6">
+                <div
+                  className={`relative overflow-hidden py-2.5 px-4 bg-gradient-to-r ${
+                    isSuperMatch
+                      ? 'from-sky-500 via-blue-600 to-amber-400'
+                      : 'from-[#FF1744] via-[#FF2E63] to-amber-500'
+                  } border-y border-white/35 shadow-[0_10px_30px_rgba(255,46,84,0.5)]`}
                 >
-                  {isSuperMatch ? '⭐ ¡Conexión Destacada!' : '¡Conexión mutua!'}
-                </p>
-                <h3 className="font-serif-display text-3xl font-bold text-white mt-0.5">
-                  {isSuperMatch ? '¡Es un Super Match!' : '¡Es un Match!'}
+                  <div className="pointer-events-none absolute inset-0 pro-crown-sheen" />
+                  <div className="relative flex items-center justify-center gap-2 text-white">
+                    <Flame className="w-4 h-4 fill-amber-200 text-amber-200 shrink-0" />
+                    <span className="font-display text-sm sm:text-base font-black italic uppercase tracking-[0.15em] drop-shadow">
+                      {isSuperMatch ? '¡Super Match! · Emparejados' : '¡Han hecho Match! · Emparejados'}
+                    </span>
+                    <Sparkles className="w-4 h-4 text-amber-200 shrink-0" />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-serif-display text-2xl sm:text-3xl font-bold text-white mt-0.5">
+                  Tú y {target.name}
                 </h3>
                 <p className="text-xs text-rose-100/80 mt-1">
-                  A ti y a <strong className="text-white">{target.name}</strong> se gustaron mutuamente.
+                  Se dieron corazón mutuamente. ¡Ya están emparejados!
                 </p>
               </div>
 

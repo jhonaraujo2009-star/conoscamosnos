@@ -843,8 +843,14 @@ function UserAppView({ onSuccess, onError }) {
           <HomeFeed
             key={`explore-${userProfile.uid}`}
             currentUser={userProfile}
+            matches={matches}
             onSelectProfile={setSelectedProfile}
             onStartChat={handleStartDirectChat}
+            onOpenChat={(chatSession) => {
+              handleOpenChatSession(chatSession);
+              setActiveTab('chat');
+            }}
+            onOpenPro={() => openDiamondStore('pro')}
             onSwipeCategory={(categoryIntention) => {
               setSwipeIntention(categoryIntention || 'Todos');
               setActiveTab('swipe');

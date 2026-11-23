@@ -50,6 +50,7 @@ import {
   formatInterestWithIcon,
   formatSwipeActivity,
   formatUserDistanceLabel,
+  getDailyLikeQuota,
   getDisplayAge,
   getOrderedPhotos,
   getPrimaryPhoto,
@@ -68,6 +69,7 @@ import GiftAnimationOverlay from '../chat/GiftAnimationOverlay';
 import GiftPickerModal from '../chat/GiftPickerModal';
 import GiftShowcaseCard from '../monetization/GiftShowcaseCard';
 import ProCrownBadge from '../monetization/ProCrownBadge';
+import { TinderMatchRibbon } from './TinderMatchBanner';
 
 export default function PublicProfileModal({
   targetUser,
@@ -282,6 +284,20 @@ export default function PublicProfileModal({
 
   const handleLike = async () => {
     if (status.iLiked || status.isMatched || isSelf) return;
+    const dailyQuota = getDailyLikeQuota(currentUser);
+    if (dailyQuota.remaining <= 0) {
+      triggerHaptic([20, 40, 20]);
+      onError?.(
+        dailyQuota.isPro
+          ? '❤️ Alcanzaste tus 100 corazones diarios PRO. Se renuevan mañana.'
+          : '❤️ Alcanzaste tu límite de 25 corazones al día. Activa Conoscamosnos PRO para disfrutar 100 corazones diarios.'
+      );
+      if (!dailyQuota.isPro) {
+        onClose?.();
+        (onOpenPro || (() => onOpenDiamondStore?.('pro')))();
+      }
+      return;
+    }
     setBusyAction('like');
     triggerHaptic([12, 24]);
     try {
@@ -298,7 +314,7 @@ export default function PublicProfileModal({
         matchId: res.matchId,
       }));
       if (res.matched) {
-        onSuccess?.(`🎉 ¡Es un Match con ${liveTarget.name}! Ya pueden chatear.`);
+        onSuccess?.(`🎉 ¡Han hecho Match con ${liveTarget.name}! Ya están emparejados.`);
       } else {
         onSuccess?.(
           `❤️ Le diste Like a la foto #${safePhotoIdx + 1} de ${liveTarget.name}.`
@@ -306,6 +322,10 @@ export default function PublicProfileModal({
       }
     } catch (err) {
       onError?.(err.message || 'No se pudo enviar el Like.');
+      if (err.code === 'DAILY_LIKE_LIMIT_REACHED' && !isProActive(currentUser)) {
+        onClose?.();
+        (onOpenPro || (() => onOpenDiamondStore?.('pro')))();
+      }
     } finally {
       setBusyAction('');
     }
@@ -732,17 +752,23 @@ export default function PublicProfileModal({
             {/* 1. Banner contextual cuando viene de Likes o ya hicieron Match */}
             {!isSelf && (status.isMatched || incomingLike) && (
               status.isMatched ? (
-                <div className="p-3.5 rounded-[22px] bg-gradient-to-r from-emerald-50 via-[#FFF4F6] to-rose-50 border border-emerald-200/80 flex items-center gap-3 shadow-card">
-                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white flex items-center justify-center shrink-0 shadow-sm">
-                    <Check className="w-5 h-5 stroke-[2.8]" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-black text-emerald-950">
-                      💘 ¡Son Match!
-                    </p>
-                    <p className="text-[11px] font-medium text-emerald-800/90 leading-snug">
-                      Ya pueden conversar libremente sin límites.
-                    </p>
+                <div className="space-y-2">
+                  <TinderMatchRibbon
+                    isSuperMatch={Boolean(incomingLike?.isSuperLike)}
+                    variant="wide"
+                  />
+                  <div className="p-3.5 rounded-[22px] bg-gradient-to-r from-[#FFF0F4] via-[#FFF6F2] to-amber-50 border border-rose-200/80 flex items-center gap-3 shadow-card">
+                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#FF1744] via-[#FF2E63] to-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                      <Check className="w-5 h-5 stroke-[2.8]" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-black text-[#1D1317]">
+                        💘 ¡Han hecho Match! · Emparejados
+                      </p>
+                      <p className="text-[11px] font-medium text-[#6B545B] leading-snug">
+                        Se dieron corazón mutuamente. Ya pueden conversar sin límites.
+                      </p>
+                    </div>
                   </div>
                 </div>
               ) : incomingLike?.isSuperLike ? (

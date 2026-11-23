@@ -83,6 +83,8 @@ export const EXCLUSIVE_PHOTO_DEFAULT_COST = 15;
 export const MIN_AGE = 18;
 export const SUPER_LIKE_WEEKLY_LIMIT_FREE = 2;
 export const SUPER_LIKE_WEEKLY_LIMIT_PRO = 20;
+export const DAILY_LIKE_LIMIT_FREE = 25;
+export const DAILY_LIKE_LIMIT_PRO = 100;
 
 export const VIRTUAL_GIFTS = [
   {

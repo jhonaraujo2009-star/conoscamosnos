@@ -1,4 +1,6 @@
 import {
+  DAILY_LIKE_LIMIT_FREE,
+  DAILY_LIKE_LIMIT_PRO,
   ECONOMY_CONFIG,
   SUPER_LIKE_WEEKLY_LIMIT_FREE,
   SUPER_LIKE_WEEKLY_LIMIT_PRO,
@@ -63,6 +65,32 @@ export function getSuperLikeQuota(userProfile) {
     isPro: pro,
     weekKey,
     nextResetMs: getNextIsoWeekResetMs(),
+  };
+}
+
+export function getUtcDayKey(date = new Date()) {
+  const d = date instanceof Date ? date : new Date();
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+export function getDailyLikeQuota(userProfile, date = new Date()) {
+  const pro = isProActive(userProfile);
+  const limit = pro ? DAILY_LIKE_LIMIT_PRO : DAILY_LIKE_LIMIT_FREE;
+  const dayKey = getUtcDayKey(date);
+  const used =
+    userProfile?.dailyLikesDayKey === dayKey
+      ? Math.max(0, Math.floor(Number(userProfile?.dailyLikesUsedToday || 0)))
+      : 0;
+  const remaining = Math.max(0, limit - used);
+  return {
+    used,
+    limit,
+    remaining,
+    isPro: pro,
+    dayKey,
   };
 }
 
