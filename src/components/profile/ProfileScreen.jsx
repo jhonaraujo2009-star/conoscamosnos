@@ -730,7 +730,7 @@ export default function ProfileScreen({
                   className="p-2.5 rounded-2xl bg-gradient-to-br from-rose-50/95 via-white to-amber-50/90 border border-rose-200/80 text-left hover:border-[#FF2E54] active:scale-[0.99] transition flex items-center justify-between gap-2"
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#FF2E54] to-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#FF2E54] to-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm">
                       <Crown className="w-4 h-4" />
                     </div>
                     <div className="min-w-0">

@@ -191,10 +191,23 @@ export default function PublicProfileModal({
       liveTarget.requireGiftToChat &&
       !isGiftChatUnlocked(status.matchData, currentUser?.uid, liveTarget)
   );
+  const hasChatUnlock = Boolean(
+    policy.isFreeMode ||
+      viewerIsPro ||
+      (userUnlocks?.chatUnlockedUserIds || []).includes(targetId)
+  );
+  const canUnlockWithAdOrDiamonds = Boolean(
+    !isSelf &&
+      !status.isMatched &&
+      !allowsPaidDirect &&
+      !needsGiftForChat &&
+      !hasChatUnlock &&
+      (policy.enableRewardedAds || policy.enableDiamondCharges)
+  );
   const isChatFreeOrUnlocked = Boolean(
     !allowsPaidDirect &&
       !needsGiftForChat &&
-      status.isMatched
+      (status.isMatched || hasChatUnlock)
   );
 
   const photos = orderedPhotos;
@@ -1107,7 +1120,9 @@ export default function PublicProfileModal({
                     ? 'Regalo y chat'
                     : isChatFreeOrUnlocked
                     ? 'Enviar mensaje'
-                    : 'Requiere Match'}
+                    : canUnlockWithAdOrDiamonds
+                    ? 'Chatear (Anuncio / 💎)'
+                    : 'Solo PRO o Match'}
                 </span>
                 {!isChatFreeOrUnlocked && !allowsPaidDirect && (
                   <Lock className="w-3.5 h-3.5 opacity-75 shrink-0" />

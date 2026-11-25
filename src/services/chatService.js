@@ -8,6 +8,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  deleteField,
   updateDoc,
   where,
 } from 'firebase/firestore';
@@ -266,6 +267,47 @@ export async function deleteConversationForUser(matchId, currentUid) {
     [`lastReadByClientMs.${currentUid}`]: nowMs,
     [`unreadCount.${currentUid}`]: 0,
   });
+}
+
+/**
+ * Oculta o vuelve a mostrar un Match únicamente en la vista del usuario actual.
+ */
+export async function setMatchHiddenForUser(matchId, currentUid, hidden = true) {
+  if (!matchId || !currentUid) return;
+  await updateDoc(doc(db, 'matches', matchId), {
+    [`hiddenBy.${currentUid}`]: hidden ? true : deleteField(),
+  });
+}
+
+/**
+ * Elimina un Match mutuamente para ambos usuarios en el servidor (match, mensajes y ambos likes).
+ * Así desaparecerá de inmediato tanto para quien lo eliminó como para la otra persona.
+ */
+export async function unmatchUser(targetUserId) {
+  if (!targetUserId) {
+    throw new Error('Usuario inválido para eliminar Match.');
+  }
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error('Debes iniciar sesión para eliminar un Match.');
+  }
+  const idToken = await currentUser.getIdToken();
+  const res = await fetch('/api/economy/spend', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({
+      action: 'unmatch_user',
+      payload: { targetUserId },
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.error || 'No se pudo eliminar el Match en este momento.');
+  }
+  return data;
 }
 
 /**

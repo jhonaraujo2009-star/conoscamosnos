@@ -8,6 +8,7 @@ import {
   ExternalLink,
   Flag,
   Flame,
+  ImagePlus,
   LogOut,
   Settings,
   X,
@@ -66,6 +67,7 @@ import {
 } from '../../utils/formatters';
 import AdminOverviewTab from './AdminOverviewTab';
 import AdminReportsTab from './AdminReportsTab';
+import AdminBulkProfilesTab from './AdminBulkProfilesTab';
 import AdminRevenueCleanupModal from './AdminRevenueCleanupModal';
 import AdminSettingsTab from './AdminSettingsTab';
 import AdminTreasuryTab from './AdminTreasuryTab';
@@ -73,6 +75,7 @@ import AdminVerificationTab from './AdminVerificationTab';
 
 const NAV_TABS = [
   { id: 'overview', label: 'Estadísticas', icon: BarChart3 },
+  { id: 'bulk_profiles', label: 'Subir 100+ Perfiles', icon: ImagePlus },
   { id: 'reports', label: 'Seguridad', icon: Flag },
   { id: 'verification', label: 'Check Azul', icon: BadgeCheck },
   { id: 'treasury', label: 'Tesorería', icon: DollarSign },
@@ -1047,6 +1050,21 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
           <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
+              onClick={() => setActiveTab('bulk_profiles')}
+              className={`px-3.5 py-2.5 rounded-full text-xs sm:text-sm font-black transition flex items-center gap-1.5 border ${
+                activeTab === 'bulk_profiles'
+                  ? 'bg-[#2C241E] text-white border-[#2C241E] shadow-md'
+                  : 'bg-[#FFFDF9] hover:bg-[#F7F1E5] text-[#2C241E] border-[#DFD1B4]'
+              }`}
+              title="Subir múltiples fotos y generar perfiles automáticamente"
+            >
+              <ImagePlus className="w-4 h-4 text-[#FF2E54]" />
+              <span className="hidden sm:inline">+ Subir Perfiles</span>
+              <span className="sm:hidden">+ Perfiles</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => navigate('/app')}
               className="px-4 py-2.5 rounded-full bg-gradient-to-r from-[#FF2E54] via-rose-500 to-amber-500 text-white text-xs sm:text-sm font-black shadow-md shadow-rose-200 hover:brightness-105 active:scale-[0.98] transition flex items-center gap-2"
             >
@@ -1162,6 +1180,14 @@ export default function AdminDashboardPage({ onSuccess, onError }) {
             onOpenRevenueCleanup={() => setCleanupModalOpen(true)}
             onPayWithdrawal={handlePayWithdrawal}
             onRejectWithdrawal={handleRejectWithdrawal}
+          />
+        )}
+
+        {activeTab === 'bulk_profiles' && (
+          <AdminBulkProfilesTab
+            users={users}
+            onSuccess={onSuccess}
+            onError={onError}
           />
         )}
 

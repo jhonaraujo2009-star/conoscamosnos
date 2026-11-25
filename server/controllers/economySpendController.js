@@ -1130,6 +1130,56 @@ export async function processEconomySpend({
       };
     }
 
+    if (cleanAction === 'unmatch_user') {
+      const targetUid = String(
+        payload?.targetUserId || payload?.targetUid || payload?.peerId || ''
+      ).trim();
+      if (!targetUid || targetUid === uid) {
+        throw new HttpError(400, 'Usuario inválido para eliminar el Match.');
+      }
+
+      const matchId = buildMatchId(uid, targetUid);
+      const matchRef = db.collection('matches').doc(matchId);
+      const matchSnap = await matchRef.get();
+
+      if (matchSnap.exists) {
+        const participants = Array.isArray(matchSnap.data()?.participants)
+          ? matchSnap.data().participants
+          : [];
+        if (!participants.includes(uid)) {
+          throw new HttpError(403, 'No tienes permiso para eliminar este Match.');
+        }
+      }
+
+      // Borrar subcolección messages en lotes seguros
+      while (true) {
+        const msgBatchSnap = await matchRef.collection('messages').limit(400).get();
+        if (msgBatchSnap.empty) break;
+        const msgBatch = db.batch();
+        msgBatchSnap.docs.forEach((docSnap) => msgBatch.delete(docSnap.ref));
+        await msgBatch.commit();
+        if (msgBatchSnap.size < 400) break;
+      }
+
+      const batch = db.batch();
+      if (matchSnap.exists) {
+        batch.delete(matchRef);
+      }
+      batch.delete(db.collection('likes').doc(`${uid}_${targetUid}`));
+      batch.delete(db.collection('likes').doc(`${targetUid}_${uid}`));
+      await batch.commit();
+
+      return {
+        statusCode: 200,
+        body: {
+          ok: true,
+          unmatched: true,
+          matchId,
+          targetUserId: targetUid,
+        },
+      };
+    }
+
     throw new HttpError(400, 'Acción económica no reconocida.');
   } catch (err) {
     if (err instanceof HttpError) {

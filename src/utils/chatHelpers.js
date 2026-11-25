@@ -108,3 +108,8 @@ export function formatChatListTime(ms, now = Date.now()) {
 export function getMatchActivityMs(match) {
   return Math.max(toMs(match?.lastMessageAt), Number(match?.lastMessageClientMs || 0));
 }
+
+export function isMatchHiddenForUser(match, uid) {
+  if (!match || !uid) return false;
+  return Boolean(match.hiddenBy?.[uid]);
+}

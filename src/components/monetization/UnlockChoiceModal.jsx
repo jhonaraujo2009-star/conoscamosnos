@@ -58,6 +58,7 @@ export default function UnlockChoiceModal({
       targetName: firstName,
       duration,
       directLink: policy.monetagDirectLink,
+      embedded: true,
     });
     onWatchAd?.(session);
   };
@@ -152,8 +153,9 @@ export default function UnlockChoiceModal({
             <div className="px-3.5 py-2.5 rounded-2xl bg-white border border-zinc-200/80 flex items-start gap-2.5 text-[11px] text-zinc-600 leading-relaxed shadow-card">
               <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
               <span>
-                Al tocar <strong className="text-zinc-900">Ver 1 anuncio gratis</strong> se abrirá la página del patrocinador ({duration}s). Cuando veas{' '}
-                <strong className="text-emerald-700">✅ ¡Listo!</strong> en la pestaña de la app, ya puedes cerrar el anuncio y entrar.
+                Al tocar <strong className="text-zinc-900">Ver 1 anuncio gratis</strong> se reproducirá aquí mismo durante{' '}
+                {duration}s. Al terminar, toca{' '}
+                <strong className="text-emerald-700">¡Reclamar recompensa!</strong> para entrar al instante.
               </span>
             </div>
           )}
@@ -180,7 +182,7 @@ export default function UnlockChoiceModal({
                       </span>
                     </div>
                     <p className="text-[11px] text-zinc-500 mt-0.5">
-                      Abre el anuncio {duration}s en nueva pestaña sin gastar Diamantes
+                      Reproduce el anuncio {duration}s aquí mismo sin gastar Diamantes
                     </p>
                   </div>
                 </div>

@@ -163,6 +163,12 @@ function UserAppView({ onSuccess, onError }) {
   const likesLoadedRef = useRef(false);
   const blockedUsersRef = useRef([]);
   blockedUsersRef.current = userProfile?.blockedUsers || [];
+  const tabHistoryRef = useRef([]);
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+  const lastBackExitPromptRef = useRef(0);
+  const bypassPopRef = useRef(false);
+  const closeTopOverlayRef = useRef(() => false);
 
   const handleSuccess = onSuccess;
   const handleError = onError;
@@ -243,6 +249,8 @@ function UserAppView({ onSuccess, onError }) {
     setSwipeGenderPref(null);
     setSwipeAgeRange({ min: MIN_AGE, max: 99 });
     setSwipeMoodKey('Todos');
+    tabHistoryRef.current = [];
+    lastBackExitPromptRef.current = 0;
     setActiveTab('swipe');
   }, [firebaseUser?.uid]);
 
@@ -368,7 +376,17 @@ function UserAppView({ onSuccess, onError }) {
 
   const handleChangeTab = useCallback(
     (nextTab) => {
-      setActiveTab(nextTab);
+      if (!nextTab) return;
+      setActiveTab((prev) => {
+        if (prev !== nextTab) {
+          const stack = tabHistoryRef.current;
+          if (stack[stack.length - 1] !== prev) {
+            stack.push(prev);
+            if (stack.length > 15) stack.shift();
+          }
+        }
+        return nextTab;
+      });
       // Al abrir la pestaña Likes, desaparece inmediatamente la burbuja de Likes.
       // La burbuja de Chat NO desaparece al abrir la pestaña: solo descuenta al abrir cada conversación.
       if (nextTab === 'likes') {
@@ -377,6 +395,130 @@ function UserAppView({ onSuccess, onError }) {
     },
     [markLikesAsSeen]
   );
+
+  // Orden jerárquico de cierre de modales/chat al presionar el botón Atrás del dispositivo
+  closeTopOverlayRef.current = () => {
+    if (likeChatAdTarget) {
+      setLikeChatAdTarget(null);
+      setLikeChatAdSession(null);
+      return true;
+    }
+    if (likeChatGateTarget) {
+      setLikeChatGateTarget(null);
+      return true;
+    }
+    if (paidMessageTarget) {
+      setPaidMessageTarget(null);
+      return true;
+    }
+    if (giftGateTarget) {
+      setGiftGateTarget(null);
+      setGateGiftAnim(null);
+      return true;
+    }
+    if (diamondStoreOpen) {
+      setDiamondStoreOpen(false);
+      return true;
+    }
+    if (withdrawalsOpen) {
+      setWithdrawalsOpen(false);
+      return true;
+    }
+    if (giftNotificationsOpen) {
+      setGiftNotificationsOpen(false);
+      return true;
+    }
+    if (boostOpen) {
+      setBoostOpen(false);
+      return true;
+    }
+    if (safetyCenterOpen) {
+      setSafetyCenterOpen(false);
+      return true;
+    }
+    if (selectedProfile) {
+      setSelectedProfile(null);
+      return true;
+    }
+    if (activeChat) {
+      setActiveChat(null);
+      return true;
+    }
+    return false;
+  };
+
+  // Memoria de navegación y prevención de cierre accidental con botón Atrás (Android TWA / Web)
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const ensureSentinel = () => {
+      try {
+        const st = window.history.state || {};
+        if (!st.__conoscamosnosGuard) {
+          window.history.pushState(
+            { ...st, __conoscamosnosGuard: true },
+            '',
+            window.location.href
+          );
+        }
+      } catch {
+        // noop
+      }
+    };
+
+    ensureSentinel();
+
+    const handlePopState = () => {
+      if (bypassPopRef.current) return;
+
+      // 1) Cerrar primero cualquier modal, perfil abierto o sala de chat activa
+      if (closeTopOverlayRef.current()) {
+        lastBackExitPromptRef.current = 0;
+        ensureSentinel();
+        return;
+      }
+
+      // 2) Volver a la pestaña visitada anteriormente
+      if (tabHistoryRef.current.length > 0) {
+        const prevTab = tabHistoryRef.current.pop();
+        if (prevTab && prevTab !== activeTabRef.current) {
+          setActiveTab(prevTab);
+          if (prevTab === 'likes') {
+            markLikesAsSeen();
+          }
+          lastBackExitPromptRef.current = 0;
+          ensureSentinel();
+          return;
+        }
+      }
+
+      // 3) Si no estamos en Descubrir ('swipe'), volver primero a Descubrir
+      if (activeTabRef.current !== 'swipe') {
+        setActiveTab('swipe');
+        lastBackExitPromptRef.current = 0;
+        ensureSentinel();
+        return;
+      }
+
+      // 4) En la pantalla principal ('swipe'), pedir doble confirmación en 2.5s antes de salir
+      const now = Date.now();
+      if (now - lastBackExitPromptRef.current > 2500) {
+        lastBackExitPromptRef.current = now;
+        handleSuccess?.('Presiona Atrás otra vez para salir de Conoscamosnos.');
+        ensureSentinel();
+        return;
+      }
+
+      bypassPopRef.current = true;
+      window.setTimeout(() => {
+        bypassPopRef.current = false;
+      }, 600);
+      window.history.back();
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [markLikesAsSeen, handleSuccess]);
 
   // Si llegan likes nuevos mientras el usuario ya está viendo la pestaña Likes, mantenerlos marcados como vistos
   useEffect(() => {
@@ -516,7 +658,7 @@ function UserAppView({ onSuccess, onError }) {
             match: { ...existingMatch, isPaidRequest: false, paidRequestStatus: 'accepted' },
             peerUser: freshTarget,
           });
-          setActiveTab('chat');
+          handleChangeTab('chat');
           return;
         }
 
@@ -524,7 +666,13 @@ function UserAppView({ onSuccess, onError }) {
           existingMatch && !isRejectedPaidRequest(existingMatch)
         );
 
-        // Si NO hay match todavía, aplicar la regla de Monetización de Mensajes Directos
+        const alreadyUnlockedChat = Boolean(
+          userIsPro ||
+            accessPolicy.isFreeMode ||
+            (userUnlocks?.chatUnlockedUserIds || []).includes(targetUid)
+        );
+
+        // Si NO hay match todavía, aplicar Monetización VIP -> Regalo -> Anuncio/Diamantes o Match obligatorio
         if (!hasActiveMatch && !options.skipLikeChatGate) {
           if (freshTarget.allowPaidMessages === true) {
             setSelectedProfile(null);
@@ -536,10 +684,17 @@ function UserAppView({ onSuccess, onError }) {
             setGiftGateTarget(freshTarget);
             return;
           }
-          handleError(
-            `Debes hacer Match con ${freshTarget.name || 'esta persona'} primero para poder enviarle un mensaje.`
-          );
-          return;
+          if (!alreadyUnlockedChat) {
+            if (accessPolicy.enableRewardedAds || accessPolicy.enableDiamondCharges) {
+              setSelectedProfile(null);
+              setLikeChatGateTarget(freshTarget);
+              return;
+            }
+            handleError(
+              `Debes hacer Match con ${freshTarget.name || 'esta persona'} primero para poder enviarle un mensaje.`
+            );
+            return;
+          }
         }
 
         // Si el perfil exige regalo para iniciar chats nuevos y el usuario no es miembro PRO
@@ -551,11 +706,9 @@ function UserAppView({ onSuccess, onError }) {
 
         // Regla global dinámica desde Panel Super Admin (Libre / PRO / Solo Ads / Solo Diamantes / Híbrido)
         const isChatUnlocked =
-          userIsPro ||
-          accessPolicy.isFreeMode ||
+          alreadyUnlockedChat ||
           Boolean(options.skipLikeChatGate) ||
-          hasActiveMatch ||
-          (userUnlocks?.chatUnlockedUserIds || []).includes(targetUid);
+          hasActiveMatch;
 
         if (!isChatUnlocked) {
           setSelectedProfile(null);
@@ -572,12 +725,12 @@ function UserAppView({ onSuccess, onError }) {
           match: res.matchData,
           peerUser: freshTarget,
         });
-        setActiveTab('chat');
+        handleChangeTab('chat');
       } catch (err) {
         handleError(err.message || 'No se pudo abrir la conversación privada.');
       }
     },
-    [userProfile, matches, userUnlocks, accessPolicy.isFreeMode, handleOpenChatSession, handleError]
+    [userProfile, matches, userUnlocks, accessPolicy, handleOpenChatSession, handleChangeTab, handleError]
   );
 
   const handleSendPaidDirectMessage = useCallback(
@@ -764,7 +917,7 @@ function UserAppView({ onSuccess, onError }) {
           },
           peerUser: target,
         });
-        setActiveTab('chat');
+        handleChangeTab('chat');
       } catch (err) {
         handleError(err.message || 'No se pudo enviar el regalo.');
       } finally {
@@ -829,7 +982,7 @@ function UserAppView({ onSuccess, onError }) {
             onStartChat={handleStartDirectChat}
             onOpenChat={(chatSession) => {
               handleOpenChatSession(chatSession);
-              setActiveTab('chat');
+              handleChangeTab('chat');
             }}
             onOpenBoost={() => setBoostOpen(true)}
             onOpenDiamondStore={() => openDiamondStore('buy')}
@@ -848,12 +1001,12 @@ function UserAppView({ onSuccess, onError }) {
             onStartChat={handleStartDirectChat}
             onOpenChat={(chatSession) => {
               handleOpenChatSession(chatSession);
-              setActiveTab('chat');
+              handleChangeTab('chat');
             }}
             onOpenPro={() => openDiamondStore('pro')}
             onSwipeCategory={(categoryIntention) => {
               setSwipeIntention(categoryIntention || 'Todos');
-              setActiveTab('swipe');
+              handleChangeTab('swipe');
             }}
             onSuccess={handleSuccess}
             onError={handleError}
@@ -871,7 +1024,7 @@ function UserAppView({ onSuccess, onError }) {
             onStartChat={handleStartDirectChat}
             onOpenChat={(chatSession) => {
               handleOpenChatSession(chatSession);
-              setActiveTab('chat');
+              handleChangeTab('chat');
             }}
             onOpenDiamondStore={() => openDiamondStore('buy')}
             onOpenPro={() => openDiamondStore('pro')}

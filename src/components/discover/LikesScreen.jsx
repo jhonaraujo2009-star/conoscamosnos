@@ -3,17 +3,23 @@ import {
   BadgeCheck,
   Camera,
   Crown,
+  Eye,
+  EyeOff,
   Flame,
   Gem,
   Heart,
+  Loader2,
   Lock,
   MapPin,
   MessageCircle,
   Play,
   Sparkles,
   Star,
+  Trash2,
   Tv,
   User,
+  UserX,
+  X,
   Zap,
 } from 'lucide-react';
 import { resolveAccessPolicy } from '../../config/constants';
@@ -24,10 +30,12 @@ import {
   unlockChatWithDiamonds,
   unlockLikeWithDiamonds,
 } from '../../services/adRewardService';
+import { setMatchHiddenForUser, unmatchUser } from '../../services/chatService';
 import { sendLike } from '../../services/discoveryService';
 import { getUserById } from '../../services/userService';
 import {
   isIncomingPendingPaidRequest,
+  isMatchHiddenForUser,
   isOutgoingPendingPaidRequest,
   isRejectedPaidRequest,
 } from '../../utils/chatHelpers';
@@ -155,6 +163,12 @@ export default function LikesScreen({
   const [choiceModal, setChoiceModal] = useState(null); // { mode: 'reveal_like' | 'unlock_chat', user }
   const [activeAd, setActiveAd] = useState(null); // { purpose: 'reveal_like' | 'unlock_chat', user, session }
   const [busyDiamondAction, setBusyDiamondAction] = useState(false);
+
+  // Gestión de Mis Matches: ocultar/mostrar localmente y eliminar Match mutuo
+  const [showHiddenMatches, setShowHiddenMatches] = useState(false);
+  const [unmatchTarget, setUnmatchTarget] = useState(null); // { match, peerId, user }
+  const [busyUnmatch, setBusyUnmatch] = useState(false);
+  const [togglingHideId, setTogglingHideId] = useState(null);
 
   // Caché local de perfiles para evitar parpadeos en vivo y limpiar al cambiar usuario
   const profileCacheRef = useRef(new Map());
@@ -375,9 +389,51 @@ export default function LikesScreen({
         peerId,
         user: livePeer,
         isSuperMatch: Boolean(incomingLikeDoc?.isSuperLike),
+        isHidden: isMatchHiddenForUser(match, myUid),
       };
     });
   }, [activeMatchesList, myUid, matchPeerProfiles, likeBySender]);
+
+  const visibleMatches = useMemo(() => matchedItems.filter((item) => !item.isHidden), [matchedItems]);
+  const hiddenMatches = useMemo(() => matchedItems.filter((item) => item.isHidden), [matchedItems]);
+  const displayedMatches = showHiddenMatches ? hiddenMatches : visibleMatches;
+
+  const handleToggleHideMatch = async (e, matchItem) => {
+    e?.stopPropagation?.();
+    if (!matchItem?.match?.id || !myUid || togglingHideId) return;
+    const nextHidden = !matchItem.isHidden;
+    setTogglingHideId(matchItem.match.id);
+    try {
+      await setMatchHiddenForUser(matchItem.match.id, myUid, nextHidden);
+      triggerHaptic('light');
+      onSuccess?.(
+        nextHidden
+          ? `Match con ${matchItem.user?.name || 'usuario'} ocultado de tu vista principal.`
+          : `Match con ${matchItem.user?.name || 'usuario'} visible nuevamente.`
+      );
+    } catch (err) {
+      onError?.(err?.message || 'No se pudo actualizar la visibilidad del Match.');
+    } finally {
+      setTogglingHideId(null);
+    }
+  };
+
+  const handleConfirmUnmatch = async () => {
+    if (!unmatchTarget?.peerId || busyUnmatch) return;
+    setBusyUnmatch(true);
+    try {
+      await unmatchUser(unmatchTarget.peerId);
+      triggerHaptic('medium');
+      onSuccess?.(
+        `Se eliminó el Match con ${unmatchTarget.user?.name || 'esta persona'} para ambos.`
+      );
+      setUnmatchTarget(null);
+    } catch (err) {
+      onError?.(err?.message || 'No se pudo eliminar el Match.');
+    } finally {
+      setBusyUnmatch(false);
+    }
+  };
 
   // Likes normales desbloqueados (PRO, Modo Libre, Match existente o desbloqueo individual)
   const revealedNormalSet = useMemo(() => {
@@ -696,7 +752,7 @@ export default function LikesScreen({
                 }`}
               />
               <span>Mis Matches</span>
-              {matchedItems.length > 0 && (
+              {visibleMatches.length > 0 && (
                 <span
                   className={`px-1.5 py-0.5 rounded-full text-[10px] font-black tabular-nums ${
                     subTab === 'matches'
@@ -704,7 +760,7 @@ export default function LikesScreen({
                       : 'bg-rose-100 text-[#FF2E54]'
                   }`}
                 >
-                  {matchedItems.length}
+                  {visibleMatches.length}
                 </span>
               )}
             </button>
@@ -1075,30 +1131,70 @@ export default function LikesScreen({
                     <Sparkles className="w-3 h-3" /> Emparejamientos Mutuos
                   </span>
                   <h2 className="font-display text-base sm:text-lg font-black text-white truncate">
-                    Mis Matches ({matchedItems.length})
+                    {showHiddenMatches
+                      ? `Matches ocultos (${hiddenMatches.length})`
+                      : `Mis Matches (${visibleMatches.length})`}
                   </h2>
                   <p className="text-[11px] text-rose-100/80 truncate">
-                    Se dieron corazón mutuamente · Chatea gratis
+                    {showHiddenMatches
+                      ? 'Ocultos solo para ti · Puedes mostrarlos cuando quieras'
+                      : 'Se dieron corazón mutuamente · Chatea, oculta o elimina'}
                   </p>
                 </div>
               </div>
+
+              {(hiddenMatches.length > 0 || showHiddenMatches) && (
+                <button
+                  type="button"
+                  onClick={() => setShowHiddenMatches((prev) => !prev)}
+                  className="shrink-0 px-3 py-1.5 rounded-full bg-white/15 hover:bg-white/25 border border-white/20 text-[11px] font-bold text-white flex items-center gap-1.5 transition"
+                >
+                  {showHiddenMatches ? (
+                    <>
+                      <Eye className="w-3.5 h-3.5 text-amber-300" />
+                      Activos ({visibleMatches.length})
+                    </>
+                  ) : (
+                    <>
+                      <EyeOff className="w-3.5 h-3.5 text-rose-200" />
+                      Ocultos ({hiddenMatches.length})
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
 
-          {matchedItems.length === 0 ? (
+          {displayedMatches.length === 0 ? (
             <div className="bg-white rounded-[30px] border border-[#EFE4E0] p-8 flex flex-col items-center justify-center py-12 text-center shadow-card space-y-3">
               <div className="w-16 h-16 rounded-[24px] bg-gradient-to-br from-rose-50 via-amber-50 to-pink-50 border border-rose-200/80 text-[#FF2E54] flex items-center justify-center shadow-inner">
-                <Heart className="w-8 h-8 fill-[#FF2E54]/20" />
+                {showHiddenMatches ? (
+                  <Eye className="w-8 h-8 text-zinc-400" />
+                ) : (
+                  <Heart className="w-8 h-8 fill-[#FF2E54]/20" />
+                )}
               </div>
               <div className="space-y-1 max-w-[260px]">
                 <p className="font-display text-base font-black text-zinc-900">
-                  Aún no tienes emparejamientos
+                  {showHiddenMatches
+                    ? 'No tienes Matches ocultos'
+                    : 'Aún no tienes emparejamientos'}
                 </p>
                 <p className="text-xs text-zinc-500 leading-relaxed">
-                  Cuando tú y otra persona se den corazón mutuamente, aparecerán aquí con su insignia oficial de Match.
+                  {showHiddenMatches
+                    ? 'Cuando ocultes un Match desde su tarjeta, aparecerá aquí guardado de forma privada.'
+                    : 'Cuando tú y otra persona se den corazón mutuamente, aparecerán aquí con su insignia oficial de Match.'}
                 </p>
               </div>
-              {totalLikesCount > 0 ? (
+              {showHiddenMatches ? (
+                <button
+                  type="button"
+                  onClick={() => setShowHiddenMatches(false)}
+                  className="px-5 py-2.5 rounded-full bg-zinc-900 text-white text-xs font-black shadow-md active:scale-95 transition"
+                >
+                  Ver Matches activos ({visibleMatches.length})
+                </button>
+              ) : totalLikesCount > 0 ? (
                 <button
                   type="button"
                   onClick={() => setSubTab('likes')}
@@ -1118,13 +1214,15 @@ export default function LikesScreen({
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
-              {matchedItems.map(({ match, peerId, user, isSuperMatch }) => {
+              {displayedMatches.map((matchItem) => {
+                const { match, peerId, user, isSuperMatch, isHidden } = matchItem;
                 const boosted = isBoostActive(user);
                 const verified = isProfileVerified(user);
                 const visibleAge = getDisplayAge(user);
                 const distInfo = formatUserDistanceLabel(user, currentUser);
                 const userIsPro = isProActive(user);
                 const online = isUserActuallyOnline(user);
+                const busyHide = togglingHideId === match.id;
 
                 return (
                   <div
@@ -1177,20 +1275,53 @@ export default function LikesScreen({
                           {!distInfo.isHidden ? `${user.country?.flag || '🌎'} ` : '🔒 '}
                           {distInfo.shortText || distInfo.text}
                         </p>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (onOpenChat && match?.id) {
-                              onOpenChat({ match, peerUser: user });
-                            } else {
-                              onStartChat?.(user, { skipLikeChatGate: true });
-                            }
-                          }}
-                          className="mt-2 w-full py-2 rounded-full bg-gradient-to-r from-[#FF1744] via-[#FF2E63] to-amber-500 text-white text-[11px] font-black flex items-center justify-center gap-1.5 shadow-md hover:brightness-110 active:scale-95 transition"
-                        >
-                          <MessageCircle className="w-3.5 h-3.5" /> Conversar ahora
-                        </button>
+                        <div className="mt-2 flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onOpenChat && match?.id) {
+                                onOpenChat({ match, peerUser: user });
+                              } else {
+                                onStartChat?.(user, { skipLikeChatGate: true });
+                              }
+                            }}
+                            className="flex-1 py-2 px-2 rounded-full bg-gradient-to-r from-[#FF1744] via-[#FF2E63] to-amber-500 text-white text-[11px] font-black flex items-center justify-center gap-1 shadow-md hover:brightness-110 active:scale-95 transition min-w-0"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate">Chatear</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={busyHide}
+                            title={isHidden ? 'Mostrar Match' : 'Ocultar Match'}
+                            aria-label={isHidden ? 'Mostrar Match' : 'Ocultar Match'}
+                            onClick={(e) => handleToggleHideMatch(e, matchItem)}
+                            className="w-8 h-8 rounded-full bg-white/15 backdrop-blur-sm border border-white/25 text-white hover:bg-white/25 flex items-center justify-center shrink-0 transition active:scale-95 disabled:opacity-50"
+                          >
+                            {busyHide ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : isHidden ? (
+                              <Eye className="w-3.5 h-3.5" />
+                            ) : (
+                              <EyeOff className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            title="Eliminar Match para ambos"
+                            aria-label="Eliminar Match"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setUnmatchTarget({ match, peerId, user });
+                            }}
+                            className="w-8 h-8 rounded-full bg-rose-500/80 border border-rose-300/40 text-white hover:bg-rose-600 flex items-center justify-center shrink-0 transition active:scale-95"
+                          >
+                            <UserX className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1306,6 +1437,72 @@ export default function LikesScreen({
           handleUnlockSingleWithDiamonds(activeAd.purpose, activeAd.user);
         }}
       />
+
+      {/* Modal de confirmación para eliminar Match mutuo */}
+      {unmatchTarget && (
+        <div
+          onClick={() => !busyUnmatch && setUnmatchTarget(null)}
+          className="fixed inset-0 z-[95] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm bg-white rounded-t-[30px] sm:rounded-[30px] p-6 pb-safe shadow-2xl space-y-4 animate-sheet-up"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-11 h-11 rounded-2xl bg-rose-50 border border-rose-200 text-[#FF2E54] flex items-center justify-center shrink-0">
+                  <UserX className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-display text-base font-black text-zinc-900">
+                    ¿Eliminar Match?
+                  </h3>
+                  <p className="text-xs text-zinc-500 truncate">
+                    Con <strong className="text-zinc-800">{unmatchTarget.user?.name || 'usuario'}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={busyUnmatch}
+                onClick={() => setUnmatchTarget(null)}
+                className="w-8 h-8 rounded-full bg-zinc-100 hover:bg-zinc-200 flex items-center justify-center text-zinc-500 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-600 leading-relaxed">
+              Esta acción eliminará el Match <strong>para los dos</strong>. Desaparecerá tanto de tu lista como del perfil de{' '}
+              <strong>{String(unmatchTarget.user?.name || 'esta persona').split(' ')[0]}</strong> y se cerrará el chat anterior.
+            </p>
+
+            <div className="grid grid-cols-2 gap-2.5 pt-1">
+              <button
+                type="button"
+                disabled={busyUnmatch}
+                onClick={() => setUnmatchTarget(null)}
+                className="py-3 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-extrabold transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={busyUnmatch}
+                onClick={handleConfirmUnmatch}
+                className="py-3 rounded-full bg-[#FF2E54] hover:brightness-105 text-white text-xs font-black shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50 transition"
+              >
+                {busyUnmatch ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                Eliminar Match
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Celebración estilo Tinder PRO al hacer Match mutuo */}
       <TinderMatchOverlay

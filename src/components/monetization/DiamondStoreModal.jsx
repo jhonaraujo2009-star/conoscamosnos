@@ -863,7 +863,7 @@ export default function DiamondStoreModal({
                     const Icon = b.icon;
                     return (
                       <div key={idx} className="flex items-start gap-2.5">
-                        <div className="w-7 h-7 rounded-xl bg-white border border-rose-200/80 text-[#FF2E54] flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                        <div className="w-7 h-7 rounded-xl bg-white border border-rose-200/80 text-[#FF2E54] flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
                           <Icon className="w-3.5 h-3.5" />
                         </div>
                         <div className="min-w-0">
@@ -927,7 +927,7 @@ export default function DiamondStoreModal({
           ) : (
             /* SECCIÓN 3: HISTORIAL DE MOVIMIENTOS DE DIAMANTES */
             <div className="space-y-3">
-              <div className="p-3.5 rounded-2xl bg-white border border-zinc-200/80 shadow-xs flex items-center justify-between gap-2">
+              <div className="p-3.5 rounded-2xl bg-white border border-zinc-200/80 shadow-sm flex items-center justify-between gap-2">
                 <div>
                   <p className="text-xs font-black text-zinc-900 flex items-center gap-1.5">
                     <History className="w-4 h-4 text-indigo-500" />
@@ -943,7 +943,7 @@ export default function DiamondStoreModal({
               </div>
 
               {timelineEvents.length === 0 ? (
-                <div className="bg-white rounded-3xl p-8 text-center border border-zinc-200/80 shadow-xs space-y-2">
+                <div className="bg-white rounded-3xl p-8 text-center border border-zinc-200/80 shadow-sm space-y-2">
                   <div className="w-11 h-11 mx-auto rounded-2xl bg-sky-50 text-sky-500 flex items-center justify-center">
                     <Gem className="w-5 h-5" />
                   </div>
@@ -974,7 +974,7 @@ export default function DiamondStoreModal({
                     return (
                       <div
                         key={item.id}
-                        className="p-3 rounded-2xl bg-white border border-zinc-200/80 shadow-xs flex items-center justify-between gap-3"
+                        className="p-3 rounded-2xl bg-white border border-zinc-200/80 shadow-sm flex items-center justify-between gap-3"
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <div className="w-9 h-9 rounded-xl bg-zinc-50 border border-zinc-200/80 text-zinc-700 flex items-center justify-center shrink-0">

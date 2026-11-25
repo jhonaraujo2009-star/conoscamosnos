@@ -18,6 +18,7 @@ import {
   ShieldAlert,
   Sparkles,
   Trash2,
+  UserX,
   X,
 } from 'lucide-react';
 import { REPORT_REASONS } from '../../config/constants';
@@ -30,6 +31,7 @@ import {
   sendTextMessage,
   sendVirtualGift,
   subscribeChatMessages,
+  unmatchUser,
 } from '../../services/chatService';
 import { getUserCloudinaryFolder, uploadImageToCloudinary } from '../../services/cloudinaryService';
 import { blockUser, reportUser, subscribeUserById } from '../../services/userService';
@@ -80,16 +82,22 @@ export default function ChatRoom({
   const [showSafetyBar, setShowSafetyBar] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deletingConversation, setDeletingConversation] = useState(false);
+  const [unmatchingPeer, setUnmatchingPeer] = useState(false);
   const [reportReason, setReportReason] = useState(REPORT_REASONS[2]);
 
   const bottomRef = useRef(null);
   const imageInputRef = useRef(null);
   const initializedRef = useRef(false);
   const seenIdsRef = useRef(new Set());
+  const sawMatchDocRef = useRef(false);
   const livePeerRef = useRef(livePeer);
   livePeerRef.current = livePeer;
   const onMarkReadRef = useRef(onMarkRead);
   onMarkReadRef.current = onMarkRead;
+  const onBackRef = useRef(onBack);
+  onBackRef.current = onBack;
+  const onSuccessRef = useRef(onSuccess);
+  onSuccessRef.current = onSuccess;
 
   const peerId =
     peerUser?.uid ||
@@ -115,12 +123,17 @@ export default function ChatRoom({
 
   useEffect(() => {
     setLiveMatch(match);
+    sawMatchDocRef.current = Boolean(match?.createdAt || match?.participants?.length);
     if (!match?.id || !isParticipant || !db) return;
     const unsub = onSnapshot(
       doc(db, 'matches', match.id),
       (snap) => {
         if (snap.exists()) {
+          sawMatchDocRef.current = true;
           setLiveMatch({ id: snap.id, ...snap.data() });
+        } else if (sawMatchDocRef.current) {
+          onSuccessRef.current?.('Este Match ha sido eliminado.');
+          onBackRef.current?.();
         }
       },
       () => {}
@@ -316,7 +329,7 @@ export default function ChatRoom({
   };
 
   const handleDeleteConversation = async () => {
-    if (!match?.id || deletingConversation) return;
+    if (!match?.id || deletingConversation || unmatchingPeer) return;
     setDeletingConversation(true);
     try {
       await deleteConversationForUser(match.id, currentUser.uid);
@@ -327,6 +340,22 @@ export default function ChatRoom({
       onError?.(err.message || 'No se pudo eliminar la conversación.');
     } finally {
       setDeletingConversation(false);
+    }
+  };
+
+  const handleUnmatchFromChat = async () => {
+    if (!peerId || unmatchingPeer || deletingConversation) return;
+    setUnmatchingPeer(true);
+    try {
+      sawMatchDocRef.current = false;
+      await unmatchUser(peerId);
+      setConfirmDeleteOpen(false);
+      onSuccess?.(`Se eliminó el Match con ${livePeer?.name || 'esta persona'} para ambos.`);
+      onBack();
+    } catch (err) {
+      onError?.(err.message || 'No se pudo eliminar el Match.');
+    } finally {
+      setUnmatchingPeer(false);
     }
   };
 
@@ -822,7 +851,7 @@ export default function ChatRoom({
       {/* Modal de confirmación para eliminar conversación desde la sala */}
       {confirmDeleteOpen && (
         <div
-          onClick={() => !deletingConversation && setConfirmDeleteOpen(false)}
+          onClick={() => !deletingConversation && !unmatchingPeer && setConfirmDeleteOpen(false)}
           className="fixed inset-0 z-[75] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
         >
           <div
@@ -835,7 +864,7 @@ export default function ChatRoom({
               </div>
               <div className="min-w-0">
                 <h3 className="font-display text-base font-black text-zinc-900">
-                  ¿Eliminar conversación?
+                  Gestionar chat o Match
                 </h3>
                 <p className="text-xs text-zinc-500 mt-0.5 truncate">
                   Con <strong className="text-zinc-800">{livePeer?.name}</strong>
@@ -843,29 +872,42 @@ export default function ChatRoom({
               </div>
             </div>
             <p className="text-xs text-zinc-600 leading-relaxed">
-              Esta conversación desaparecerá de tu lista de mensajes de forma limpia.
+              Puedes limpiar los mensajes solo para ti o eliminar el Match por completo para ambos perfiles.
             </p>
-            <div className="grid grid-cols-2 gap-2.5 pt-1">
+            <div className="space-y-2 pt-1">
               <button
                 type="button"
-                disabled={deletingConversation}
-                onClick={() => setConfirmDeleteOpen(false)}
-                className="py-3 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-extrabold transition"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={deletingConversation}
+                disabled={deletingConversation || unmatchingPeer}
                 onClick={handleDeleteConversation}
-                className="py-3 rounded-full bg-[#FF2E54] hover:brightness-105 text-white text-xs font-black shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50 transition"
+                className="w-full py-3 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-black flex items-center justify-center gap-1.5 disabled:opacity-50 transition"
               >
                 {deletingConversation ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <Trash2 className="w-4 h-4" />
                 )}
-                Eliminar
+                Vaciar chat (solo para mí)
+              </button>
+              <button
+                type="button"
+                disabled={deletingConversation || unmatchingPeer}
+                onClick={handleUnmatchFromChat}
+                className="w-full py-3 rounded-full bg-[#FF2E54] hover:brightness-105 text-white text-xs font-black shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50 transition"
+              >
+                {unmatchingPeer ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <UserX className="w-4 h-4" />
+                )}
+                Eliminar Match para ambos
+              </button>
+              <button
+                type="button"
+                disabled={deletingConversation || unmatchingPeer}
+                onClick={() => setConfirmDeleteOpen(false)}
+                className="w-full py-2.5 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-extrabold transition"
+              >
+                Cancelar
               </button>
             </div>
           </div>

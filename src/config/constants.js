@@ -144,11 +144,13 @@ export const ECONOMY_CONFIG = {
   minWithdrawalDiamonds: 500, // 500 diamantes ganados = $3.00 USD netos mínimos
 };
 
+const VITE_ENV = (typeof import.meta !== 'undefined' && import.meta.env) || {};
+
 export function resolveDirectPaymentMethods(economyConfig = null) {
-  const defaultBinanceId = import.meta.env.VITE_BINANCE_PAY_ID || '';
-  const defaultZinliEmail = import.meta.env.VITE_ZINLI_EMAIL || 'jhonaraujo2009@gmail.com';
+  const defaultBinanceId = VITE_ENV.VITE_BINANCE_PAY_ID || '';
+  const defaultZinliEmail = VITE_ENV.VITE_ZINLI_EMAIL || 'jhonaraujo2009@gmail.com';
   const defaultPagoMovil =
-    import.meta.env.VITE_PAGO_MOVIL_INFO ||
+    VITE_ENV.VITE_PAGO_MOVIL_INFO ||
     '0412-0496690 | V-23493744 | Banco de Venezuela (0102)';
 
   const liveChannels = economyConfig?.paymentChannels || {};
@@ -189,7 +191,7 @@ export function resolveDirectPaymentMethods(economyConfig = null) {
           extraInstructions:
             'Abre tu app Zinli, toca Enviar dinero en USD a este correo (o escanea el QR oficial) y adjunta tu captura con el número de referencia.',
           qrPrefix: 'zinli://pay?to=',
-          qrImageUrl: import.meta.env.VITE_ZINLI_QR_URL || '/zinli-qr.png',
+          qrImageUrl: VITE_ENV.VITE_ZINLI_QR_URL || '/zinli-qr.png',
         }
       : null,
     enablePagoMovil
@@ -216,21 +218,21 @@ export const WITHDRAWAL_PAYOUT_METHODS = [
   { id: 'pago_movil', name: 'Pago Móvil (Local)', placeholder: 'Banco + Teléfono + Cédula/Documento' },
 ];
 
-export const ENABLE_DEMO_PAYMENTS = import.meta.env.VITE_ENABLE_DEMO_PAYMENTS === 'true';
+export const ENABLE_DEMO_PAYMENTS = VITE_ENV.VITE_ENABLE_DEMO_PAYMENTS === 'true';
 
 /**
  * Configuración base del sistema de Publicidad Recompensada (Rewarded Ads) vs. Diamantes (💎):
  * El Super Admin puede anular estos valores en tiempo real desde appConfig/economy.
  */
 export const AD_REWARD_CONFIG = {
-  provider: import.meta.env.VITE_AD_PROVIDER || 'monetag',
-  adDurationSeconds: Math.max(5, Number(import.meta.env.VITE_AD_DURATION_SECONDS || 12)),
-  adsenseClient: import.meta.env.VITE_ADSENSE_CLIENT || '',
-  monetagZoneId: import.meta.env.VITE_MONETAG_ZONE_ID || '311878',
-  monetagScriptSrc: import.meta.env.VITE_MONETAG_SCRIPT_SRC || 'https://quge5.com/88/tag.min.js',
-  monetagDirectLink: import.meta.env.VITE_MONETAG_DIRECT_LINK || 'https://uplcm.com/4/12295528',
-  adsterraDirectLink: import.meta.env.VITE_ADSTERRA_DIRECT_LINK || '',
-  customSponsorUrl: import.meta.env.VITE_CUSTOM_SPONSOR_URL || '',
+  provider: VITE_ENV.VITE_AD_PROVIDER || 'monetag',
+  adDurationSeconds: Math.max(5, Number(VITE_ENV.VITE_AD_DURATION_SECONDS || 12)),
+  adsenseClient: VITE_ENV.VITE_ADSENSE_CLIENT || '',
+  monetagZoneId: VITE_ENV.VITE_MONETAG_ZONE_ID || '311878',
+  monetagScriptSrc: VITE_ENV.VITE_MONETAG_SCRIPT_SRC || 'https://quge5.com/88/tag.min.js',
+  monetagDirectLink: VITE_ENV.VITE_MONETAG_DIRECT_LINK || 'https://uplcm.com/4/12295528',
+  adsterraDirectLink: VITE_ENV.VITE_ADSTERRA_DIRECT_LINK || '',
+  customSponsorUrl: VITE_ENV.VITE_CUSTOM_SPONSOR_URL || '',
   unlockMode: 'hybrid',
   enableDiamondCharges: true,
   enableRewardedAds: true,

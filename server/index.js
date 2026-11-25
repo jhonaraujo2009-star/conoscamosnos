@@ -1,4 +1,5 @@
 import express from 'express';
+import { adminBulkProfilesExpressHandler } from './controllers/adminBulkProfilesController.js';
 import { adminCleanupExpressHandler } from './controllers/adminCleanupController.js';
 import { approvePaymentExpressHandler } from './controllers/adminPaymentController.js';
 import { createInvoiceExpressHandler } from './controllers/createInvoiceController.js';
@@ -11,7 +12,7 @@ const app = express();
 
 // Seguridad básica y parseo JSON para callbacks IPN y facturas de NowPayments
 app.disable('x-powered-by');
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '4mb' }));
 
 app.get('/api/health', (_req, res) => {
   res.json({
@@ -26,6 +27,7 @@ app.post('/api/store/activate', storeActivateExpressHandler);
 app.post('/api/economy/spend', economySpendExpressHandler);
 app.post('/api/notifications/send', sendPushExpressHandler);
 app.post('/api/admin/cleanup', adminCleanupExpressHandler);
+app.post('/api/admin/bulk-profiles', adminBulkProfilesExpressHandler);
 app.post('/api/admin/approve-payment', approvePaymentExpressHandler);
 app.use('/api/webhooks', paymentsRouter);
 

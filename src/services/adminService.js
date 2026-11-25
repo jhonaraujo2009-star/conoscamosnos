@@ -444,3 +444,59 @@ export async function purgeAdminRevenueRecords({
   }
   return data;
 }
+
+/**
+ * Super Admin: crea múltiples perfiles en lote a partir de fotos subidas desde /api/admin/bulk-profiles.
+ */
+export async function createAdminBulkProfiles({ profiles = [], batchId = '' }) {
+  const currentUser = auth?.currentUser;
+  if (!currentUser) {
+    throw new Error('Debes iniciar sesión como Super Admin.');
+  }
+  const idToken = await currentUser.getIdToken();
+  const res = await fetch('/api/admin/bulk-profiles', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({
+      action: 'create_bulk_profiles',
+      profiles,
+      batchId,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.error || 'No se pudieron guardar los perfiles en el servidor.');
+  }
+  return data;
+}
+
+/**
+ * Super Admin: elimina perfiles generados masivamente (`createdByAdminBulk === true`).
+ */
+export async function deleteAdminBulkProfiles({ uids = [], mode = '' }) {
+  const currentUser = auth?.currentUser;
+  if (!currentUser) {
+    throw new Error('Debes iniciar sesión como Super Admin.');
+  }
+  const idToken = await currentUser.getIdToken();
+  const res = await fetch('/api/admin/bulk-profiles', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({
+      action: 'delete_bulk_profiles',
+      uids,
+      mode,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.error || 'No se pudieron eliminar los perfiles masivos.');
+  }
+  return data;
+}
