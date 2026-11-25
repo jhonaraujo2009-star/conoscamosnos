@@ -12,6 +12,7 @@ import {
   Users,
   Zap,
 } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 import { sendLike } from '../../services/discoveryService';
 import { subscribePopularUsers } from '../../services/userService';
 import {
@@ -200,6 +201,9 @@ export default function HomeFeed({
   onSuccess,
   onError,
 }) {
+  const { economyConfig } = useAuth();
+  const showAdminBulkProfiles = economyConfig?.showAdminBulkProfiles !== false;
+
   const [users, setUsers] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [likedIds, setLikedIds] = useState({});
@@ -219,12 +223,13 @@ export default function HomeFeed({
         countryCode: currentUser?.country?.code,
         currentUserId: myUid,
         blockedUsers: currentUser?.blockedUsers || [],
+        showAdminBulkProfiles,
       },
       setUsers,
       () => {}
     );
     return () => unsub();
-  }, [myUid, currentUser?.country?.code, blockedKey]);
+  }, [myUid, currentUser?.country?.code, blockedKey, showAdminBulkProfiles]);
 
   const matchedPeerSet = useMemo(() => {
     const set = new Set();

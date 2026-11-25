@@ -3,10 +3,14 @@ import {
   BadgeCheck,
   CheckCircle2,
   Edit3,
+  Eye,
+  EyeOff,
   Globe2,
+  Heart,
   ImagePlus,
   Loader2,
   MapPin,
+  Power,
   RefreshCw,
   Shuffle,
   Sparkles,
@@ -16,7 +20,13 @@ import {
   X,
 } from 'lucide-react';
 import { COUNTRIES, LOOKING_FOR_OPTIONS, MIN_AGE } from '../../config/constants';
-import { createAdminBulkProfiles, deleteAdminBulkProfiles } from '../../services/adminService';
+import { useAuth } from '../../contexts/AuthContext';
+import {
+  createAdminBulkProfiles,
+  deleteAdminBulkProfiles,
+  setAdminBulkProfileVisibility,
+  updateAdminBulkSettings,
+} from '../../services/adminService';
 import { uploadImageToCloudinary } from '../../services/cloudinaryService';
 import {
   generateBulkProfileDrafts,
@@ -35,8 +45,14 @@ function makeQueueId() {
 }
 
 export default function AdminBulkProfilesTab({ users = [], onSuccess, onError }) {
+  const { userProfile, economyConfig } = useAuth();
   const fileInputRef = useRef(null);
   const queueRef = useRef([]);
+
+  const showBulkProfiles = economyConfig?.showAdminBulkProfiles !== false;
+  const enableAutoLikes = economyConfig?.enableBulkAutoLikes !== false;
+  const [savingToggleKey, setSavingToggleKey] = useState(null);
+  const [togglingBulkUid, setTogglingBulkUid] = useState(null);
 
   // Configuración del generador automático
   const [countryCode, setCountryCode] = useState('CO');
@@ -385,6 +401,69 @@ export default function AdminBulkProfilesTab({ users = [], onSuccess, onError })
     }
   };
 
+  const handleToggleGlobalBulkVisibility = async () => {
+    if (savingToggleKey || !userProfile?.uid) return;
+    const nextVal = !showBulkProfiles;
+    setSavingToggleKey('visibility');
+    try {
+      await updateAdminBulkSettings({
+        adminId: userProfile.uid,
+        showAdminBulkProfiles: nextVal,
+      });
+      onSuccess?.(
+        nextVal
+          ? 'Perfiles masivos HABILITADOS en Descubrir y Explorar.'
+          : 'Perfiles masivos INHABILITADOS en Descubrir y Explorar (se mantienen visibles en Chats y Mis Matches).'
+      );
+    } catch (err) {
+      onError?.(err?.message || 'No se pudo cambiar la visibilidad global.');
+    } finally {
+      setSavingToggleKey(null);
+    }
+  };
+
+  const handleToggleAutoLikes = async () => {
+    if (savingToggleKey || !userProfile?.uid) return;
+    const nextVal = !enableAutoLikes;
+    setSavingToggleKey('autolikes');
+    try {
+      await updateAdminBulkSettings({
+        adminId: userProfile.uid,
+        enableBulkAutoLikes: nextVal,
+      });
+      onSuccess?.(
+        nextVal
+          ? 'Auto-Likes de bienvenida ACTIVADOS (máx. 2 Likes a nuevos registros).'
+          : 'Auto-Likes de bienvenida PAUSADOS.'
+      );
+    } catch (err) {
+      onError?.(err?.message || 'No se pudo actualizar los auto-likes.');
+    } finally {
+      setSavingToggleKey(null);
+    }
+  };
+
+  const handleToggleSingleBulkVisibility = async (user) => {
+    if (!user?.uid || togglingBulkUid || deletingBulk) return;
+    const nextHidden = !user.isBulkHidden;
+    setTogglingBulkUid(user.uid);
+    try {
+      await setAdminBulkProfileVisibility({
+        uids: [user.uid],
+        hidden: nextHidden,
+      });
+      onSuccess?.(
+        nextHidden
+          ? `Perfil "${user.name || 'Usuario'}" ocultado de Descubrir y Explorar.`
+          : `Perfil "${user.name || 'Usuario'}" visible nuevamente en Descubrir y Explorar.`
+      );
+    } catch (err) {
+      onError?.(err?.message || 'No se pudo actualizar la visibilidad del perfil.');
+    } finally {
+      setTogglingBulkUid(null);
+    }
+  };
+
   const pendingCount = queue.filter((it) => it.status !== 'saved').length;
   const displayedQueue = showAllQueue ? queue : queue.slice(0, 24);
 
@@ -413,6 +492,93 @@ export default function AdminBulkProfilesTab({ users = [], onSuccess, onError })
               <p className="text-[10px] text-amber-200/80 font-bold uppercase">Creados hoy/total</p>
               <p className="text-lg font-black tabular-nums">{bulkUsers.length}</p>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Control maestro en vivo: Habilitar/Inhabilitar visibilidad + Auto-Likes de bienvenida */}
+      <section className="rounded-[26px] bg-[#FFFDF9] border border-[#E8DEC8] p-5 shadow-sm space-y-3">
+        <div className="flex items-center gap-2">
+          <Power className="w-4 h-4 text-[#FF2E54]" />
+          <h3 className="font-display text-sm sm:text-base font-black text-[#2C241E]">
+            Control en vivo de visibilidad y Auto-Likes
+          </h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          <div className="rounded-2xl border border-[#EAE0CA] bg-[#FBF7EE] p-4 flex items-center justify-between gap-3">
+            <div className="space-y-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs sm:text-sm font-black text-[#2C241E]">
+                  Mostrar perfiles en Descubrir y Explorar
+                </span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                    showBulkProfiles
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : 'bg-zinc-200 text-zinc-700'
+                  }`}
+                >
+                  {showBulkProfiles ? 'Habilitado' : 'Inhabilitado'}
+                </span>
+              </div>
+              <p className="text-[11px] text-[#7D6C5B] leading-relaxed">
+                Si lo inhabilitas, dejan de mostrarse en Descubrir y Explorar de inmediato, pero siguen apareciendo en Chats y Mis Matches ya existentes.
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={savingToggleKey === 'visibility'}
+              onClick={handleToggleGlobalBulkVisibility}
+              aria-label="Habilitar o inhabilitar perfiles en Descubrir y Explorar"
+              className={`shrink-0 w-12 h-7 rounded-full p-1 transition flex items-center ${
+                showBulkProfiles ? 'bg-emerald-500 justify-end' : 'bg-zinc-300 justify-start'
+              } disabled:opacity-60`}
+            >
+              <span className="w-5 h-5 rounded-full bg-white shadow flex items-center justify-center">
+                {savingToggleKey === 'visibility' && (
+                  <Loader2 className="w-3 h-3 animate-spin text-zinc-600" />
+                )}
+              </span>
+            </button>
+          </div>
+
+          <div className="rounded-2xl border border-[#EAE0CA] bg-[#FBF7EE] p-4 flex items-center justify-between gap-3">
+            <div className="space-y-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs sm:text-sm font-black text-[#2C241E] flex items-center gap-1">
+                  <Heart className="w-3.5 h-3.5 text-[#FF2E54] fill-[#FF2E54]" />
+                  Auto-Likes a usuarios nuevos
+                </span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                    enableAutoLikes
+                      ? 'bg-rose-100 text-[#FF2E54]'
+                      : 'bg-zinc-200 text-zinc-700'
+                  }`}
+                >
+                  {enableAutoLikes ? 'Activo' : 'Pausado'}
+                </span>
+              </div>
+              <p className="text-[11px] text-[#7D6C5B] leading-relaxed">
+                Al registrarse un usuario nuevo, recibe automáticamente máximo 2 Likes en su foto principal: 1.º entre min 5–10 y 2.º entre min 15–30.
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={savingToggleKey === 'autolikes'}
+              onClick={handleToggleAutoLikes}
+              aria-label="Activar o pausar Auto-Likes de bienvenida"
+              className={`shrink-0 w-12 h-7 rounded-full p-1 transition flex items-center ${
+                enableAutoLikes ? 'bg-[#FF2E54] justify-end' : 'bg-zinc-300 justify-start'
+              } disabled:opacity-60`}
+            >
+              <span className="w-5 h-5 rounded-full bg-white shadow flex items-center justify-center">
+                {savingToggleKey === 'autolikes' && (
+                  <Loader2 className="w-3 h-3 animate-spin text-zinc-600" />
+                )}
+              </span>
+            </button>
           </div>
         </div>
       </section>
@@ -874,18 +1040,40 @@ export default function AdminBulkProfilesTab({ users = [], onSuccess, onError })
                     src={u.photos?.[0]}
                     alt={u.name}
                     loading="lazy"
-                    className="w-full h-full object-cover"
+                    className={`w-full h-full object-cover ${u.isBulkHidden ? 'opacity-50 grayscale-[40%]' : ''}`}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                  <button
-                    type="button"
-                    disabled={deletingBulk}
-                    onClick={() => handleDeleteSingleBulk(u.uid, u.name)}
-                    title="Eliminar este perfil generado"
-                    className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 hover:bg-rose-600 text-white flex items-center justify-center transition"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
+                  <div className="absolute top-1.5 left-1.5 right-1.5 flex items-center justify-between gap-1">
+                    <button
+                      type="button"
+                      disabled={togglingBulkUid === u.uid || deletingBulk}
+                      onClick={() => handleToggleSingleBulkVisibility(u)}
+                      title={u.isBulkHidden ? 'Mostrar en Descubrir/Explorar' : 'Ocultar de Descubrir/Explorar'}
+                      className={`px-2 py-0.5 rounded-full text-[9px] font-black flex items-center gap-1 transition ${
+                        u.isBulkHidden
+                          ? 'bg-zinc-900/90 text-amber-300 border border-amber-300/40'
+                          : 'bg-black/60 hover:bg-black/80 text-white'
+                      }`}
+                    >
+                      {togglingBulkUid === u.uid ? (
+                        <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                      ) : u.isBulkHidden ? (
+                        <EyeOff className="w-2.5 h-2.5" />
+                      ) : (
+                        <Eye className="w-2.5 h-2.5" />
+                      )}
+                      {u.isBulkHidden ? 'Oculto' : 'Visible'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={deletingBulk || togglingBulkUid === u.uid}
+                      onClick={() => handleDeleteSingleBulk(u.uid, u.name)}
+                      title="Eliminar este perfil generado"
+                      className="w-6 h-6 rounded-full bg-black/60 hover:bg-rose-600 text-white flex items-center justify-center transition"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
                   <div className="absolute bottom-1.5 inset-x-2 text-white">
                     <p className="text-[11px] font-black truncate">
                       {u.name}, {u.age}

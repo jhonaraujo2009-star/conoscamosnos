@@ -10,6 +10,7 @@ export async function POST(request) {
       batchId: body?.batchId,
       uids: body?.uids,
       mode: body?.mode,
+      hidden: body?.hidden,
     });
 
     return Response.json(result.body, { status: result.statusCode });

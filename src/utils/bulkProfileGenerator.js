@@ -349,3 +349,12 @@ export function generateBulkProfileDrafts(count, options = {}) {
   }
   return list;
 }
+
+/**
+ * Indica si un perfil generado masivamente desde Super Admin debe ocultarse de Descubrir y Explorar.
+ * No afecta Chats ni Matches existentes.
+ */
+export function isBulkProfileHiddenFromDiscovery(user, showAdminBulkProfiles = true) {
+  if (!user || user.createdByAdminBulk !== true) return false;
+  return showAdminBulkProfiles === false || user.isBulkHidden === true;
+}

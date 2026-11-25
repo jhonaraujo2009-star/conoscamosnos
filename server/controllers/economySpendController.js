@@ -1,5 +1,6 @@
 import { FieldValue, getAdminAuth, getAdminFirestore } from '../config/firebaseAdmin.js';
 import { dispatchPushNotificationInternal } from './pushNotificationController.js';
+import { handleSyncWelcomeAutoLikes } from '../services/welcomeAutoLikesService.js';
 
 export const SUPER_LIKE_WEEKLY_LIMIT_FREE = 2;
 export const SUPER_LIKE_WEEKLY_LIMIT_PRO = 20;
@@ -1176,6 +1177,21 @@ export async function processEconomySpend({
           unmatched: true,
           matchId,
           targetUserId: targetUid,
+        },
+      };
+    }
+
+    if (cleanAction === 'sync_welcome_likes') {
+      const outcome = await handleSyncWelcomeAutoLikes({
+        db,
+        uid,
+        economyCfg,
+      });
+      return {
+        statusCode: 200,
+        body: {
+          ok: true,
+          ...outcome,
         },
       };
     }

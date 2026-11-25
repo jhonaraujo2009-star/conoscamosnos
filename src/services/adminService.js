@@ -30,6 +30,8 @@ export const DEFAULT_LIVE_ECONOMY = {
   proPlans: PRO_PLANS,
   boostPlans: BOOST_PLANS,
   virtualGifts: VIRTUAL_GIFTS,
+  showAdminBulkProfiles: true,
+  enableBulkAutoLikes: true,
   ...resolveAccessPolicy(AD_REWARD_CONFIG),
   paymentChannels: {
     enableZinli: true,
@@ -112,6 +114,8 @@ export function subscribeEconomyConfig(callback) {
         proPlans,
         boostPlans,
         virtualGifts,
+        showAdminBulkProfiles: data.showAdminBulkProfiles !== false,
+        enableBulkAutoLikes: data.enableBulkAutoLikes !== false,
       });
     },
     () => callback(DEFAULT_LIVE_ECONOMY)
@@ -445,10 +449,7 @@ export async function purgeAdminRevenueRecords({
   return data;
 }
 
-/**
- * Super Admin: crea múltiples perfiles en lote a partir de fotos subidas desde /api/admin/bulk-profiles.
- */
-export async function createAdminBulkProfiles({ profiles = [], batchId = '' }) {
+async function callAdminBulkProfilesApi(body, fallbackError) {
   const currentUser = auth?.currentUser;
   if (!currentUser) {
     throw new Error('Debes iniciar sesión como Super Admin.');
@@ -460,43 +461,76 @@ export async function createAdminBulkProfiles({ profiles = [], batchId = '' }) {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${idToken}`,
     },
-    body: JSON.stringify({
-      action: 'create_bulk_profiles',
-      profiles,
-      batchId,
-    }),
+    body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data?.ok) {
-    throw new Error(data?.error || 'No se pudieron guardar los perfiles en el servidor.');
+    throw new Error(data?.error || fallbackError);
   }
   return data;
+}
+
+/**
+ * Super Admin: actualiza el interruptor global de visibilidad de perfiles masivos y auto-likes en `appConfig/economy`.
+ */
+export async function updateAdminBulkSettings({
+  adminId,
+  showAdminBulkProfiles,
+  enableBulkAutoLikes,
+}) {
+  if (!adminId) throw new Error('Sesión de Super Admin inválida.');
+  const patch = {
+    updatedBy: adminId,
+    updatedAt: serverTimestamp(),
+  };
+  if (typeof showAdminBulkProfiles === 'boolean') {
+    patch.showAdminBulkProfiles = showAdminBulkProfiles;
+  }
+  if (typeof enableBulkAutoLikes === 'boolean') {
+    patch.enableBulkAutoLikes = enableBulkAutoLikes;
+  }
+  await setDoc(doc(db, 'appConfig', 'economy'), patch, { merge: true });
+}
+
+/**
+ * Super Admin: crea múltiples perfiles en lote a partir de fotos subidas desde /api/admin/bulk-profiles.
+ */
+export async function createAdminBulkProfiles({ profiles = [], batchId = '' }) {
+  return callAdminBulkProfilesApi(
+    {
+      action: 'create_bulk_profiles',
+      profiles,
+      batchId,
+    },
+    'No se pudieron guardar los perfiles en el servidor.'
+  );
+}
+
+/**
+ * Super Admin: oculta o muestra perfiles generados masivamente (`createdByAdminBulk === true`).
+ */
+export async function setAdminBulkProfileVisibility({ uids = [], mode = '', hidden = false }) {
+  return callAdminBulkProfilesApi(
+    {
+      action: 'set_bulk_profile_visibility',
+      uids,
+      mode,
+      hidden: Boolean(hidden),
+    },
+    'No se pudo actualizar la visibilidad de los perfiles masivos.'
+  );
 }
 
 /**
  * Super Admin: elimina perfiles generados masivamente (`createdByAdminBulk === true`).
  */
 export async function deleteAdminBulkProfiles({ uids = [], mode = '' }) {
-  const currentUser = auth?.currentUser;
-  if (!currentUser) {
-    throw new Error('Debes iniciar sesión como Super Admin.');
-  }
-  const idToken = await currentUser.getIdToken();
-  const res = await fetch('/api/admin/bulk-profiles', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${idToken}`,
-    },
-    body: JSON.stringify({
+  return callAdminBulkProfilesApi(
+    {
       action: 'delete_bulk_profiles',
       uids,
       mode,
-    }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data?.ok) {
-    throw new Error(data?.error || 'No se pudieron eliminar los perfiles masivos.');
-  }
-  return data;
+    },
+    'No se pudieron eliminar los perfiles masivos.'
+  );
 }

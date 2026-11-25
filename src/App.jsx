@@ -26,6 +26,7 @@ import {
   checkConnectionStatus,
   openOrCreateDirectChat,
   subscribeReceivedLikes,
+  syncWelcomeAutoLikes,
 } from './services/discoveryService';
 import { getUserById } from './services/userService';
 import {
@@ -282,7 +283,7 @@ function UserAppView({ onSuccess, onError }) {
           like.fromUserId !== currentUid
       );
 
-      if (!likesLoadedRef.current) {
+        if (!likesLoadedRef.current) {
         seenLikeIdsRef.current = new Set(strictList.map((l) => `${l.id}_${l.isSuperLike ? '1' : '0'}`));
         likesLoadedRef.current = true;
       } else {
@@ -292,6 +293,13 @@ function UserAppView({ onSuccess, onError }) {
             l.isSuperLike === true &&
             !blockedSet.has(l.fromUserId) &&
             !seenLikeIdsRef.current.has(`${l.id}_1`)
+        );
+        const freshNormalLike = strictList.find(
+          (l) =>
+            l.toUserId === currentUid &&
+            !l.isSuperLike &&
+            !blockedSet.has(l.fromUserId) &&
+            !seenLikeIdsRef.current.has(`${l.id}_0`)
         );
         strictList.forEach((l) =>
           seenLikeIdsRef.current.add(`${l.id}_${l.isSuperLike ? '1' : '0'}`)
@@ -310,6 +318,14 @@ function UserAppView({ onSuccess, onError }) {
                 tag: `superlike_${freshSuper.id}`,
               });
             });
+        } else if (freshNormalLike) {
+          triggerHaptic('light');
+          handleSuccess('❤️ ¡Alguien le dio Me gusta a tu foto! Míralo en Likes.');
+          showLocalServiceWorkerNotification({
+            title: '❤️ ¡Alguien le dio Me gusta a tu foto!',
+            body: 'Entra a Likes en Conoscamosnos para descubrir quién se fijó en tu perfil.',
+            tag: `like_${freshNormalLike.id}`,
+          });
         }
       }
 
@@ -361,6 +377,79 @@ function UserAppView({ onSuccess, onError }) {
       unsubGifts();
     };
   }, [userProfile?.uid, userProfile?.onboardingCompleted, handleSuccess]);
+
+  // Sincronización automática de hasta 2 Me gusta escalonados para usuarios recién registrados
+  useEffect(() => {
+    const uid = userProfile?.uid;
+    if (
+      !uid ||
+      !userProfile?.onboardingCompleted ||
+      userProfile?.createdByAdminBulk ||
+      userProfile?.welcomeAutoLikesDone
+    ) {
+      return undefined;
+    }
+    if (economyConfig?.showAdminBulkProfiles === false || economyConfig?.enableBulkAutoLikes === false) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    let timerId = null;
+    let nextDueRef = 0;
+
+    const scheduleNext = (nextDueAtMs) => {
+      if (timerId) {
+        window.clearTimeout(timerId);
+        timerId = null;
+      }
+      if (!nextDueAtMs || cancelled) return;
+      nextDueRef = Number(nextDueAtMs);
+      const delay = Math.max(5_000, Math.min(35 * 60 * 1000, nextDueRef - Date.now() + 1_200));
+      timerId = window.setTimeout(runSync, delay);
+    };
+
+    const runSync = async () => {
+      if (cancelled) return;
+      try {
+        const res = await syncWelcomeAutoLikes();
+        if (cancelled || res?.completed || res?.paused) return;
+        if (res?.nextDueAtMs) {
+          scheduleNext(res.nextDueAtMs);
+        }
+      } catch {
+        // Reintento suave en caso de pérdida temporal de red
+        if (!cancelled) {
+          timerId = window.setTimeout(runSync, 2 * 60 * 1000);
+        }
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (
+        document.visibilityState === 'visible' &&
+        nextDueRef > 0 &&
+        Date.now() >= nextDueRef
+      ) {
+        runSync();
+      }
+    };
+
+    runSync();
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      if (timerId) window.clearTimeout(timerId);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [
+    userProfile?.uid,
+    userProfile?.onboardingCompleted,
+    userProfile?.createdByAdminBulk,
+    userProfile?.welcomeAutoLikesDone,
+    economyConfig?.showAdminBulkProfiles,
+    economyConfig?.enableBulkAutoLikes,
+  ]);
 
   const markLikesAsSeen = useCallback(() => {
     const now = Date.now();

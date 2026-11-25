@@ -326,3 +326,28 @@ export async function sendLike({
 
   return result;
 }
+
+/**
+ * Sincroniza los auto-likes de bienvenida escalonados (máx. 2 Likes en los primeros ~30 min)
+ * para usuarios recién registrados.
+ */
+export async function syncWelcomeAutoLikes() {
+  const currentUser = auth?.currentUser;
+  if (!currentUser) return { completed: true, sentNow: 0, nextDueAtMs: null };
+  const idToken = await currentUser.getIdToken();
+  const res = await fetch('/api/economy/spend', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({
+      action: 'sync_welcome_likes',
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.error || 'No se pudieron sincronizar los likes de bienvenida.');
+  }
+  return data;
+}

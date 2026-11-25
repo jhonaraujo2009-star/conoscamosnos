@@ -33,6 +33,7 @@ import { unlockExclusivePhotoWithDiamonds } from '../../services/adRewardService
 import { sendTextMessage, sendVirtualGift } from '../../services/chatService';
 import { sendLike } from '../../services/discoveryService';
 import { fetchDiscoverProfiles } from '../../services/userService';
+import { isBulkProfileHiddenFromDiscovery } from '../../utils/bulkProfileGenerator';
 import {
   calculateAffinityScore,
   formatUserDistanceLabel,
@@ -142,6 +143,7 @@ export default function DiscoverSwipe({
 }) {
   const { economyConfig } = useAuth();
   const accessPolicy = useMemo(() => resolveAccessPolicy(economyConfig), [economyConfig]);
+  const showAdminBulkProfiles = economyConfig?.showAdminBulkProfiles !== false;
   const proActive = isProActive(currentUser);
 
   const [localScope, setLocalScope] = useState('global');
@@ -260,6 +262,7 @@ export default function DiscoverSwipe({
           onlyOnline,
           passedIds,
           includeAlreadyLiked: forceIncludeAll,
+          showAdminBulkProfiles,
         });
 
         if (
@@ -283,6 +286,7 @@ export default function DiscoverSwipe({
             onlyOnline: false,
             passedIds: [],
             includeAlreadyLiked: true,
+            showAdminBulkProfiles,
           });
         }
 
@@ -306,6 +310,7 @@ export default function DiscoverSwipe({
       ageRange?.max,
       onlyVerified,
       onlyOnline,
+      showAdminBulkProfiles,
       onError,
     ]
   );
@@ -322,8 +327,12 @@ export default function DiscoverSwipe({
     };
   }, []);
 
-  // VIRTUALIZACIÓN DEL MAZO: Solo máximo 2 tarjetas en el DOM (activa + siguiente)
-  const visibleDeck = cards.slice(0, 2);
+  // VIRTUALIZACIÓN DEL MAZO: Filtra en vivo perfiles ocultos desde Admin y mantiene máximo 2 tarjetas en el DOM
+  const activeCards = useMemo(
+    () => cards.filter((u) => !isBulkProfileHiddenFromDiscovery(u, showAdminBulkProfiles)),
+    [cards, showAdminBulkProfiles]
+  );
+  const visibleDeck = activeCards.slice(0, 2);
   const topCard = visibleDeck[0] || null;
   const nextCard = visibleDeck[1] || null;
 
@@ -385,10 +394,10 @@ export default function DiscoverSwipe({
       nextUrls.forEach(warmUrl);
     }
 
-    cards.slice(2, 5).forEach((upcoming) => {
+    activeCards.slice(2, 5).forEach((upcoming) => {
       warmUrl(getPrimaryPhoto(upcoming, CARD_PHOTO_WIDTH, { seed: currentUser?.uid }));
     });
-  }, [topCardOptimizedPhotos, nextCard, cards, currentUser?.uid]);
+  }, [topCardOptimizedPhotos, nextCard, activeCards, currentUser?.uid]);
 
   const dismissTutorial = () => {
     try {

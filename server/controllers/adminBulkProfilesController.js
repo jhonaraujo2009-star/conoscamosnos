@@ -69,6 +69,7 @@ function sanitizeBulkProfile(raw, { batchId, adminUid }) {
     messagePriceDiamonds,
     onboardingCompleted: true,
     createdByAdminBulk: true,
+    isBulkHidden: false,
     bulkBatchId: batchId,
     createdByAdminUid: adminUid,
     role: 'user',
@@ -84,6 +85,35 @@ function sanitizeBulkProfile(raw, { batchId, adminUid }) {
   };
 }
 
+async function collectBulkTargetRefs(db, { mode = '', uids = [] }) {
+  const refs = [];
+  if (mode === 'all_bulk') {
+    const snap = await db.collection('users').where('createdByAdminBulk', '==', true).get();
+    snap.docs.forEach((d) => {
+      if (d.data()?.createdByAdminBulk === true) {
+        refs.push(d.ref);
+      }
+    });
+    return refs;
+  }
+
+  const cleanUids = Array.isArray(uids)
+    ? Array.from(new Set(uids.map((u) => String(u || '').trim()).filter(Boolean))).slice(0, 400)
+    : [];
+  if (cleanUids.length === 0) {
+    return null;
+  }
+  const docRefs = cleanUids.map((id) => db.collection('users').doc(id));
+  const snaps = await db.getAll(...docRefs);
+  snaps.forEach((s) => {
+    // Seguridad estricta: jamás modificar ni borrar cuentas reales de usuarios
+    if (s.exists && s.data()?.createdByAdminBulk === true) {
+      refs.push(s.ref);
+    }
+  });
+  return refs;
+}
+
 async function deleteDocsInChunks(db, docRefs, chunkSize = 400) {
   let deleted = 0;
   for (let i = 0; i < docRefs.length; i += chunkSize) {
@@ -96,9 +126,26 @@ async function deleteDocsInChunks(db, docRefs, chunkSize = 400) {
   return deleted;
 }
 
+async function updateBulkHiddenInChunks(db, docRefs, hidden, chunkSize = 400) {
+  let updated = 0;
+  for (let i = 0; i < docRefs.length; i += chunkSize) {
+    const slice = docRefs.slice(i, i + chunkSize);
+    const batch = db.batch();
+    slice.forEach((ref) =>
+      batch.update(ref, {
+        isBulkHidden: Boolean(hidden),
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+    );
+    await batch.commit();
+    updated += slice.length;
+  }
+  return updated;
+}
+
 /**
- * Super Admin: creación masiva de perfiles a partir de fotos subidas y eliminación segura
- * limitada exclusivamente a documentos marcados con `createdByAdminBulk === true`.
+ * Super Admin: creación masiva de perfiles a partir de fotos subidas y eliminación/visibilidad
+ * segura limitada exclusivamente a documentos marcados con `createdByAdminBulk === true`.
  */
 export async function handleAdminBulkProfiles({
   authHeader = '',
@@ -107,6 +154,7 @@ export async function handleAdminBulkProfiles({
   batchId = '',
   uids = [],
   mode = '',
+  hidden = false,
 }) {
   const bearerMatch = String(authHeader || '').match(/^Bearer\s+(.+)$/i);
   if (!bearerMatch?.[1]) {
@@ -207,34 +255,33 @@ export async function handleAdminBulkProfiles({
       };
     }
 
-    if (action === 'delete_bulk_profiles') {
-      const refsToDelete = [];
+    if (action === 'set_bulk_profile_visibility') {
+      const refsToUpdate = await collectBulkTargetRefs(db, { mode, uids });
+      if (refsToUpdate === null) {
+        return {
+          statusCode: 400,
+          body: { ok: false, error: 'Selecciona al menos 1 perfil generado masivamente.' },
+        };
+      }
+      const nextHidden = Boolean(hidden);
+      const updatedCount = await updateBulkHiddenInChunks(db, refsToUpdate, nextHidden);
+      return {
+        statusCode: 200,
+        body: {
+          ok: true,
+          updatedCount,
+          hidden: nextHidden,
+        },
+      };
+    }
 
-      if (mode === 'all_bulk') {
-        const snap = await db.collection('users').where('createdByAdminBulk', '==', true).get();
-        snap.docs.forEach((d) => {
-          if (d.data()?.createdByAdminBulk === true) {
-            refsToDelete.push(d.ref);
-          }
-        });
-      } else {
-        const cleanUids = Array.isArray(uids)
-          ? Array.from(new Set(uids.map((u) => String(u || '').trim()).filter(Boolean))).slice(0, 400)
-          : [];
-        if (cleanUids.length === 0) {
-          return {
-            statusCode: 400,
-            body: { ok: false, error: 'Selecciona al menos 1 perfil generado masivamente.' },
-          };
-        }
-        const docRefs = cleanUids.map((id) => db.collection('users').doc(id));
-        const snaps = await db.getAll(...docRefs);
-        snaps.forEach((s) => {
-          // Seguridad estricta: jamás borrar cuentas reales de usuarios
-          if (s.exists && s.data()?.createdByAdminBulk === true) {
-            refsToDelete.push(s.ref);
-          }
-        });
+    if (action === 'delete_bulk_profiles') {
+      const refsToDelete = await collectBulkTargetRefs(db, { mode, uids });
+      if (refsToDelete === null) {
+        return {
+          statusCode: 400,
+          body: { ok: false, error: 'Selecciona al menos 1 perfil generado masivamente.' },
+        };
       }
 
       const deletedCount = await deleteDocsInChunks(db, refsToDelete);
@@ -272,6 +319,7 @@ export async function adminBulkProfilesExpressHandler(req, res) {
       batchId: req.body?.batchId,
       uids: req.body?.uids,
       mode: req.body?.mode,
+      hidden: req.body?.hidden,
     });
     return res.status(result.statusCode).json(result.body);
   } catch (err) {

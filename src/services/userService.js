@@ -17,6 +17,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { MAX_EXCLUSIVE_PHOTOS, MAX_PHOTOS, MIN_AGE } from '../config/constants';
+import { isBulkProfileHiddenFromDiscovery } from '../utils/bulkProfileGenerator';
 import {
   isBoostActive,
   isProActive,
@@ -45,6 +46,9 @@ export async function completeOnboarding(uid, formData) {
     interests: formData.interests || [],
     photos,
     onboardingCompleted: true,
+    onboardingCompletedAt: serverTimestamp(),
+    welcomeAutoLikesEligible: true,
+    welcomeAutoLikesDone: false,
     isOnline: true,
     lastSeen: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -187,7 +191,11 @@ export function subscribeUserById(uid, callback) {
   );
 }
 
-export function subscribeVipUsers({ scope, countryCode, currentUserId, blockedUsers = [] }, onData, onError) {
+export function subscribeVipUsers(
+  { scope, countryCode, currentUserId, blockedUsers = [], showAdminBulkProfiles = true },
+  onData,
+  onError
+) {
   const usersRef = collection(db, 'users');
   const constraints = [where('isBoosted', '==', true)];
 
@@ -204,6 +212,7 @@ export function subscribeVipUsers({ scope, countryCode, currentUserId, blockedUs
         if (u.id === currentUserId) return false;
         if (u.isBanned || u.accountStatus === 'banned' || u.accountStatus === 'suspended') return false;
         if (u.discoverable === false) return false;
+        if (isBulkProfileHiddenFromDiscovery(u, showAdminBulkProfiles)) return false;
         if (blockedSet.has(u.id)) return false;
         if (Array.isArray(u.blockedUsers) && u.blockedUsers.includes(currentUserId)) return false;
         if (!u.onboardingCompleted) return false;
@@ -235,7 +244,11 @@ export function subscribeVipUsers({ scope, countryCode, currentUserId, blockedUs
   };
 }
 
-export function subscribePopularUsers({ scope, countryCode, currentUserId, blockedUsers = [] }, onData, onError) {
+export function subscribePopularUsers(
+  { scope, countryCode, currentUserId, blockedUsers = [], showAdminBulkProfiles = true },
+  onData,
+  onError
+) {
   const usersRef = collection(db, 'users');
   const constraints = [];
 
@@ -252,6 +265,7 @@ export function subscribePopularUsers({ scope, countryCode, currentUserId, block
         if (u.id === currentUserId || blockedSet.has(u.id)) return false;
         if (u.isBanned || u.accountStatus === 'banned' || u.accountStatus === 'suspended') return false;
         if (u.discoverable === false) return false;
+        if (isBulkProfileHiddenFromDiscovery(u, showAdminBulkProfiles)) return false;
         if (Array.isArray(u.blockedUsers) && u.blockedUsers.includes(currentUserId)) return false;
         const hasPhoto = Array.isArray(u.photos) && u.photos.length > 0 && Boolean(u.photos[0]);
         const isReady = u.onboardingCompleted || hasPhoto || (u.name && u.name !== 'Nuevo Usuario');
@@ -301,6 +315,7 @@ export async function fetchDiscoverProfiles({
   onlyOnline = false,
   passedIds = [],
   includeAlreadyLiked = false,
+  showAdminBulkProfiles = true,
 }) {
   const usersRef = collection(db, 'users');
   const constraints = [];
@@ -341,6 +356,7 @@ export async function fetchDiscoverProfiles({
       if (u.id === currentUser.uid) return false;
       if (u.isBanned || u.accountStatus === 'banned' || u.accountStatus === 'suspended') return false;
       if (u.discoverable === false) return false;
+      if (isBulkProfileHiddenFromDiscovery(u, showAdminBulkProfiles)) return false;
       if (blockedSet.has(u.id)) return false;
       if (Array.isArray(u.blockedUsers) && u.blockedUsers.includes(currentUser.uid)) return false;
       const isProfileReady =
